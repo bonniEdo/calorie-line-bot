@@ -1,0 +1,9 @@
+name = "sisters-calorie-line-webhook"
+main = "src/index.js"
+compatibility_date = "2026-08-17"
+
+# Do not put secrets in this file.
+# Set these in Cloudflare Dashboard > Worker > Settings > Variables and Secrets:
+# LINE_CHANNEL_SECRET             (Secret)
+# APPS_SCRIPT_RELAY_SECRET        (Secret)
+# APPS_SCRIPT_WEBHOOK_URL         (Text or Secret)

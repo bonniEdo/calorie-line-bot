@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --cream: #fffaf0;
+      --yellow: #f5d77a;
+      --ink: #332f29;
+      --muted: #776f64;
+      --green: #4e8b69;
+      --line: #eadfca;
+      --white: #fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--cream);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+    }
+    button { font: inherit; touch-action: manipulation; }
+    .app { max-width: 760px; margin: 0 auto; padding: 18px 14px 52px; }
+    .hero {
+      padding: 22px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #ffe9a8, #f6d76e);
+      box-shadow: 0 10px 30px rgba(85, 65, 28, .10);
+    }
+    .eyebrow { font-size: 12px; font-weight: 900; letter-spacing: .12em; color: #765c17; }
+    h1 { margin: 7px 0 5px; font-size: 27px; line-height: 1.2; }
+    .hero p { margin: 0; color: #6b571f; line-height: 1.5; }
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 15px; }
+    .summary-card { padding: 11px 8px; border-radius: 14px; background: rgba(255,255,255,.72); text-align: center; }
+    .summary-card strong { display: block; font-size: 20px; }
+    .summary-card span { font-size: 11px; color: #765c17; }
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 16px; padding: 5px; border-radius: 16px; background: #eee6d8; }
+    .tab { min-height: 46px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-weight: 900; cursor: pointer; }
+    .tab.active { background: var(--white); color: var(--ink); box-shadow: 0 3px 10px rgba(74, 56, 24, .09); }
+    .panel { margin-top: 14px; }
+    .record, .rank-card, .empty, .privacy {
+      margin-top: 10px;
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--white);
+    }
+    .record-head, .progress-row { display: flex; align-items: center; gap: 10px; }
+    .record-head { justify-content: space-between; }
+    .alias { min-width: 0; font-size: 16px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .status { flex: 0 0 auto; padding: 5px 9px; border-radius: 999px; background: #f3eee5; color: var(--muted); font-size: 11px; font-weight: 900; }
+    .status.complete { background: #e6f2e9; color: #35684b; }
+    .progress-row { justify-content: space-between; margin-top: 12px; }
+    .progress-label { font-size: 12px; color: var(--muted); }
+    .progress-value { font-size: 17px; font-weight: 900; text-align: right; }
+    .bar { height: 8px; margin-top: 9px; border-radius: 999px; background: #f0eadf; overflow: hidden; }
+    .bar > span { display: block; height: 100%; border-radius: inherit; background: var(--green); }
+    .meal-list { margin-top: 11px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .time { margin-top: 7px; color: #aaa094; font-size: 11px; text-align: right; }
+    .record-footer { margin-top: 10px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+    .record-footer .time { min-width: 0; flex: 1; margin-top: 0; text-align: left; }
+    .record-footer .like-button { flex: 0 0 76px; }
+    .rank-card { padding: 8px 15px; }
+    .rank-row {
+      min-height: 66px;
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) auto 70px;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid #f0e8dc;
+    }
+    .rank-row:last-child { border-bottom: 0; }
+    .place { width: 42px; flex: 0 0 42px; text-align: center; font-weight: 900; }
+    .rank-name { min-width: 0; flex: 1; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .streak { flex: 0 0 auto; text-align: right; font-weight: 900; }
+    .streak small { display: block; color: var(--muted); font-size: 10px; font-weight: 700; }
+    .like-button {
+      min-height: 38px;
+      padding: 6px 9px;
+      border: 1px solid #e5ca70;
+      border-radius: 12px;
+      background: #fff9e6;
+      color: #765c17;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .like-button.liked { border-color: #8db89d; background: #e6f2e9; color: #35684b; }
+    .like-button:disabled { cursor: default; opacity: .72; }
+    .like-hint {
+      margin-top: 12px;
+      padding: 11px 13px;
+      border-radius: 14px;
+      background: #fff9e6;
+      color: #765c17;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.5;
+      text-align: center;
+    }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(20px + env(safe-area-inset-bottom));
+      z-index: 20;
+      max-width: calc(100% - 36px);
+      padding: 12px 16px;
+      border-radius: 14px;
+      background: rgba(51, 47, 41, .94);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      text-align: center;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 10px);
+      transition: opacity .18s ease, transform .18s ease;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .empty { color: var(--muted); text-align: center; line-height: 1.6; }
+    .privacy { margin-top: 16px; background: #f4faf6; border-color: #cfe1d5; color: #35684b; font-size: 12px; line-height: 1.6; }
+    .updated { margin-top: 13px; color: #aaa094; font-size: 11px; text-align: center; }
+    @media (max-width: 380px) {
+      .app { padding-left: 10px; padding-right: 10px; }
+      .hero { padding: 18px; }
+      .summary-card span { font-size: 10px; }
+      .progress-value { font-size: 15px; }
+      .rank-row { grid-template-columns: 34px minmax(0, 1fr) auto 62px; gap: 5px; }
+      .place { width: 34px; }
+      .like-button { padding-left: 6px; padding-right: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="hero">
+      <div class="eyebrow">HEALTH LOG</div>
+      <h1>🌏 公開飲控紀錄</h1>
+      <p id="heroDate"></p>
+      <div class="summary">
+        <div class="summary-card"><strong id="publicCount">0</strong><span>今日公開</span></div>
+        <div class="summary-card"><strong id="completedCount">0</strong><span>已完成</span></div>
+        <div class="summary-card"><strong id="rankingCount">0</strong><span>參加連續排行</span></div>
+      </div>
+    </section>
+
+    <nav class="tabs" aria-label="公開功能頁籤">
+      <button id="recordsTab" class="tab active" type="button">今日公開紀錄</button>
+      <button id="streaksTab" class="tab" type="button">連續打卡排行</button>
+    </nav>
+
+    <section id="recordsPanel" class="panel"></section>
+    <section id="streaksPanel" class="panel" hidden></section>
+
+    <div id="likeHint" class="like-hint"></div>
+
+    <div class="privacy">🔒 這是自願公開區。只顯示公開暱稱、熱量進度、餐別、完成狀態與連續天數；不顯示 LINE 身分、群組、體重、BMR、照片或食物細項。群組排行仍只在各自群組內計算。</div>
+    <div id="updated" class="updated"></div>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <div id="publicData" hidden><?= publicJson ?></div>
+  <script>
+    window.__publicWallBuild = '2026.08.18-17';
+    const DATA = JSON.parse(document.getElementById('publicData').textContent || '{}');
+    const recordsPanel = document.getElementById('recordsPanel');
+    const streaksPanel = document.getElementById('streaksPanel');
+    const likeHint = document.getElementById('likeHint');
+    const toast = document.getElementById('toast');
+    let likeRequestInFlight = false;
+    document.getElementById('heroDate').textContent = `${DATA.date || ''}・只顯示本人主動公開的內容`;
+    document.getElementById('publicCount').textContent = Number(DATA.summary && DATA.summary.publicCount || 0);
+    document.getElementById('completedCount').textContent = Number(DATA.summary && DATA.summary.completedCount || 0);
+    document.getElementById('rankingCount').textContent = Number(DATA.summary && DATA.summary.rankingCount || 0);
+    document.getElementById('updated').textContent = `更新時間：${DATA.generatedAt || ''}`;
+    updateLikeHint();
+
+    function switchTab(tab) {
+      const showRecords = tab === 'records';
+      recordsPanel.hidden = !showRecords;
+      streaksPanel.hidden = showRecords;
+      document.getElementById('recordsTab').classList.toggle('active', showRecords);
+      document.getElementById('streaksTab').classList.toggle('active', !showRecords);
+    }
+
+    document.getElementById('recordsTab').addEventListener('click', () => switchTab('records'));
+    document.getElementById('streaksTab').addEventListener('click', () => switchTab('streaks'));
+
+    function renderRecords() {
+      const records = Array.isArray(DATA.records) ? DATA.records : [];
+      if (!records.length) {
+        recordsPanel.innerHTML = '<div class="empty">今天還沒有人公開紀錄。<br>每個人的公開設定預設都是關閉的。</div>';
+        return;
+      }
+      recordsPanel.innerHTML = records.map(record => {
+        const hasAllowance = Number(record.allowance || 0) > 0;
+        const ratio = hasAllowance ? Math.max(0, Math.min(100, Math.round(Number(record.intake || 0) / Number(record.allowance) * 100))) : 0;
+        const progress = hasAllowance
+          ? `${number(record.intake)} / ${number(record.allowance)} kcal`
+          : `${number(record.intake)} kcal / 額度待設定`;
+        const meals = Array.isArray(record.meals) && record.meals.length ? record.meals.join('、') : '尚未記錄餐點';
+        return [
+          '<article class="record">',
+            '<div class="record-head"><div class="alias">' + escapeHtml(record.alias) + '</div><span class="status ' + (record.isComplete ? 'complete' : '') + '">' + (record.isComplete ? '✅ 已完成' : '📝 打卡中') + '</span></div>',
+            '<div class="progress-row"><span class="progress-label">已攝取 / 今日額度</span><span class="progress-value">' + escapeHtml(progress) + '</span></div>',
+            hasAllowance ? '<div class="bar"><span style="width:' + ratio + '%"></span></div>' : '',
+            '<div class="meal-list">已記錄餐別：' + escapeHtml(meals) + '</div>',
+            '<div class="record-footer">',
+              '<div class="time">最後更新 ' + escapeHtml(record.updatedAt || '—') + '</div>',
+              likeButtonHtml(record),
+            '</div>',
+          '</article>',
+        ].join('');
+      }).join('');
+    }
+
+    function renderStreaks() {
+      const streaks = Array.isArray(DATA.streaks) ? DATA.streaks : [];
+      if (!streaks.length) {
+        streaksPanel.innerHTML = '<div class="empty">還沒有人選擇參加公開連續打卡排行。</div>';
+        return;
+      }
+      streaksPanel.innerHTML = '<div class="rank-card">' + streaks.map((item, index) => {
+        const place = ['🥇', '🥈', '🥉'][index] || String(index + 1);
+        return '<div class="rank-row">'
+          + '<div class="place">' + place + '</div>'
+          + '<div class="rank-name">' + escapeHtml(item.alias) + '</div>'
+          + '<div class="streak">' + number(item.streak) + ' 天<small>' + (item.completedToday ? '今天已完成' : '今天尚未完成') + '</small></div>'
+          + likeButtonHtml(item)
+          + '</div>';
+      }).join('') + '</div>';
+    }
+
+    recordsPanel.addEventListener('click', handleLikeClick);
+    streaksPanel.addEventListener('click', handleLikeClick);
+
+    function handleLikeClick(event) {
+      const button = event.target.closest('[data-like-key]');
+      if (!button || button.disabled || likeRequestInFlight) return;
+      const targetKey = button.getAttribute('data-like-key') || '';
+      const allItems = []
+        .concat(Array.isArray(DATA.records) ? DATA.records : [])
+        .concat(Array.isArray(DATA.streaks) ? DATA.streaks : []);
+      const item = allItems.find(entry => entry.likeKey === targetKey);
+      if (!item) return;
+      const matchedItems = allItems.filter(entry => entry.likeKey === targetKey);
+      const previousItems = matchedItems.map(entry => ({
+        entry,
+        likeCount: Number(entry.likeCount || 0),
+        likedByViewer: Boolean(entry.likedByViewer),
+      }));
+      const previousUsedLikes = Number(DATA.viewer.usedLikes || 0);
+      const previousRemainingLikes = Number(DATA.viewer.remainingLikes || 0);
+      const wasLiked = Boolean(item.likedByViewer);
+      const delta = wasLiked ? -1 : 1;
+
+      // 先更新畫面，不用等 Apps Script 冷啟動與工作表寫入完成。
+      likeRequestInFlight = true;
+      matchedItems.forEach(entry => {
+        entry.likeCount = Math.max(0, Number(entry.likeCount || 0) + delta);
+        entry.likedByViewer = !wasLiked;
+      });
+      DATA.viewer.usedLikes = Math.max(0, previousUsedLikes + delta);
+      DATA.viewer.remainingLikes = Math.max(0, Math.min(2, previousRemainingLikes - delta));
+      renderRecords();
+      renderStreaks();
+      updateLikeHint();
+      showToast(wasLiked ? '↩️ 已收回' : '👍 已送出', 900);
+      google.script.run
+        .withSuccessHandler(result => {
+          likeRequestInFlight = false;
+          matchedItems.forEach(entry => {
+            entry.likeCount = Number(result.likeCount || 0);
+            entry.likedByViewer = Boolean(result.liked);
+          });
+          DATA.viewer.usedLikes = Number(result.usedLikes || 0);
+          DATA.viewer.remainingLikes = Number(result.remainingLikes || 0);
+          renderRecords();
+          renderStreaks();
+          updateLikeHint();
+        })
+        .withFailureHandler(error => {
+          likeRequestInFlight = false;
+          previousItems.forEach(previous => {
+            previous.entry.likeCount = previous.likeCount;
+            previous.entry.likedByViewer = previous.likedByViewer;
+          });
+          DATA.viewer.usedLikes = previousUsedLikes;
+          DATA.viewer.remainingLikes = previousRemainingLikes;
+          renderRecords();
+          renderStreaks();
+          updateLikeHint();
+          showToast(error && error.message ? error.message : '按讚失敗，請稍後再試。', 2800);
+        })
+        .likePublicParticipant({
+          uid: DATA.viewer && DATA.viewer.uid || '',
+          sig: DATA.viewer && DATA.viewer.sig || '',
+          targetKey,
+        });
+    }
+
+    function likeButtonHtml(item) {
+      const canToggleLike = Boolean(
+        DATA.viewer
+        && DATA.viewer.canLike
+        && !likeRequestInFlight
+        && !item.isSelf
+        && (item.likedByViewer || Number(DATA.viewer.remainingLikes || 0) > 0)
+      );
+      const label = '👍 ' + number(item.likeCount);
+      const actionLabel = item.likedByViewer ? '再點一次收回讚' : '送出鼓勵讚';
+      return '<button class="like-button ' + (item.likedByViewer ? 'liked' : '')
+        + '" type="button" data-like-key="' + escapeAttr(item.likeKey) + '" '
+        + 'aria-label="' + actionLabel + '" title="' + actionLabel + '" '
+        + (canToggleLike ? '' : 'disabled') + '>' + label + '</button>';
+    }
+
+    function showToast(message, duration) {
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove('show'), Number(duration || 1400));
+    }
+
+    function updateLikeHint() {
+      if (DATA.viewer && DATA.viewer.canLike) {
+        const remaining = Math.max(0, Number(DATA.viewer.remainingLikes || 0));
+        likeHint.textContent = remaining > 0
+          ? `今天還可送 ${remaining} 個讚；綠色再點一次可收回。`
+          : '今天的讚已送完；點綠色讚可收回名額。';
+        return;
+      }
+      likeHint.textContent = '想按讚嗎？請回 LINE 對機器人輸入「公開排行」，再由它提供的連結開啟。';
+    }
+
+    function number(value) { return Math.max(0, Math.round(Number(value || 0))).toLocaleString('zh-TW'); }
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      })[char]);
+    }
+    function escapeAttr(value) { return escapeHtml(value).replace(/`/g, '&#96;'); }
+
+    renderRecords();
+    renderStreaks();
+  </script>
+</body>
+</html>
