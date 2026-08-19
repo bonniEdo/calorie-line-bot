@@ -19,7 +19,23 @@
     .summary-card strong { display:block; font-size:20px; }
     .summary-card span { color:#765c17; font-size:11px; font-weight:800; }
     .section { margin-top:16px; padding:16px; border:1px solid var(--line); border-radius:20px; background:#fff; box-shadow:0 6px 18px rgba(85,65,28,.05); }
-    .section h2 { margin:0 0 10px; font-size:18px; }
+    .section h2 { margin:0 0 6px; font-size:18px; }
+    .section-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
+    .section-head h2 { margin:0; }
+    .chart-wrap { margin-top:13px; padding:10px 4px 2px; overflow:hidden; border-radius:16px; background:#fffaf0; }
+    .chart-svg { display:block; width:100%; height:auto; min-height:210px; }
+    .chart-grid { stroke:#eadfca; stroke-width:1; stroke-dasharray:3 4; }
+    .chart-axis { fill:#9a8d7a; font-size:10px; }
+    .chart-line-intake { fill:none; stroke:#e59a32; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+    .chart-line-tdee { fill:none; stroke:#4e8b69; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+    .chart-dot-intake { fill:#fff; stroke:#e59a32; stroke-width:2; }
+    .chart-dot-tdee { fill:#fff; stroke:#4e8b69; stroke-width:2; }
+    .chart-legend { display:flex; justify-content:center; gap:18px; margin-top:8px; color:var(--muted); font-size:12px; font-weight:800; }
+    .legend-item { display:inline-flex; align-items:center; gap:5px; }
+    .legend-dot { width:9px; height:9px; border-radius:50%; display:inline-block; }
+    .legend-intake { background:#e59a32; }
+    .legend-tdee { background:#4e8b69; }
+    .chart-empty { padding:38px 10px; text-align:center; color:var(--muted); }
     .hint { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
     .record { border-top:1px solid var(--line); padding:13px 0 0; margin-top:13px; }
     .record:first-child { border-top:0; margin-top:0; padding-top:0; }
@@ -73,7 +89,14 @@
         + '<div class="summary-card"><strong>' + number(summary.averageTdee) + '</strong><span>平均 TDEE kcal</span></div>'
         + '<div class="summary-card"><strong>' + number(summary.completedDays) + '/' + number(summary.loggedDays) + '</strong><span>完成紀錄</span></div>'
         + '</div></section>';
-      html += '<section class="section"><h2>每日紀錄</h2><p class="hint">點開日期可查看餐別、運動與飲水；數字都是估算值。</p>';
+      html += '<section class="section chart-section"><div class="section-head"><div><h2>📈 攝取趨勢</h2><p class="hint">橘線是已攝取，綠線是每日可攝取總量（TDEE）。</p></div></div>';
+      if (!records.length) {
+        html += '<div class="chart-empty">有紀錄後，這裡會顯示你的熱量趨勢圖。</div>';
+      } else {
+        html += buildTrendChart(records);
+      }
+      html += '</section>';
+      html += '<section class="section"><div class="section-head"><div><h2>📅 每日歷史紀錄</h2><p class="hint">點開日期查看餐別、運動與飲水；預設收合，畫面更簡潔。</p></div></div>';
       if (!records.length) {
         html += '<div class="empty">目前還沒有歷史紀錄。</div>';
       } else {
@@ -97,6 +120,37 @@
       }
       html += '</section>';
       root.innerHTML = html;
+
+      function buildTrendChart(items) {
+        const ordered = items.slice().reverse();
+        const width = 680;
+        const height = 270;
+        const pad = { left: 44, right: 14, top: 18, bottom: 38 };
+        const plotWidth = width - pad.left - pad.right;
+        const plotHeight = height - pad.top - pad.bottom;
+        const max = Math.max(100, ...ordered.map(item => Math.max(Number(item.intake) || 0, Number(item.tdee) || 0)));
+        const x = index => ordered.length === 1
+          ? pad.left + plotWidth / 2
+          : pad.left + (plotWidth * index / (ordered.length - 1));
+        const y = value => pad.top + plotHeight - (Math.max(0, Number(value) || 0) / max * plotHeight);
+        const path = key => ordered.map((item, index) => `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(item[key]).toFixed(1)}`).join(' ');
+        const grid = [0, .25, .5, .75, 1].map(ratio => {
+          const value = Math.round(max * ratio);
+          const lineY = y(value).toFixed(1);
+          return '<line class="chart-grid" x1="' + pad.left + '" y1="' + lineY + '" x2="' + (width - pad.right) + '" y2="' + lineY + '" />'
+            + '<text class="chart-axis" x="' + (pad.left - 7) + '" y="' + (Number(lineY) + 3) + '" text-anchor="end">' + number(value) + '</text>';
+        }).join('');
+        const dots = (key, klass) => ordered.map((item, index) => '<circle class="' + klass + '" cx="' + x(index).toFixed(1) + '" cy="' + y(item[key]).toFixed(1) + '" r="3.5" />').join('');
+        const labels = ordered.map((item, index) => {
+          const show = ordered.length <= 10 || index === 0 || index === ordered.length - 1 || index % Math.ceil(ordered.length / 6) === 0;
+          return show ? '<text class="chart-axis" x="' + x(index).toFixed(1) + '" y="' + (height - 12) + '" text-anchor="middle">' + dateLabel(item.date) + '</text>' : '';
+        }).join('');
+        return '<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="每日攝取與TDEE趨勢圖">'
+          + grid + '<path class="chart-line-tdee" d="' + path('tdee') + '" />'
+          + '<path class="chart-line-intake" d="' + path('intake') + '" />'
+          + dots('tdee', 'chart-dot-tdee') + dots('intake', 'chart-dot-intake') + labels
+          + '</svg><div class="chart-legend"><span class="legend-item"><i class="legend-dot legend-intake"></i>已攝取</span><span class="legend-item"><i class="legend-dot legend-tdee"></i>可攝取總量 TDEE</span></div></div>';
+      }
     }());
   </script>
 </body>

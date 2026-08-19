@@ -175,6 +175,57 @@ function disableTestWebAccess() {
   return { ok: true, message: '測試網頁直入模式已關閉。' };
 }
 
+/** 測試環境專用：產生最近 7 天假資料，方便預覽歷史頁。 */
+function seedTestHistoryData() {
+  const props = PropertiesService.getScriptProperties();
+  if (String(props.getProperty('TEST_MODE') || '').toLowerCase() !== 'true') {
+    throw new Error('這個函式只允許在 TEST_MODE=true 的測試專案執行。');
+  }
+  const memberId = String(props.getProperty('TEST_USER_ID') || '');
+  const member = getMemberById_(memberId) || getMembers_().find(item => item.isFriend) || getMembers_()[0];
+  if (!member || !member.userId) throw new Error('測試表中找不到成員。');
+
+  const samples = [
+    [520, 680, 610, 0, 0, '快走', 30, 180],
+    [430, 720, 560, 180, 0, '重訓', 45, 260],
+    [480, 590, 760, 0, 220, '未填寫', 0, 0],
+    [350, 640, 540, 160, 0, '羽球', 60, 420],
+    [620, 580, 690, 0, 0, '快走', 25, 150],
+    [410, 760, 510, 0, 180, '重訓', 40, 230],
+    [500, 630, 550, 0, 0, '未填寫', 0, 0],
+  ];
+  const now = new Date();
+  samples.forEach((sample, index) => {
+    const breakfast = sample[0];
+    const lunch = sample[1];
+    const dinner = sample[2];
+    const snack = sample[3];
+    const lateNight = sample[4];
+    const exerciseName = sample[5] === '未填寫' ? '' : sample[5];
+    const exerciseMinutes = sample[6];
+    const exerciseKcal = sample[7];
+    const intake = breakfast + lunch + dinner + snack + lateNight;
+    const bmr = numberInRange_(member.bmr || 1334, 500, 5000);
+    const tdee = Math.round(bmr * 1.2 + exerciseKcal);
+    const date = dateDaysAgo_(index + 1);
+    const details = JSON.stringify({
+      breakfast: [{ name: '測試早餐', calories: breakfast, source: 'manual' }],
+      lunch: [{ name: '測試午餐', calories: lunch, source: 'manual' }],
+      dinner: [{ name: '測試晚餐', calories: dinner, source: 'manual' }],
+      snack: snack ? [{ name: '測試點心', calories: snack, source: 'manual' }] : [],
+      lateNight: lateNight ? [{ name: '測試宵夜', calories: lateNight, source: 'manual' }] : [],
+    });
+    upsertDailyRow_(date, member.userId, [
+      now, date, member.userId, member.name,
+      breakfast, lunch, dinner, snack, lateNight, intake,
+      1500, exerciseName, exerciseMinutes, exerciseKcal, bmr,
+      tdee, tdee - intake, details, '測試歷史資料', now,
+      index === 2 ? '打卡中' : '完成', false, '', false,
+    ]);
+  });
+  return { ok: true, user: member.name, days: samples.length, message: '已建立最近 7 天測試歷史資料。' };
+}
+
 function getTestWebAccess_(e) {
   const requested = String((e && e.parameter && e.parameter.test) || '') === '1';
   const props = PropertiesService.getScriptProperties();
