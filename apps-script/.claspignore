@@ -1,0 +1,8 @@
+# clasp 預設會推 rootDir 底下所有 .gs / .html / appsscript.json，
+# 包含子資料夾——備份或暫存檔會變成重複的函式定義，後蓋前且不會報錯。
+# 所以這裡改成白名單：先全部忽略，再指名要推的四個檔案。
+**/**
+!appsscript.json
+!Code.gs
+!Index.html
+!Public.html
