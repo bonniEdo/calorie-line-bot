@@ -790,7 +790,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.19-39';
+    window.__dietAppBuild = '2026.08.20-40';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -897,6 +897,9 @@
       autoSaveTimer: null,
       saveInFlight: false,
       queuedUserSave: null,
+      userSubmitPending: false,
+      lastSavedSignature: '',
+      activeSaveSignature: '',
       pendingAutoComplete: false,
       recordDate: BOOTSTRAP && BOOTSTRAP.today ? BOOTSTRAP.today : '',
       loadingRecordDate: false,
@@ -1168,7 +1171,7 @@
           state.exerciseRecords.splice(index, 1);
           renderExerciseRecords();
           updateTotals();
-          markRecordChanged(250);
+          markRecordChanged(900);
         });
         grid.append(itemLabel, minutesLabel, kcalLabel, remove);
         card.append(grid);
@@ -1423,7 +1426,7 @@
         .addEventListener('click', () => {
           state.exerciseRecords.push(newExerciseRecord());
           renderExerciseRecords();
-          markRecordChanged(250);
+          markRecordChanged(900);
           const rows = document.querySelectorAll('#exerciseRecords .exercise-record');
           const lastRow = rows[rows.length - 1];
           const minutesInput = lastRow && lastRow.querySelector('input[type="number"]');
@@ -1445,7 +1448,7 @@
           updateTotals();
 
           // 250ms 後自動儲存，並將已完成狀態切回打卡中。
-          markRecordChanged(250);
+          markRecordChanged(900);
 
           showToast('已清除運動紀錄，正在自動儲存。');
         });
@@ -2325,6 +2328,12 @@
     function updateSubmitButtons() {
       // 背景自動儲存時仍允許按「送出完成」；若請求正在進行，會排在下一筆送出。
       const isBackfill = state.recordDate !== BOOTSTRAP.today;
+      if (state.userSubmitPending) {
+        submitButton.disabled = true;
+        submitButton.textContent = isBackfill ? '補登送出中…' : '打卡送出中…';
+        saveStatus.textContent = isBackfill ? '正在儲存並完成補登…' : '正在儲存並完成打卡…';
+        return;
+      }
       submitButton.disabled = todayIsComplete;
       submitButton.textContent = todayIsComplete
         ? (isBackfill ? '✅ 這天已補登' : '✅ 今日已完成')
@@ -2335,12 +2344,8 @@
     }
 
     function setSavingState(saving) {
-      submitButton.disabled = saving;
-      if (saving) {
-        submitButton.textContent = '送出中…';
-        saveStatus.textContent = '正在送出完成狀態…';
-      }
-      else updateSubmitButtons();
+      state.userSubmitPending = Boolean(saving);
+      updateSubmitButtons();
     }
 
     function markRecordChanged(saveDelayMs) {
@@ -2354,7 +2359,7 @@
 
       const delay = Number.isFinite(saveDelayMs)
         ? saveDelayMs
-        : (changedFromComplete ? 250 : 700);
+        : (changedFromComplete ? 350 : 1200);
 
       window.clearTimeout(state.autoSaveTimer);
 
@@ -2377,7 +2382,7 @@
       updateSubmitButtons();
       state.autoSaveTimer = window.setTimeout(
         () => submitLog(todayIsComplete, true),
-        500
+        900
       );
       if (!silent) {
         showToast('🌏 公開設定將自動儲存；群組排行不受影響。');
@@ -2397,7 +2402,7 @@
         window.clearTimeout(state.autoSaveTimer);
         state.autoSaveTimer = window.setTimeout(
           () => submitLog(Boolean(state.pendingAutoComplete), true),
-          800
+          650
         );
       } else if (state.pendingDateSwitch) {
         const targetDate = state.pendingDateSwitch;
@@ -2466,19 +2471,21 @@
       if (state.saveInFlight) {
         if (!automatic) {
           state.queuedUserSave = Boolean(markComplete);
-          submitButton.disabled = true;
-          submitButton.textContent = '排程送出中…';
-          saveStatus.textContent = '先完成背景儲存，接著自動送出…';
+          // 背景儲存已在進行時，介面仍只顯示一個「送出中」狀態。
+          // 第一筆結束後會立即送出完成狀態，不再顯示「排程送出中」。
+          setSavingState(true);
         }
         return;
       }
       const bmr = Number(document.getElementById('bmr').value || 0);
       if (markComplete && !bmr) {
+        if (!automatic) setSavingState(false);
         showToast('請先填寫 BMR，或使用「不知道基礎代謝？幫我估算」。');
         document.getElementById('bmrHelper').open = true;
         return;
       }
       if (markComplete && grandTotal() <= 0) {
+        if (!automatic) setSavingState(false);
         showToast('請先拍照辨識食物，或手動填寫食物熱量。');
         return;
       }
@@ -2508,12 +2515,21 @@
       };
 
       const requestRevision = state.mealRevision;
+      const requestSignature = JSON.stringify(payload);
+      if (automatic && requestSignature === state.lastSavedSignature) {
+        state.savedMealRevision = Math.max(state.savedMealRevision, requestRevision);
+        updateSubmitButtons();
+        return;
+      }
       state.saveInFlight = true;
+      state.activeSaveSignature = requestSignature;
       window.clearTimeout(state.autoSaveTimer);
       if (!automatic) setSavingState(true);
       else updateSubmitButtons();
       google.script.run
         .withSuccessHandler(result => {
+          state.lastSavedSignature = requestSignature;
+          state.activeSaveSignature = '';
           todayIsComplete = Boolean(result.isComplete);
           const savedSnapshot = {
             exists: true,
@@ -2555,6 +2571,7 @@
         })
         .withFailureHandler(error => {
           state.saveInFlight = false;
+          state.activeSaveSignature = '';
           state.pendingDateSwitch = '';
           const queuedComplete = state.queuedUserSave;
           state.queuedUserSave = null;
@@ -2562,7 +2579,7 @@
             submitLog(queuedComplete, false);
             return;
           }
-          if (!automatic) setSavingState(false);
+          if (!automatic || state.userSubmitPending) setSavingState(false);
           else updateSubmitButtons();
           showToast(`儲存失敗：${error && error.message ? error.message : error}`);
         })
