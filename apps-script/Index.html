@@ -683,7 +683,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.19-29';
+    window.__dietAppBuild = '2026.08.19-30';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1155,7 +1155,7 @@
           '</div>',
           '<details id="foodLibrary" class="food-library">',
             '<summary>『這裏』可以展開食物庫手動補充</summary>',
-            '<input id="search" class="search" type="search" placeholder="搜尋白飯、雞蛋、便當…">',
+            '<input id="search" class="search" type="search" name="foodSearchTerm" inputmode="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="搜尋白飯、雞蛋、便當…">',
             '<div id="categoryChips" class="category-chips"></div>',
             '<div id="foodGrid" class="food-grid"></div>',
           '</details>',

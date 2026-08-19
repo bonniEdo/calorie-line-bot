@@ -2823,8 +2823,8 @@ function setConfig_(key, value, description) {
 
 function seedFoods_() {
   const sheet = getSheet_(APP.sheets.foods);
-  if (sheet.getLastRow() > 1) return;
   const rows = [
+    ['common_yangtao_breakfast', '常見食物', '楊桃可怕早餐', '1份', 410, '🍽️', '', true, '使用者自訂', '中', 1],
     ['staple_rice_half', '主食', '白飯', '半碗', 140, '🍚', '', true, '示範值，請依常用碗校正', '中', 10],
     ['staple_rice_bowl', '主食', '白飯', '1碗', 280, '🍚', '', true, '示範值，請依常用碗校正', '中', 11],
     ['staple_brown_half', '主食', '糙米飯', '半碗', 140, '🍚', '', true, '示範值', '中', 12],
@@ -2857,7 +2857,15 @@ function seedFoods_() {
     ['meal_hotpot', '常見外食', '個人小火鍋', '1鍋不含飲料', 700, '🍲', '', true, '示範估算，湯料差異大', '低', 152],
     ['meal_noodle', '常見外食', '湯麵', '1碗', 500, '🍜', '', true, '示範估算，配料差異大', '低', 153],
   ];
-  sheet.getRange(2, 1, rows.length, APP.headers.foods.length).setValues(rows);
+  const existingIds = sheet.getLastRow() > 1
+    ? new Set(sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues().flat().map(String))
+    : new Set();
+  const missingRows = rows.filter(row => !existingIds.has(String(row[0])));
+  if (missingRows.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, missingRows.length, APP.headers.foods.length)
+      .setValues(missingRows);
+    CacheService.getScriptCache().remove('active-foods:v1');
+  }
 }
 
 function formatSheets_() {
