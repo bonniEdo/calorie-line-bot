@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# clasp：含本地 scriptId 與部署設定，不放進版控
+.clasp.json
+
+# 本地備份
+_backup_*/
+
+# Node
+node_modules/
+
+# Cloudflare：wrangler.toml 可能被填入實際值，只保留 .example
+cloudflare-worker/wrangler.toml
+.wrangler/
+
+# 絕對不要進版控的東西
+*.key
+.env
+.env.*

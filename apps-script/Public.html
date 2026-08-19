@@ -57,6 +57,35 @@
     .bar { height: 8px; margin-top: 9px; border-radius: 999px; background: #f0eadf; overflow: hidden; }
     .bar > span { display: block; height: 100%; border-radius: inherit; background: var(--green); }
     .meal-list { margin-top: 11px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+    .food-details {
+      margin-top: 12px;
+      border: 1px solid #eadfca;
+      border-radius: 14px;
+      background: #fffaf0;
+      overflow: hidden;
+    }
+    .food-details summary {
+      padding: 11px 13px;
+      color: #765c17;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+      list-style-position: inside;
+    }
+    .food-details-body { padding: 0 13px 12px; }
+    .meal-detail-group { padding-top: 10px; border-top: 1px solid #eee3cf; }
+    .meal-detail-group + .meal-detail-group { margin-top: 10px; }
+    .meal-detail-title { margin-bottom: 4px; color: var(--green); font-size: 12px; font-weight: 900; }
+    .food-detail-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+      padding: 6px 0;
+    }
+    .food-detail-name { min-width: 0; font-size: 13px; font-weight: 800; line-height: 1.4; }
+    .food-detail-meta { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 500; }
+    .food-detail-kcal { color: var(--ink); font-size: 12px; font-weight: 900; white-space: nowrap; }
     .time { margin-top: 7px; color: #aaa094; font-size: 11px; text-align: right; }
     .record-footer { margin-top: 10px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
     .record-footer .time { min-width: 0; flex: 1; margin-top: 0; text-align: left; }
@@ -156,7 +185,7 @@
 
     <div id="likeHint" class="like-hint"></div>
 
-    <div class="privacy">🔒 這是自願公開區。只顯示公開暱稱、熱量進度、餐別、完成狀態與連續天數；不顯示 LINE 身分、群組、體重、BMR、照片或食物細項。群組排行仍只在各自群組內計算。</div>
+    <div class="privacy">🔒 這是自願公開區。食物細項只有本人另外勾選時才會出現；不顯示 LINE 身分、群組、體重、BMR 或照片。群組排行仍只在各自群組內計算。</div>
     <div id="updated" class="updated"></div>
   </main>
 
@@ -164,7 +193,7 @@
 
   <div id="publicData" hidden><?= publicJson ?></div>
   <script>
-    window.__publicWallBuild = '2026.08.18-17';
+    window.__publicWallBuild = '2026.08.19-19';
     const DATA = JSON.parse(document.getElementById('publicData').textContent || '{}');
     const recordsPanel = document.getElementById('recordsPanel');
     const streaksPanel = document.getElementById('streaksPanel');
@@ -208,6 +237,7 @@
             '<div class="progress-row"><span class="progress-label">已攝取 / 今日額度</span><span class="progress-value">' + escapeHtml(progress) + '</span></div>',
             hasAllowance ? '<div class="bar"><span style="width:' + ratio + '%"></span></div>' : '',
             '<div class="meal-list">已記錄餐別：' + escapeHtml(meals) + '</div>',
+            foodDetailsHtml(record),
             '<div class="record-footer">',
               '<div class="time">最後更新 ' + escapeHtml(record.updatedAt || '—') + '</div>',
               likeButtonHtml(record),
@@ -215,6 +245,38 @@
           '</article>',
         ].join('');
       }).join('');
+    }
+
+    function foodDetailsHtml(record) {
+      const mealDetails = Array.isArray(record.mealDetails)
+        ? record.mealDetails.filter(meal => meal && Array.isArray(meal.items) && meal.items.length)
+        : [];
+      if (!mealDetails.length) return '';
+
+      const itemCount = mealDetails.reduce((sum, meal) => sum + meal.items.length, 0);
+      const groups = mealDetails.map(meal => {
+        const items = meal.items.map(item => {
+          const quantity = Math.max(0, Number(item.quantity || 0));
+          const meta = [];
+          if (item.portion) meta.push(String(item.portion));
+          if (quantity > 1) meta.push('×' + formatQuantity(quantity));
+          return '<div class="food-detail-item">'
+            + '<div class="food-detail-name">' + escapeHtml(item.name || '未命名食物')
+            + (meta.length ? '<span class="food-detail-meta">' + escapeHtml(meta.join('・')) + '</span>' : '')
+            + '</div>'
+            + '<div class="food-detail-kcal">' + number(item.calories) + ' kcal</div>'
+            + '</div>';
+        }).join('');
+        return '<section class="meal-detail-group">'
+          + '<div class="meal-detail-title">' + escapeHtml(meal.label || '餐點') + '</div>'
+          + items
+          + '</section>';
+      }).join('');
+
+      return '<details class="food-details">'
+        + '<summary>🍽️ 查看今天吃了什麼（' + number(itemCount) + ' 項）</summary>'
+        + '<div class="food-details-body">' + groups + '</div>'
+        + '</details>';
     }
 
     function renderStreaks() {
@@ -337,6 +399,10 @@
     }
 
     function number(value) { return Math.max(0, Math.round(Number(value || 0))).toLocaleString('zh-TW'); }
+    function formatQuantity(value) {
+      const quantity = Math.max(0, Number(value || 0));
+      return Number.isInteger(quantity) ? String(quantity) : quantity.toFixed(1).replace(/\.0$/, '');
+    }
     function escapeHtml(value) {
       return String(value || '').replace(/[&<>"']/g, char => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',

@@ -259,6 +259,7 @@
     }
     .privacy-toggle input { width: 20px; height: 20px; margin: 0; flex: 0 0 auto; accent-color: var(--green); }
     .privacy-toggle span { font-size: 13px; line-height: 1.45; }
+    .privacy-toggle input:disabled + span { opacity: .48; }
     .public-wall-link {
       display: inline-flex;
       align-items: center;
@@ -569,7 +570,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.18-17';
+    window.__dietAppBuild = '2026.08.19-19';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -686,9 +687,12 @@
 
     function renderInvalid() {
       app.innerHTML = '';
+      const expired = BOOTSTRAP && BOOTSTRAP.invalidReason === 'expired';
       const box = el('div', 'notice');
-      box.append(el('h2', '', '打卡連結無效或已被修改'));
-      box.append(el('p', '', '請回到 LINE 私訊機器人「打卡」，再從新的按鈕進入。'));
+      box.append(el('h2', '', expired ? '這個打卡連結已經過期了' : '打卡連結無效或已被修改'));
+      box.append(el('p', '', expired
+        ? '為了保護你的紀錄，每個連結只有 24 小時有效。請回到 LINE 私訊機器人「打卡」，就會拿到新的連結，先前存好的內容都還在。'
+        : '請回到 LINE 私訊機器人「打卡」，再從新的按鈕進入。'));
       app.append(box);
     }
 
@@ -731,6 +735,10 @@
           : '📝 已載入今天的暫存進度，目前仍為打卡中') + '</div>'
         : '';
       const hasBmr = Number(MEMBER.bmr || 0) > 0;
+      // 永久公開偏好以成員設定為唯一來源，不再因為換日或舊的每日紀錄而重設。
+      const defaultPublishToday = Boolean(MEMBER.defaultPublishToday);
+      const defaultPublishFoodDetails = defaultPublishToday
+        && Boolean(MEMBER.defaultPublishFoodDetails);
       app.innerHTML = [
         '<section class="hero">',
           '<div class="eyebrow">HEALTH LOG</div>',
@@ -779,9 +787,10 @@
               '<span class="public-settings-chevron" aria-hidden="true">⌄</span>',
             '</summary>',
             '<div class="public-settings-body">',
-              '<p class="hint">預設不公開，且不影響任何群組排行。公開頁不會顯示體重、BMR、UserId、照片或食物細項。</p>',
+              '<p class="hint">公開選擇會記住並沿用到隔天，直到你主動關閉；且不影響任何群組排行。公開頁永遠不會顯示體重、BMR、UserId 或照片。</p>',
               '<label>公開暱稱<input id="publicAlias" maxlength="40" value="' + escapeAttr(MEMBER.publicAlias || MEMBER.name || '') + '" placeholder="例如：檸檬夥伴"></label>',
-              '<label class="privacy-toggle"><input id="publishToday" type="checkbox" ' + (SAVED_LOG && SAVED_LOG.isPublic ? 'checked' : '') + '><span><strong>公開今天的飲控紀錄</strong><br>只公開暱稱、已攝取／今日額度、餐別與完成狀態。</span></label>',
+              '<label class="privacy-toggle"><input id="publishToday" type="checkbox" ' + (defaultPublishToday ? 'checked' : '') + '><span><strong>公開我的飲控紀錄</strong><br>開啟後每天沿用，只公開暱稱、已攝取／今日額度、餐別與完成狀態。</span></label>',
+              '<label class="privacy-toggle"><input id="publishFoodDetails" type="checkbox" ' + (defaultPublishFoodDetails ? 'checked' : '') + '><span><strong>同時公開我吃了什麼</strong><br>開啟後每天沿用，顯示食物名稱、份量與估算熱量；不會顯示照片。</span></label>',
               '<label class="privacy-toggle"><input id="joinPublicRanking" type="checkbox" ' + (MEMBER.joinPublicRanking ? 'checked' : '') + '><span><strong>參加公開連續打卡排行</strong><br>只比較完成打卡的連續天數，不比較誰吃得最少。</span></label>',
               '<a class="public-wall-link" href="' + escapeAttr(BOOTSTRAP.publicWallUrl || '') + '" target="_top">查看公開頁面 ↗</a>',
             '</div>',
@@ -836,6 +845,7 @@
             '<label>運動時間<input id="exerciseMinutes" type="number" inputmode="numeric" min="0" max="1440" value="' + escapeAttr(SAVED_LOG ? SAVED_LOG.exerciseMinutes : '') + '" placeholder="分鐘"></label>',
             '<label>運動消耗<input id="exerciseKcal" type="number" inputmode="numeric" min="0" max="5000" value="' + escapeAttr(SAVED_LOG ? SAVED_LOG.exerciseKcal : '') + '" placeholder="手錶顯示 kcal"></label>',
           '</div>',
+          '<button id="clearExerciseButton" class="danger-small" type="button">清除運動紀錄</button>',
           '<p class="hint">如果使用運動手錶，請填「活動熱量」，不要填包含基礎代謝的總消耗。</p>',
         '</section>',
         '<p class="hint" style="padding:0 8px">食物熱量與每日赤字皆為估算。排行榜用於一起養成紀錄習慣，不代表赤字越大越好。</p>',
@@ -856,46 +866,129 @@
         state.entryMode = 'photo';
         renderEntryMode();
       });
+
       document.getElementById('manualModeButton').addEventListener('click', () => {
         state.entryMode = 'manual';
         renderEntryMode();
-        window.setTimeout(() => document.getElementById('customFoodKcal').focus(), 0);
+
+        window.setTimeout(() => {
+          document.getElementById('customFoodKcal').focus();
+        }, 0);
       });
+
       document.getElementById('foodLibrary').addEventListener('toggle', event => {
         if (!event.target.open || state.foodLibraryReady) return;
+
         state.foodLibraryReady = true;
         renderCategories();
         renderFoods();
       });
+
       document.getElementById('search').addEventListener('input', event => {
         state.search = event.target.value.trim().toLowerCase();
-        if (state.foodLibraryReady) renderFoods();
+
+        if (state.foodLibraryReady) {
+          renderFoods();
+        }
       });
-      document.getElementById('addCustomFoodButton').addEventListener('click', addCustomFood);
-      document.getElementById('customFoodKcal').addEventListener('keydown', event => {
-        if (event.key === 'Enter') addCustomFood();
-      });
+
+      document
+        .getElementById('addCustomFoodButton')
+        .addEventListener('click', addCustomFood);
+
+      document
+        .getElementById('customFoodKcal')
+        .addEventListener('keydown', event => {
+          if (event.key === 'Enter') {
+            addCustomFood();
+          }
+        });
+
       [
-        'name', 'bmr', 'exerciseMinutes', 'exerciseKcal',
+        'name',
+        'bmr',
+        'exerciseMinutes',
+        'exerciseKcal',
       ].forEach(id => {
-        document.getElementById(id).addEventListener('input', () => {
-          if (id === 'bmr' || id === 'exerciseKcal') updateTotals();
+        const input = document.getElementById(id);
+
+        input.addEventListener('input', () => {
+          if (id === 'bmr' || id === 'exerciseKcal') {
+            updateTotals();
+          }
+
           markRecordChanged();
         });
       });
-      document.getElementById('publicAlias').addEventListener('input', () => markPublicSettingsChanged(true));
-      document.getElementById('publishToday').addEventListener('change', () => {
-        updatePublicSettingsSummary();
-        markPublicSettingsChanged(false);
+
+      document
+        .getElementById('clearExerciseButton')
+        .addEventListener('click', () => {
+          const exerciseMinutes =
+            document.getElementById('exerciseMinutes');
+
+          const exerciseKcal =
+            document.getElementById('exerciseKcal');
+
+          if (!exerciseMinutes.value && !exerciseKcal.value) {
+            showToast('目前沒有運動紀錄。');
+            return;
+          }
+
+          exerciseMinutes.value = '';
+          exerciseKcal.value = '';
+
+          // 立即把 TDEE 更新成不包含運動消耗的數字。
+          updateTotals();
+
+          // 250ms 後自動儲存，並將已完成狀態切回打卡中。
+          markRecordChanged(250);
+
+          showToast('已清除運動紀錄，正在自動儲存。');
+        });
+
+      document
+        .getElementById('publicAlias')
+        .addEventListener('input', () => {
+          markPublicSettingsChanged(true);
+        });
+
+      document
+        .getElementById('publishToday')
+        .addEventListener('change', () => {
+          updatePublicSettingsSummary();
+          markPublicSettingsChanged(false);
+        });
+
+      document
+        .getElementById('publishFoodDetails')
+        .addEventListener('change', () => {
+          updatePublicSettingsSummary();
+          markPublicSettingsChanged(false);
+        });
+
+      document
+        .getElementById('joinPublicRanking')
+        .addEventListener('change', () => {
+          updatePublicSettingsSummary();
+          markPublicSettingsChanged(false);
+        });
+
+      document
+        .getElementById('foodPhoto')
+        .addEventListener('change', handleFoodPhoto);
+
+      document
+        .getElementById('galleryPhoto')
+        .addEventListener('change', handleFoodPhoto);
+
+      document
+        .getElementById('calculateBmrButton')
+        .addEventListener('click', calculateBmrEstimate);
+
+      submitButton.addEventListener('click', () => {
+        submitLog(true);
       });
-      document.getElementById('joinPublicRanking').addEventListener('change', () => {
-        updatePublicSettingsSummary();
-        markPublicSettingsChanged(false);
-      });
-      document.getElementById('foodPhoto').addEventListener('change', handleFoodPhoto);
-      document.getElementById('galleryPhoto').addEventListener('change', handleFoodPhoto);
-      document.getElementById('calculateBmrButton').addEventListener('click', calculateBmrEstimate);
-      submitButton.addEventListener('click', () => submitLog(true));
     }
 
     function renderEntryMode() {
@@ -913,9 +1006,14 @@
     function updatePublicSettingsSummary() {
       const status = document.getElementById('publicSettingsStatus');
       const publishToday = document.getElementById('publishToday');
+      const publishFoodDetails = document.getElementById('publishFoodDetails');
       const joinPublicRanking = document.getElementById('joinPublicRanking');
-      if (!status || !publishToday || !joinPublicRanking) return;
-      const recordText = publishToday.checked ? '今日紀錄已公開' : '今日紀錄不公開';
+      if (!status || !publishToday || !publishFoodDetails || !joinPublicRanking) return;
+      if (!publishToday.checked) publishFoodDetails.checked = false;
+      publishFoodDetails.disabled = !publishToday.checked;
+      const recordText = publishToday.checked
+        ? (publishFoodDetails.checked ? '紀錄與餐點細項預設公開' : '紀錄預設公開（不含餐點細項）')
+        : '紀錄預設不公開';
       const rankingText = joinPublicRanking.checked ? '已參加連續排行' : '未參加連續排行';
       status.textContent = `目前：${recordText}・${rankingText}`;
     }
@@ -1448,17 +1546,26 @@
       else updateSubmitButtons();
     }
 
-    function markRecordChanged() {
+    function markRecordChanged(saveDelayMs) {
       const changedFromComplete = todayIsComplete;
+
       todayIsComplete = false;
       state.pendingAutoComplete = false;
       state.mealRevision += 1;
+
       updateSubmitButtons();
+
+      const delay = Number.isFinite(saveDelayMs)
+        ? saveDelayMs
+        : (changedFromComplete ? 250 : 700);
+
       window.clearTimeout(state.autoSaveTimer);
+
       state.autoSaveTimer = window.setTimeout(
         () => submitLog(false, true),
-        changedFromComplete ? 250 : 1800
+        delay
       );
+
       if (changedFromComplete) {
         showToast('📝 內容已修改，已切回打卡中並自動儲存。');
       }
@@ -1535,6 +1642,7 @@
         isComplete: Boolean(markComplete),
         publicAlias: document.getElementById('publicAlias').value,
         publishToday: document.getElementById('publishToday').checked,
+        publishFoodDetails: document.getElementById('publishFoodDetails').checked,
         joinPublicRanking: document.getElementById('joinPublicRanking').checked,
       };
 

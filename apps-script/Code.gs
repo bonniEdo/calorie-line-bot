@@ -1,5 +1,11 @@
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
+  // 連結憑證的用途範圍。form 可讀寫今天的紀錄；wall 只能看公開頁與按讚。
+  tokenScopes: { form: 'form', wall: 'wall' },
+  // 連結的有效時間。過期後成員回 LINE 輸入「打卡」即可取得新連結。
+  tokenTtlSeconds: { form: 24 * 60 * 60, wall: 24 * 60 * 60 },
+  // 照片辨識共用同一組 Gemini 免費額度，需要上限避免單一連結外流後被無限呼叫。
+  photoQuota: { perUserPerDay: 40, totalPerDay: 300 },
   sheets: {
     config: '系統設定',
     members: '成員設定',
@@ -14,7 +20,7 @@ const APP = Object.freeze({
     members: [
       'UserId', '姓名', '基礎代謝BMR', '體重kg', '身高cm', '年齡',
       '生理性別', '已加好友', '建立時間', '更新時間', '群組中',
-      '公開暱稱', '參與公開排行',
+      '公開暱稱', '參與公開排行', '預設公開紀錄', '預設公開食物細項',
     ],
     groups: ['GroupId', '群組名稱', '啟用排行', '建立時間', '更新時間'],
     groupMembers: ['GroupId', 'UserId', '群組中', '加入時間', '更新時間'],
@@ -27,7 +33,7 @@ const APP = Object.freeze({
       '晚餐kcal', '點心kcal', '宵夜kcal', '總攝取kcal', '飲水ml',
       '運動項目', '運動分鐘', '活動熱量kcal', '基礎代謝BMR',
       '估算總消耗kcal', '估算赤字kcal', '食物明細JSON', '備註', '更新時間',
-      '打卡狀態', '公開紀錄', '公開時間',
+      '打卡狀態', '公開紀錄', '公開時間', '公開食物細項',
     ],
     publicLikes: ['日期', '按讚者UserId', '被按讚者UserId', '建立時間', '更新時間'],
   },
@@ -50,6 +56,8 @@ function setupProject() {
   if (!props.getProperty('FORM_SIGNING_SECRET')) {
     props.setProperty('FORM_SIGNING_SECRET', Utilities.getUuid() + Utilities.getUuid());
   }
+  // 連結憑證的版本號。執行 revokeAllTokens() 會 +1，讓所有已發出的連結一次失效。
+  if (!props.getProperty('SIG_VERSION')) props.setProperty('SIG_VERSION', '1');
 
   ensureSheet_(APP.sheets.config, APP.headers.config);
   ensureSheet_(APP.sheets.members, APP.headers.members);
@@ -75,7 +83,7 @@ function setupProject() {
   return {
     ok: true,
     spreadsheetId: ss.getId(),
-    next: '到「專案設定 → 指令碼屬性」加入 LINE_CHANNEL_ACCESS_TOKEN，然後部署網頁應用程式。',
+    next: '到「專案設定 → 指令碼屬性」加入 LINE_CHANNEL_ACCESS_TOKEN 與 GEMINI_API_KEY（照片辨識需要），然後部署網頁應用程式。',
   };
 }
 
@@ -96,13 +104,16 @@ function doGet(e) {
   }
   const uid = String((e && e.parameter && e.parameter.uid) || '');
   const sig = String((e && e.parameter && e.parameter.sig) || '');
-  const valid = Boolean(uid && sig && validateFormSignature_(uid, sig));
+  const tokenState = inspectAccessToken_(uid, sig, APP.tokenScopes.form);
+  const valid = tokenState === 'ok';
   const member = valid ? getMemberById_(uid) : null;
   const foods = valid ? getFoods_() : [];
   const template = HtmlService.createTemplateFromFile('Index');
 
   const bootstrap = {
     valid,
+    // 讓畫面能分辨「連結過期」與「連結錯誤」，給出不同的說明。
+    invalidReason: valid ? '' : tokenState,
     uid,
     sig,
     today: today_(),
@@ -354,7 +365,8 @@ function saveDailyLog(payload) {
   payload = payload || {};
   const userId = String(payload.uid || '');
   const sig = String(payload.sig || '');
-  if (!userId || !validateFormSignature_(userId, sig)) throw new Error('打卡連結驗證失敗，請回 LINE 重新輸入「打卡」。');
+  const tokenState = inspectAccessToken_(userId, sig, APP.tokenScopes.form);
+  if (tokenState !== 'ok') throw new Error(accessTokenErrorMessage_(tokenState));
 
   let member = getMemberById_(userId);
   if (!member) throw new Error('尚未綁定成員，請先私訊機器人「綁定」。');
@@ -370,11 +382,22 @@ function saveDailyLog(payload) {
   const requestedPublicRanking = payload.joinPublicRanking === undefined
     ? Boolean(member.joinPublicRanking)
     : Boolean(payload.joinPublicRanking);
+  // 公開設定屬於成員偏好，而不是每天歸零的紀錄欄位。
+  const requestedDefaultPublishToday = payload.publishToday === undefined
+    ? Boolean(member.defaultPublishToday)
+    : Boolean(payload.publishToday);
+  const requestedDefaultPublishFoodDetails = requestedDefaultPublishToday && (
+    payload.publishFoodDetails === undefined
+      ? Boolean(member.defaultPublishFoodDetails)
+      : Boolean(payload.publishFoodDetails)
+  );
   const memberChanged = displayName !== member.name
     || (finalBmr && finalBmr !== Number(member.bmr || 0))
     || (finalWeightKg && finalWeightKg !== Number(member.weightKg || 0))
     || requestedPublicAlias !== String(member.publicAlias || '')
-    || requestedPublicRanking !== Boolean(member.joinPublicRanking);
+    || requestedPublicRanking !== Boolean(member.joinPublicRanking)
+    || requestedDefaultPublishToday !== Boolean(member.defaultPublishToday)
+    || requestedDefaultPublishFoodDetails !== Boolean(member.defaultPublishFoodDetails);
   const pendingMemberUpdate = memberChanged
     ? {
       userId,
@@ -383,6 +406,8 @@ function saveDailyLog(payload) {
       weightKg: finalWeightKg,
       publicAlias: requestedPublicAlias,
       joinPublicRanking: requestedPublicRanking,
+      defaultPublishToday: requestedDefaultPublishToday,
+      defaultPublishFoodDetails: requestedDefaultPublishFoodDetails,
     }
     : null;
 
@@ -461,9 +486,9 @@ function saveDailyLog(payload) {
   const now = new Date();
   // 由使用者這次按下的按鈕決定狀態；已完成也可以主動改回打卡中繼續補充。
   const isComplete = Boolean(payload.isComplete);
-  const isPublic = payload.publishToday === undefined
-    ? getTodayPublicFlag_(userId)
-    : Boolean(payload.publishToday);
+  const isPublic = requestedDefaultPublishToday;
+  // 食物細項是比熱量摘要更高一層的公開權限；只有今日紀錄本身公開時才允許開啟。
+  const publishFoodDetails = requestedDefaultPublishFoodDetails;
 
   const row = [
     now,
@@ -489,6 +514,7 @@ function saveDailyLog(payload) {
     isComplete ? '完成' : '打卡中',
     isPublic,
     isPublic ? now : '',
+    publishFoodDetails,
   ];
 
   // 只在真正寫入工作表時持有全域鎖，避免自動儲存長時間卡住公開頁按讚。
@@ -509,6 +535,7 @@ function saveDailyLog(payload) {
     hasBmr: Boolean(finalBmr),
     isComplete,
     isPublic,
+    publishFoodDetails,
   };
 }
 
@@ -585,7 +612,7 @@ function runScheduledJobs() {
 /** 相容舊排程：午夜結算前一天，早上 08:00 發送已保存的結果。 */
 function sendRankingIfDue() {
   const hour = Number(Utilities.formatDate(new Date(), APP.timezone, 'HH'));
-  if (hour === 0) return finalizePreviousDayAtMidnight();
+  if (hour === 3) return finalizePreviousDayAtMidnight();
   if (hour === 8) return sendPreviousDayRankingAt0800();
   return { ok: true, skipped: 'not_due' };
 }
@@ -701,7 +728,7 @@ function installReminderTrigger() {
   ScriptApp.newTrigger('sendReminderAt2330')
     .timeBased().atHour(23).nearMinute(30).everyDays(1).inTimezone(APP.timezone).create();
   ScriptApp.newTrigger('finalizePreviousDayAtMidnight')
-    .timeBased().atHour(0).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
+    .timeBased().atHour(3).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
   ScriptApp.newTrigger('sendPreviousDayRankingAt0800')
     .timeBased().atHour(8).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
   return { ok: true, message: '已建立排程：23:00、23:30 個人提醒，00:00 結算，隔天 08:00 群組公布。' };
@@ -954,7 +981,8 @@ function getLogsForDate_(date) {
 function getPublicWallData_(viewerId, viewerSignature) {
   viewerId = String(viewerId || '');
   viewerSignature = String(viewerSignature || '');
-  const viewerValid = Boolean(viewerId && viewerSignature && validateFormSignature_(viewerId, viewerSignature));
+  // 公開頁只接受 wall 範圍的 token；打卡用的 form token 不能在這裡使用，反之亦然。
+  const viewerValid = validateFormSignature_(viewerId, viewerSignature, APP.tokenScopes.wall);
   const today = today_();
   const base = getPublicWallBaseData_(today);
   const viewerMember = viewerValid ? getMemberById_(viewerId) : null;
@@ -963,6 +991,7 @@ function getPublicWallData_(viewerId, viewerSignature) {
     intake: item.intake,
     allowance: item.allowance,
     meals: item.meals,
+    mealDetails: Array.isArray(item.mealDetails) ? item.mealDetails : [],
     isComplete: item.isComplete,
     updatedAt: item.updatedAt,
     likeKey: item.likeKey,
@@ -1016,7 +1045,7 @@ function getPublicWallData_(viewerId, viewerSignature) {
  */
 function getPublicWallBaseData_(today, members) {
   today = String(today || today_());
-  const cacheKey = `public-wall-base:v2:${today}`;
+  const cacheKey = `public-wall-base:v3:${today}`;
   const cached = readJsonCache_(cacheKey);
   if (cached && Array.isArray(cached.records) && Array.isArray(cached.streaks)) {
     return cached;
@@ -1060,12 +1089,14 @@ function getPublicWallBaseData_(today, members) {
       .forEach(([column, label]) => {
         if (numberInRange_(row[column], 0, 100000) > 0) meals.push(label);
       });
+    const publishFoodDetails = row[23] === true || String(row[23]).toUpperCase() === 'TRUE';
     return {
       userId,
       alias: publicAliasForMember_(member),
       intake,
       allowance,
       meals,
+      mealDetails: publishFoodDetails ? buildPublicMealDetails_(row[17]) : [],
       isComplete: isLogComplete_(row[20]),
       updatedAt: formatPublicTime_(row[19]),
       likeKey: publicLikeTargetKey_(userId),
@@ -1103,6 +1134,34 @@ function getPublicWallBaseData_(today, members) {
   const result = { records, streaks };
   writeJsonCache_(cacheKey, result, 180);
   return result;
+}
+
+/**
+ * 將每日紀錄中的食物明細整理成公開頁需要的最小資料。
+ * 不回傳照片、內部 ID、AI 信心、備註或其他可能洩漏隱私的欄位。
+ */
+function buildPublicMealDetails_(detailsJson) {
+  const details = parseJsonObject_(detailsJson);
+  const mealOrder = [
+    ['breakfast', '早餐'],
+    ['lunch', '午餐'],
+    ['dinner', '晚餐'],
+    ['lateNight', '宵夜'],
+    ['snack', '點心'],
+  ];
+
+  return mealOrder.map(([mealKey, label]) => {
+    const sourceItems = Array.isArray(details[mealKey]) ? details[mealKey] : [];
+    const items = sourceItems.slice(0, 20).map(item => {
+      const name = cleanText_(item && item.name, 60);
+      const portion = cleanText_(item && item.portion, 80);
+      const quantity = numberInRange_(item && item.quantity, 0, 20) || 1;
+      const calories = Math.round(numberInRange_(item && item.calories, 0, 5000));
+      return { name, portion, quantity, calories };
+    }).filter(item => item.name && item.calories > 0);
+
+    return { mealKey, label, items };
+  }).filter(meal => meal.items.length > 0);
 }
 
 function cachePublicLikeTargets_(visibleTargets) {
@@ -1143,8 +1202,11 @@ function likePublicParticipant(payload) {
   const viewerId = String(payload.uid || '');
   const viewerSignature = String(payload.sig || '');
   const targetKey = String(payload.targetKey || '');
-  if (!viewerId || !viewerSignature || !validateFormSignature_(viewerId, viewerSignature)) {
-    throw new Error('按讚身分已失效，請回 LINE 輸入「公開排行」後重新開啟。');
+  const tokenState = inspectAccessToken_(viewerId, viewerSignature, APP.tokenScopes.wall);
+  if (tokenState !== 'ok') {
+    throw new Error(tokenState === 'expired'
+      ? '這個公開頁連結已經過期了。請回 LINE 輸入「公開紀錄」重新開啟。'
+      : '按讚身分驗證失敗，請回 LINE 輸入「公開紀錄」後重新開啟。');
   }
 
   const viewer = getMemberById_(viewerId);
@@ -1280,7 +1342,7 @@ function getPublicLikesSheet_() {
 }
 
 function publicLikeTargetKey_(userId) {
-  return signUserId_(`public-like:${String(userId || '')}`);
+  return opaqueId_(`public-like:${String(userId || '')}`);
 }
 
 function publicAliasForMember_(member) {
@@ -1444,6 +1506,7 @@ function getTodayFormData_(userId, foods) {
     note: cleanText_(savedRow[18], 500),
     isComplete: isLogComplete_(savedRow[20]),
     isPublic: savedRow[21] === true || String(savedRow[21]).toUpperCase() === 'TRUE',
+    publishFoodDetails: savedRow[23] === true || String(savedRow[23]).toUpperCase() === 'TRUE',
   };
 }
 
@@ -1453,7 +1516,7 @@ function getTodayFormData_(userId, foods) {
  */
 function ensureLogStatusHeader_(sheet) {
   const cache = CacheService.getScriptCache();
-  if (cache.get('log-headers:v3') === 'ok') return;
+  if (cache.get('log-headers:v4') === 'ok') return;
   const current = sheet.getRange(1, 1, 1, APP.headers.logs.length).getValues()[0];
   let changed = false;
   APP.headers.logs.forEach((header, index) => {
@@ -1467,7 +1530,7 @@ function ensureLogStatusHeader_(sheet) {
       .setFontWeight('bold')
       .setHorizontalAlignment('center');
   }
-  cache.put('log-headers:v3', 'ok', 21600);
+  cache.put('log-headers:v4', 'ok', 21600);
 }
 
 function isLogComplete_(value) {
@@ -1525,7 +1588,7 @@ function upsertDailyRow_(date, userId, row) {
 }
 
 function getMembers_() {
-  const cached = readJsonCache_('members:v3');
+  const cached = readJsonCache_('members:v4');
   if (Array.isArray(cached)) return cached;
   const sheet = getSheet_(APP.sheets.members);
   ensureMemberGroupHeader_(sheet);
@@ -1544,14 +1607,16 @@ function getMembers_() {
       inGroup: row[10] === true || String(row[10]).toUpperCase() === 'TRUE',
       publicAlias: String(row[11] || ''),
       joinPublicRanking: row[12] === true || String(row[12]).toUpperCase() === 'TRUE',
+      defaultPublishToday: row[13] === true || String(row[13]).toUpperCase() === 'TRUE',
+      defaultPublishFoodDetails: row[14] === true || String(row[14]).toUpperCase() === 'TRUE',
     }));
-  writeJsonCache_('members:v3', members, 180);
+  writeJsonCache_('members:v4', members, 180);
   return members;
 }
 
 function ensureMemberGroupHeader_(sheet) {
   const cache = CacheService.getScriptCache();
-  if (cache.get('member-headers:v2') === 'ok') return;
+  if (cache.get('member-headers:v3') === 'ok') return;
   const current = sheet.getRange(1, 1, 1, APP.headers.members.length).getValues()[0];
   APP.headers.members.forEach((header, index) => {
     if (String(current[index] || '') !== header) sheet.getRange(1, index + 1).setValue(header);
@@ -1560,7 +1625,61 @@ function ensureMemberGroupHeader_(sheet) {
     .setBackground('#F5D77A')
     .setFontWeight('bold')
     .setHorizontalAlignment('center');
-  cache.put('member-headers:v2', 'ok', 21600);
+  initializePublicDefaultsFromLogs_(sheet);
+  cache.put('member-headers:v3', 'ok', 21600);
+}
+
+/**
+ * 只在新增永久公開偏好欄位時初始化一次。
+ * 曾公開過的人沿用最近一次「公開紀錄」的餐點細項設定；之後以成員欄位為準，
+ * 使用者主動關閉後不會再被歷史紀錄打開。
+ */
+function initializePublicDefaultsFromLogs_(memberSheet) {
+  const memberCount = memberSheet.getLastRow() - 1;
+  if (memberCount <= 0) return;
+
+  const preferenceRange = memberSheet.getRange(2, 14, memberCount, 2);
+  const preferences = preferenceRange.getValues();
+  if (!preferences.some(row => row[0] === '' || row[1] === '')) return;
+
+  const latestPublishedByUser = new Map();
+  const logSheet = getSheet_(APP.sheets.logs);
+  ensureLogStatusHeader_(logSheet);
+  if (logSheet.getLastRow() >= 2) {
+    const logRows = logSheet
+      .getRange(2, 1, logSheet.getLastRow() - 1, APP.headers.logs.length)
+      .getValues();
+    for (let index = logRows.length - 1; index >= 0; index -= 1) {
+      const row = logRows[index];
+      const userId = String(row[2] || '');
+      if (!userId || latestPublishedByUser.has(userId)) continue;
+      const isPublic = row[21] === true || String(row[21]).toUpperCase() === 'TRUE';
+      if (!isPublic) continue;
+      latestPublishedByUser.set(userId, {
+        publishToday: true,
+        publishFoodDetails: row[23] === true || String(row[23]).toUpperCase() === 'TRUE',
+      });
+    }
+  }
+
+  const userIds = memberSheet.getRange(2, 1, memberCount, 1).getValues();
+  let changed = false;
+  preferences.forEach((row, index) => {
+    const previous = latestPublishedByUser.get(String(userIds[index][0] || '')) || {
+      publishToday: false,
+      publishFoodDetails: false,
+    };
+    if (row[0] === '') {
+      row[0] = previous.publishToday;
+      changed = true;
+    }
+    if (row[1] === '') {
+      const publicEnabled = row[0] === true || String(row[0]).toUpperCase() === 'TRUE';
+      row[1] = publicEnabled && previous.publishFoodDetails;
+      changed = true;
+    }
+  });
+  if (changed) preferenceRange.setValues(preferences);
 }
 
 function ensureGroupSheets_() {
@@ -1860,7 +1979,7 @@ function upsertMember_(data) {
     }
   }
 
-  const row = existing || [data.userId, '', '', '', '', '', '', false, now, now, false, '', false];
+  const row = existing || [data.userId, '', '', '', '', '', '', false, now, now, false, '', false, false, false];
   row[0] = data.userId || row[0];
   if (data.name !== undefined && data.name !== '') row[1] = cleanText_(data.name, 40);
   if (data.bmr !== undefined && data.bmr !== '') row[2] = Number(data.bmr);
@@ -1877,13 +1996,22 @@ function upsertMember_(data) {
   else if (row[11] === undefined) row[11] = '';
   if (data.joinPublicRanking !== undefined) row[12] = Boolean(data.joinPublicRanking);
   else if (row[12] === undefined || row[12] === '') row[12] = false;
+  if (data.defaultPublishToday !== undefined) row[13] = Boolean(data.defaultPublishToday);
+  else if (row[13] === undefined || row[13] === '') row[13] = false;
+  if (data.defaultPublishFoodDetails !== undefined) {
+    row[14] = Boolean(row[13]) && Boolean(data.defaultPublishFoodDetails);
+  } else if (row[14] === undefined || row[14] === '') {
+    row[14] = false;
+  }
 
   if (rowNumber > 0) sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
   else sheet.appendRow(row);
   const cache = CacheService.getScriptCache();
   cache.remove(`member:${String(data.userId)}`);
   cache.remove('members:v3');
+  cache.remove('members:v4');
   cache.remove(`public-wall-base:v2:${today_()}`);
+  cache.remove(`public-wall-base:v3:${today_()}`);
   try {
     cache.remove(`public-like-target:v2:${publicLikeTargetKey_(data.userId)}`);
   } catch (error) {
@@ -1925,27 +2053,127 @@ function getFoods_() {
 function getSignedFormUrl_(userId) {
   const baseUrl = ScriptApp.getService().getUrl();
   if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
-  return `${baseUrl}?uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(signUserId_(userId))}&v=${Date.now()}`;
+  // token 每次發放都不同，本身就會讓網址唯一，不需要額外的 v= 參數。
+  const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
+  return `${baseUrl}?uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(token)}`;
 }
 
+/**
+ * 公開頁的網址是會被分享出去的，所以這裡只發 wall 範圍的 token：
+ * 拿到的人可以看公開頁、可以按讚，但不能讀寫任何人的打卡紀錄。
+ */
 function getPublicWallUrl_(userId) {
   const baseUrl = ScriptApp.getService().getUrl();
   if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
   userId = String(userId || '');
-  // 公開頁網址只在版本更新時變更，避免每次開啟都產生無法重用的新網址。
-  if (!userId) return `${baseUrl}?view=public&v=17`;
-  return `${baseUrl}?view=public&uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(signUserId_(userId))}&v=17`;
+  if (!userId) return `${baseUrl}?view=public`;
+  const token = issueAccessToken_(userId, APP.tokenScopes.wall, APP.tokenTtlSeconds.wall);
+  return `${baseUrl}?view=public&uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(token)}`;
 }
 
-function signUserId_(userId) {
-  const secret = PropertiesService.getScriptProperties().getProperty('FORM_SIGNING_SECRET') || '';
+/**
+ * 連結憑證（token）。
+ *
+ * 舊版是 sign(userId)：同一個人永遠拿到同一個字串，等於一把永不過期、也無法作廢的
+ * 鑰匙。而這個網頁沒有登入畫面，那串簽章就是身分本身——所以任何轉傳、截圖或瀏覽器
+ * 歷史紀錄的外流，都是永久有效的帳號外流。
+ *
+ * 新版把三件事一起綁進簽章：
+ * - scope：這把鑰匙能做什麼（form 可讀寫紀錄；wall 只能看公開頁與按讚）
+ * - exp：到期的 Unix 秒數，過期即失效
+ * - SIG_VERSION：執行 revokeAllTokens() 後，所有已發出的連結一次作廢
+ *
+ * 格式：`${exp}.${base64url(hmac)}`
+ */
+let runtimeSigningConfig_ = null;
+
+function getSigningConfig_() {
+  if (runtimeSigningConfig_) return runtimeSigningConfig_;
+  const props = PropertiesService.getScriptProperties().getProperties();
+  const secret = props.FORM_SIGNING_SECRET || '';
   if (!secret) throw new Error('缺少 FORM_SIGNING_SECRET，請先執行 setupProject。');
-  const bytes = Utilities.computeHmacSha256Signature(userId, secret);
-  return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/g, '');
+  runtimeSigningConfig_ = { secret, version: String(props.SIG_VERSION || '1') };
+  return runtimeSigningConfig_;
 }
 
-function validateFormSignature_(userId, signature) {
-  return safeEqual_(signUserId_(userId), String(signature || '').replace(/=+$/g, ''));
+function computeTokenSignature_(userId, scope, expiresAt, config) {
+  const payload = `v${config.version}|${scope}|${String(userId)}|${expiresAt}`;
+  return Utilities.base64EncodeWebSafe(
+    Utilities.computeHmacSha256Signature(payload, config.secret)
+  ).replace(/=+$/g, '');
+}
+
+function issueAccessToken_(userId, scope, ttlSeconds) {
+  const config = getSigningConfig_();
+  const expiresAt = Math.floor(Date.now() / 1000) + Math.max(60, Number(ttlSeconds) || 0);
+  return `${expiresAt}.${computeTokenSignature_(userId, scope, expiresAt, config)}`;
+}
+
+/**
+ * 回傳 'ok' | 'expired' | 'invalid'。
+ * 分成三種狀態是為了讓使用者看到「連結過期了，回 LINE 重按」而不是籠統的驗證失敗。
+ */
+function inspectAccessToken_(userId, token, scope) {
+  userId = String(userId || '');
+  token = String(token || '');
+  if (!userId || !token) return 'invalid';
+
+  const separator = token.indexOf('.');
+  // 舊版沒有到期時間的簽章不含分隔點，一律視為無效。
+  if (separator <= 0) return 'invalid';
+
+  const expiresAt = Number(token.slice(0, separator));
+  const signature = token.slice(separator + 1).replace(/=+$/g, '');
+  if (!Number.isFinite(expiresAt) || !signature) return 'invalid';
+
+  const config = getSigningConfig_();
+  const expected = computeTokenSignature_(userId, scope, expiresAt, config);
+  if (!safeEqual_(expected, signature)) return 'invalid';
+
+  // 先驗簽章、後看時間：到期時間是被簽章保護的內容，不能拿未驗證的值做判斷。
+  return Math.floor(Date.now() / 1000) > expiresAt ? 'expired' : 'ok';
+}
+
+function validateFormSignature_(userId, token, scope) {
+  return inspectAccessToken_(userId, token, scope || APP.tokenScopes.form) === 'ok';
+}
+
+function accessTokenErrorMessage_(state) {
+  if (state === 'expired') {
+    return '這個連結已經過期了（連結有效 24 小時）。請回 LINE 輸入「打卡」取得新連結。';
+  }
+  return '連結驗證失敗，請回 LINE 重新輸入「打卡」。';
+}
+
+/**
+ * 在 Apps Script 編輯器手動執行，即可讓所有已發出的連結立刻失效。
+ * 使用時機：連結被轉傳出去、成員退出、或任何你不確定的時候。
+ * 執行後成員只要回 LINE 輸入「打卡」就會拿到新連結，資料不受影響。
+ */
+function revokeAllTokens() {
+  const props = PropertiesService.getScriptProperties();
+  const next = String(Number(props.getProperty('SIG_VERSION') || '1') + 1);
+  props.setProperty('SIG_VERSION', next);
+  runtimeSigningConfig_ = null;
+  return {
+    ok: true,
+    signatureVersion: next,
+    message: '所有舊連結已失效，請成員回 LINE 重新輸入「打卡」。',
+  };
+}
+
+/**
+ * 產生一個穩定、不可反推的識別字串。
+ *
+ * 只給 publicLikeTargetKey_ 用：讓公開頁可以指向某個人而不必暴露真實的 LINE UserId。
+ * 這不是身分憑證，不含到期時間也不受 revokeAllTokens 影響（它必須永遠穩定，
+ * 否則舊的按讚資料會對不上）。絕對不要拿它當作授權依據。
+ */
+function opaqueId_(value) {
+  const config = getSigningConfig_();
+  return Utilities.base64EncodeWebSafe(
+    Utilities.computeHmacSha256Signature(String(value), config.secret)
+  ).replace(/=+$/g, '');
 }
 
 function fetchLineDisplayName_(source) {
@@ -2014,20 +2242,69 @@ function testGeminiConnection() {
   return { ok: true, reply };
 }
 
+/**
+ * 每日照片辨識配額。
+ *
+ * 所有成員共用同一組 Gemini 免費額度，所以需要兩層上限：單人上限擋住某個外流連結
+ * 被拿去無限呼叫，全站上限保護整組額度不被單日耗盡（額度用完，全部人的辨識都會壞）。
+ *
+ * 計數放 ScriptProperties 而不是 CacheService：後者最長只有 6 小時，跨不過一整天。
+ * 這個值大約每 150 位成員會用掉 9KB 的屬性上限，目前規模綽綽有餘。
+ */
+function consumePhotoQuota_(userId) {
+  const limits = APP.photoQuota;
+  const props = PropertiesService.getScriptProperties();
+  const lock = LockService.getScriptLock();
+  // 只鎖住計數本身；Gemini 呼叫留在鎖外，避免所有人排隊等同一支 API。
+  if (!lock.tryLock(5000)) throw new Error('系統忙碌中，請兩秒後再按一次分析。');
+  try {
+    const date = today_();
+    const state = parseJsonObject_(props.getProperty('PHOTO_QUOTA'));
+    const counts = state.date === date && state.counts && typeof state.counts === 'object'
+      ? state.counts
+      : {};
+    const used = Number(counts[userId] || 0);
+    const total = Number(counts.__total || 0);
+
+    if (used >= limits.perUserPerDay) {
+      throw new Error(`今天的照片辨識已達每人上限 ${limits.perUserPerDay} 次，明天會重新計算。你仍然可以手動輸入熱量。`);
+    }
+    if (total >= limits.totalPerDay) {
+      throw new Error('今天大家的照片辨識額度已經用完了，明天會重新計算。你仍然可以手動輸入熱量。');
+    }
+
+    counts[userId] = used + 1;
+    counts.__total = total + 1;
+    props.setProperty('PHOTO_QUOTA', JSON.stringify({ date, counts }));
+    return { used: used + 1, total: total + 1 };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 需要時在編輯器手動執行，把今天的照片辨識次數歸零。 */
+function resetPhotoQuota() {
+  PropertiesService.getScriptProperties().deleteProperty('PHOTO_QUOTA');
+  return { ok: true, message: '今日照片辨識次數已歸零。' };
+}
+
 /** 分析一張餐點照片；照片不會寫入 Sheet 或 Drive。 */
 function analyzeFoodPhoto(payload) {
   payload = payload || {};
   const uid = String(payload.uid || '');
   const sig = String(payload.sig || '');
-  if (!uid || !validateFormSignature_(uid, sig)) {
-    throw new Error('打卡連結驗證失敗，請回 LINE 重新輸入「打卡」。');
-  }
+  const tokenState = inspectAccessToken_(uid, sig, APP.tokenScopes.form);
+  if (tokenState !== 'ok') throw new Error(accessTokenErrorMessage_(tokenState));
 
   const match = String(payload.imageDataUrl || '').match(
     /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/
   );
   if (!match) throw new Error('照片格式不支援，請重新拍照或選擇 JPG、PNG 圖片。');
   if (match[2].length > 2800000) throw new Error('照片太大，請重新拍照。');
+
+  // 格式檢查通過後才計數，避免壞掉的請求白白消耗別人的額度。
+  const quota = consumePhotoQuota_(uid);
+  console.log(`照片辨識配額：本人今日第 ${quota.used} 次，全站今日第 ${quota.total} 次。`);
 
   const prompt = [
     '你是協助台灣使用者記錄飲食的營養估算助手。',
@@ -2320,7 +2597,14 @@ function formatSheets_() {
 }
 
 function today_() {
-  return Utilities.formatDate(new Date(), APP.timezone, 'yyyy-MM-dd');
+  const now = new Date();
+  const dietDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+
+  return Utilities.formatDate(
+    dietDate,
+    APP.timezone,
+    'yyyy-MM-dd'
+  );
 }
 
 function dateDaysAgo_(days, baseDate) {
@@ -2396,6 +2680,7 @@ function invalidateLogCache_(date, userId) {
   const cache = CacheService.getScriptCache();
   cache.remove(`logs-for-date:v4:${date}`);
   cache.remove(`public-wall-base:v2:${date}`);
+  cache.remove(`public-wall-base:v3:${date}`);
   if (userId) {
     try {
       cache.remove(`public-like-target:v2:${publicLikeTargetKey_(userId)}`);
