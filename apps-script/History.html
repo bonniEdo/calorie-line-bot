@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>卡路里歷史紀錄</title>
+  <style>
+    :root { --cream:#fffaf0; --ink:#332f29; --muted:#776f64; --line:#eadfca; --yellow:#f5d77a; --green:#4e8b69; --red:#c65f55; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--cream); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif; }
+    .app { max-width:720px; margin:0 auto; padding:16px 14px 40px; }
+    .hero { padding:20px; border-radius:24px; background:linear-gradient(135deg,#ffe9a8,#f6d76e); box-shadow:0 10px 30px rgba(85,65,28,.1); }
+    .eyebrow { color:#765c17; font-size:12px; font-weight:900; letter-spacing:.12em; }
+    h1 { margin:7px 0 4px; font-size:27px; }
+    .hero p { margin:0; color:#6b571f; font-size:13px; }
+    .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:14px; }
+    .summary-card { padding:11px 9px; border-radius:15px; background:rgba(255,255,255,.78); text-align:center; }
+    .summary-card strong { display:block; font-size:20px; }
+    .summary-card span { color:#765c17; font-size:11px; font-weight:800; }
+    .section { margin-top:16px; padding:16px; border:1px solid var(--line); border-radius:20px; background:#fff; box-shadow:0 6px 18px rgba(85,65,28,.05); }
+    .section h2 { margin:0 0 10px; font-size:18px; }
+    .hint { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
+    .record { border-top:1px solid var(--line); padding:13px 0 0; margin-top:13px; }
+    .record:first-child { border-top:0; margin-top:0; padding-top:0; }
+    .record summary { display:grid; grid-template-columns:82px minmax(0,1fr) auto; gap:8px; align-items:center; cursor:pointer; list-style:none; }
+    .record summary::-webkit-details-marker { display:none; }
+    .date { color:var(--muted); font-size:13px; font-weight:800; }
+    .energy { min-width:0; }
+    .energy strong { font-size:17px; }
+    .energy small { display:block; color:var(--muted); font-size:11px; }
+    .status { padding:4px 8px; border-radius:999px; background:#e5f2e8; color:#35684b; font-size:11px; font-weight:900; white-space:nowrap; }
+    .status.progress { background:#fff4d4; color:#765c17; }
+    .detail { margin:12px 0 0 90px; padding:11px 12px; border-radius:14px; background:#fffaf0; }
+    .detail-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:7px; }
+    .detail-item { color:var(--muted); font-size:12px; }
+    .detail-item strong { display:block; color:var(--ink); font-size:14px; }
+    .meal-list { margin:10px 0 0; padding-top:9px; border-top:1px dashed var(--line); }
+    .meal { display:flex; justify-content:space-between; gap:8px; padding:3px 0; font-size:12px; }
+    .meal span:last-child { font-weight:900; }
+    .empty, .error { padding:22px 10px; text-align:center; color:var(--muted); line-height:1.6; }
+    .error { color:var(--red); }
+    @media (max-width:420px) { .summary-card strong { font-size:17px; } .record summary { grid-template-columns:70px minmax(0,1fr) auto; } .detail { margin-left:0; } }
+  </style>
+</head>
+<body>
+  <main class="app" id="app"><div class="empty">正在載入歷史紀錄…</div></main>
+  <div id="historyData" hidden><?= historyJson ?></div>
+  <script>
+    (function () {
+      const root = document.getElementById('app');
+      let data;
+      try { data = JSON.parse(document.getElementById('historyData').textContent || '{}'); }
+      catch (error) { root.innerHTML = '<div class="section error">歷史資料讀取失敗，請重新開啟。</div>'; return; }
+      if (!data.valid) {
+        root.innerHTML = '<div class="section error"><h2>歷史紀錄連結無效</h2><p>請回 LINE 重新輸入「打卡」取得新連結。</p></div>';
+        return;
+      }
+      const number = value => Number(value || 0).toLocaleString('zh-TW');
+      const dateLabel = value => {
+        const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        return match ? `${match[2]}/${match[3]}` : String(value || '');
+      };
+      const signed = value => value > 0 ? `+${number(value)}` : number(value);
+      const records = Array.isArray(data.records) ? data.records : [];
+      const summary = data.summary || {};
+      let html = '<section class="hero">'
+        + '<div class="eyebrow">CALORIE HISTORY</div>'
+        + '<h1>📊 卡路里歷史紀錄</h1>'
+        + '<p>最近 ' + number(data.days || 30) + ' 天・只顯示自己的資料</p>'
+        + '<div class="summary">'
+        + '<div class="summary-card"><strong>' + number(summary.averageIntake) + '</strong><span>平均攝取 kcal</span></div>'
+        + '<div class="summary-card"><strong>' + number(summary.averageTdee) + '</strong><span>平均 TDEE kcal</span></div>'
+        + '<div class="summary-card"><strong>' + number(summary.completedDays) + '/' + number(summary.loggedDays) + '</strong><span>完成紀錄</span></div>'
+        + '</div></section>';
+      html += '<section class="section"><h2>每日紀錄</h2><p class="hint">點開日期可查看餐別、運動與飲水；數字都是估算值。</p>';
+      if (!records.length) {
+        html += '<div class="empty">目前還沒有歷史紀錄。</div>';
+      } else {
+        records.forEach(record => {
+          const progress = record.status !== '完成';
+          html += '<details class="record"><summary>'
+            + '<span class="date">' + dateLabel(record.date) + '</span>'
+            + '<span class="energy"><strong>' + number(record.intake) + ' / ' + number(record.tdee) + ' kcal</strong><small>差額 ' + signed(record.deficit) + ' kcal</small></span>'
+            + '<span class="status ' + (progress ? 'progress' : '') + '">' + (progress ? '打卡中' : '已完成') + '</span>'
+            + '</summary><div class="detail"><div class="detail-grid">'
+            + '<div class="detail-item"><strong>' + number(record.exerciseKcal) + ' kcal</strong>運動消耗</div>'
+            + '<div class="detail-item"><strong>' + number(record.exerciseMinutes) + ' 分鐘</strong>運動時間</div>'
+            + '<div class="detail-item"><strong>' + number(record.waterMl) + ' ml</strong>飲水量</div>'
+            + '<div class="detail-item"><strong>' + (record.exerciseName || '未填寫') + '</strong>運動項目</div>'
+            + '</div><div class="meal-list">';
+          (record.meals || []).forEach(meal => {
+            html += '<div class="meal"><span>' + meal.label + (meal.names && meal.names.length ? '・' + meal.names.join('、') : '') + '</span><span>' + number(meal.kcal) + ' kcal</span></div>';
+          });
+          html += '</div></div></details>';
+        });
+      }
+      html += '</section>';
+      root.innerHTML = html;
+    }());
+  </script>
+</body>
+</html>
