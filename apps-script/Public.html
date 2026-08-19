@@ -10,6 +10,7 @@
       --ink: #332f29;
       --muted: #776f64;
       --green: #4e8b69;
+      --amber: #d79a3c;
       --line: #eadfca;
       --white: #fff;
     }
@@ -21,94 +22,105 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
     }
     button { font: inherit; touch-action: manipulation; }
-    .app { max-width: 760px; margin: 0 auto; padding: 18px 14px 52px; }
+    .app { max-width: 760px; margin: 0 auto; padding: 16px 14px 48px; }
+
     .hero {
-      padding: 22px;
-      border-radius: 24px;
+      padding: 18px 20px;
+      border-radius: 22px;
       background: linear-gradient(135deg, #ffe9a8, #f6d76e);
       box-shadow: 0 10px 30px rgba(85, 65, 28, .10);
     }
-    .eyebrow { font-size: 12px; font-weight: 900; letter-spacing: .12em; color: #765c17; }
-    h1 { margin: 7px 0 5px; font-size: 27px; line-height: 1.2; }
-    .hero p { margin: 0; color: #6b571f; line-height: 1.5; }
-    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 15px; }
-    .summary-card { padding: 11px 8px; border-radius: 14px; background: rgba(255,255,255,.72); text-align: center; }
-    .summary-card strong { display: block; font-size: 20px; }
+    .eyebrow { font-size: 11px; font-weight: 900; letter-spacing: .12em; color: #765c17; }
+    h1 { margin: 6px 0 4px; font-size: 23px; line-height: 1.2; }
+    .hero p { margin: 0; color: #6b571f; font-size: 13px; line-height: 1.5; }
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 13px; }
+    .summary-card { padding: 9px 6px; border-radius: 13px; background: rgba(255,255,255,.72); text-align: center; }
+    .summary-card strong { display: block; font-size: 18px; }
     .summary-card span { font-size: 11px; color: #765c17; }
-    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 16px; padding: 5px; border-radius: 16px; background: #eee6d8; }
-    .tab { min-height: 46px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-weight: 900; cursor: pointer; }
+
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 14px; padding: 5px; border-radius: 16px; background: #eee6d8; }
+    .tab { min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-weight: 900; cursor: pointer; }
     .tab.active { background: var(--white); color: var(--ink); box-shadow: 0 3px 10px rgba(74, 56, 24, .09); }
-    .panel { margin-top: 14px; }
-    .record, .rank-card, .empty, .privacy {
-      margin-top: 10px;
-      padding: 15px;
+    .panel { margin-top: 12px; }
+
+    /* 收合狀態只有一行：名字、熱量、讚、展開箭頭，再加一條細進度條。 */
+    .person {
+      margin-top: 8px;
       border: 1px solid var(--line);
-      border-radius: 18px;
+      border-radius: 16px;
       background: var(--white);
-    }
-    .record-head, .progress-row { display: flex; align-items: center; gap: 10px; }
-    .record-head { justify-content: space-between; }
-    .alias { min-width: 0; font-size: 16px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .status { flex: 0 0 auto; padding: 5px 9px; border-radius: 999px; background: #f3eee5; color: var(--muted); font-size: 11px; font-weight: 900; }
-    .status.complete { background: #e6f2e9; color: #35684b; }
-    .progress-row { justify-content: space-between; margin-top: 12px; }
-    .progress-label { font-size: 12px; color: var(--muted); }
-    .progress-value { font-size: 17px; font-weight: 900; text-align: right; }
-    .bar { height: 8px; margin-top: 9px; border-radius: 999px; background: #f0eadf; overflow: hidden; }
-    .bar > span { display: block; height: 100%; border-radius: inherit; background: var(--green); }
-    .meal-list { margin-top: 11px; color: var(--muted); font-size: 12px; line-height: 1.5; }
-    .food-details {
-      margin-top: 12px;
-      border: 1px solid #eadfca;
-      border-radius: 14px;
-      background: #fffaf0;
       overflow: hidden;
     }
-    .food-details summary {
-      padding: 11px 13px;
-      color: #765c17;
-      font-size: 13px;
-      font-weight: 900;
+    .person > summary {
+      padding: 10px 13px;
+      list-style: none;
       cursor: pointer;
-      list-style-position: inside;
+      -webkit-tap-highlight-color: transparent;
     }
-    .food-details-body { padding: 0 13px 12px; }
-    .meal-detail-group { padding-top: 10px; border-top: 1px solid #eee3cf; }
-    .meal-detail-group + .meal-detail-group { margin-top: 10px; }
-    .meal-detail-title { margin-bottom: 4px; color: var(--green); font-size: 12px; font-weight: 900; }
-    .food-detail-item {
+    .person > summary::-webkit-details-marker { display: none; }
+    .person > summary:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+    .person-row {
+      min-height: 34px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+      align-items: center;
+      gap: 9px;
+    }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: #dcd2c0; }
+    .dot.complete { background: var(--green); }
+    .person-name { min-width: 0; font-size: 15px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .kcal { font-size: 15px; font-weight: 900; white-space: nowrap; letter-spacing: -.01em; }
+    .kcal small { margin-left: 1px; color: var(--muted); font-size: 11px; font-weight: 700; }
+    .chevron { width: 14px; color: #b7ac9c; font-size: 11px; text-align: center; transition: transform .16s ease; }
+    .person[open] .chevron { transform: rotate(180deg); }
+
+    .bar { height: 5px; margin-top: 8px; border-radius: 999px; background: #f0eadf; overflow: hidden; }
+    .bar > span { display: block; height: 100%; border-radius: inherit; background: var(--green); }
+    .bar.over > span { background: var(--amber); }
+
+    .person-body { padding: 0 13px 13px; }
+    .person-meta {
+      padding: 11px 0 0;
+      border-top: 1px solid #f3ecde;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .meal-group { padding-top: 10px; }
+    .meal-group + .meal-group { margin-top: 8px; border-top: 1px solid #f3ecde; }
+    .meal-title { margin-bottom: 3px; color: var(--green); font-size: 12px; font-weight: 900; }
+    .food-item {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
       align-items: start;
-      padding: 6px 0;
+      padding: 5px 0;
     }
-    .food-detail-name { min-width: 0; font-size: 13px; font-weight: 800; line-height: 1.4; }
-    .food-detail-meta { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; font-weight: 500; }
-    .food-detail-kcal { color: var(--ink); font-size: 12px; font-weight: 900; white-space: nowrap; }
-    .time { margin-top: 7px; color: #aaa094; font-size: 11px; text-align: right; }
-    .record-footer { margin-top: 10px; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
-    .record-footer .time { min-width: 0; flex: 1; margin-top: 0; text-align: left; }
-    .record-footer .like-button { flex: 0 0 76px; }
-    .rank-card { padding: 8px 15px; }
+    .food-name { min-width: 0; font-size: 13px; font-weight: 800; line-height: 1.4; }
+    .food-meta { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; font-weight: 500; }
+    .food-kcal { color: var(--ink); font-size: 12px; font-weight: 900; white-space: nowrap; }
+    .no-details { padding-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+    .rank-card { margin-top: 8px; padding: 4px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--white); }
     .rank-row {
-      min-height: 66px;
+      min-height: 56px;
       display: grid;
-      grid-template-columns: 42px minmax(0, 1fr) auto 70px;
+      grid-template-columns: 34px minmax(0, 1fr) auto auto;
       align-items: center;
-      gap: 8px;
-      border-bottom: 1px solid #f0e8dc;
+      gap: 9px;
+      border-bottom: 1px solid #f3ecde;
     }
     .rank-row:last-child { border-bottom: 0; }
-    .place { width: 42px; flex: 0 0 42px; text-align: center; font-weight: 900; }
-    .rank-name { min-width: 0; flex: 1; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .streak { flex: 0 0 auto; text-align: right; font-weight: 900; }
+    .place { text-align: center; font-weight: 900; }
+    .rank-name { min-width: 0; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .streak { text-align: right; font-weight: 900; font-size: 14px; white-space: nowrap; }
     .streak small { display: block; color: var(--muted); font-size: 10px; font-weight: 700; }
+
     .like-button {
-      min-height: 38px;
-      padding: 6px 9px;
+      min-height: 36px;
+      padding: 5px 9px;
       border: 1px solid #e5ca70;
-      border-radius: 12px;
+      border-radius: 11px;
       background: #fff9e6;
       color: #765c17;
       font-size: 12px;
@@ -117,11 +129,12 @@
       white-space: nowrap;
     }
     .like-button.liked { border-color: #8db89d; background: #e6f2e9; color: #35684b; }
-    .like-button:disabled { cursor: default; opacity: .72; }
+    .like-button:disabled { cursor: default; opacity: .68; }
+
     .like-hint {
       margin-top: 12px;
-      padding: 11px 13px;
-      border-radius: 14px;
+      padding: 10px 13px;
+      border-radius: 13px;
       background: #fff9e6;
       color: #765c17;
       font-size: 12px;
@@ -148,17 +161,33 @@
       transition: opacity .18s ease, transform .18s ease;
     }
     .toast.show { opacity: 1; transform: translate(-50%, 0); }
-    .empty { color: var(--muted); text-align: center; line-height: 1.6; }
-    .privacy { margin-top: 16px; background: #f4faf6; border-color: #cfe1d5; color: #35684b; font-size: 12px; line-height: 1.6; }
-    .updated { margin-top: 13px; color: #aaa094; font-size: 11px; text-align: center; }
+    .empty {
+      margin-top: 10px;
+      padding: 20px 15px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--white);
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    /* 說明文字收進摺疊，需要的人點開就好，不用一直佔版面。 */
+    .privacy { margin-top: 14px; border: 1px solid #cfe1d5; border-radius: 14px; background: #f4faf6; overflow: hidden; }
+    .privacy summary { padding: 11px 13px; color: #35684b; font-size: 12px; font-weight: 900; cursor: pointer; list-style-position: inside; }
+    .privacy p { margin: 0; padding: 0 13px 12px; color: #35684b; font-size: 12px; line-height: 1.65; }
+    .updated { margin-top: 12px; color: #aaa094; font-size: 11px; text-align: center; }
+
     @media (max-width: 380px) {
       .app { padding-left: 10px; padding-right: 10px; }
-      .hero { padding: 18px; }
+      .hero { padding: 16px; }
+      h1 { font-size: 21px; }
       .summary-card span { font-size: 10px; }
-      .progress-value { font-size: 15px; }
-      .rank-row { grid-template-columns: 34px minmax(0, 1fr) auto 62px; gap: 5px; }
-      .place { width: 34px; }
-      .like-button { padding-left: 6px; padding-right: 6px; }
+      .person-row { gap: 7px; }
+      .person-name { font-size: 14px; }
+      .kcal { font-size: 14px; }
+      .rank-row { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 6px; }
+      .like-button { padding-left: 7px; padding-right: 7px; }
     }
   </style>
 </head>
@@ -175,108 +204,154 @@
       </div>
     </section>
 
-    <nav class="tabs" aria-label="公開功能頁籤">
-      <button id="recordsTab" class="tab active" type="button">今日公開紀錄</button>
-      <button id="streaksTab" class="tab" type="button">連續打卡排行</button>
+    <nav class="tabs" role="tablist" aria-label="公開功能頁籤">
+      <button id="recordsTab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="recordsPanel">今日公開紀錄</button>
+      <button id="streaksTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="streaksPanel">連續打卡排行</button>
     </nav>
 
-    <section id="recordsPanel" class="panel"></section>
-    <section id="streaksPanel" class="panel" hidden></section>
+    <section id="recordsPanel" class="panel" role="tabpanel" aria-labelledby="recordsTab"></section>
+    <section id="streaksPanel" class="panel" role="tabpanel" aria-labelledby="streaksTab" hidden></section>
 
     <div id="likeHint" class="like-hint"></div>
 
-    <div class="privacy">🔒 這是自願公開區。食物細項只有本人另外勾選時才會出現；不顯示 LINE 身分、群組、體重、BMR 或照片。群組排行仍只在各自群組內計算。</div>
+    <details class="privacy">
+      <summary>🔒 這裡會顯示什麼、不會顯示什麼</summary>
+      <p>這是自願公開區，每個人的公開設定預設都是關閉的。食物細項只有本人另外勾選時才會出現；不顯示 LINE 身分、群組、體重、BMR 或照片。群組排行仍只在各自群組內計算。</p>
+    </details>
     <div id="updated" class="updated"></div>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <!--
+    伺服器資料以純文字節點傳入，再由 textContent 讀取。
+    請保留目前的「跳脫後輸出」方式，不要改成未跳脫輸出，避免形成 HTML 注入點。
+  -->
   <div id="publicData" hidden><?= publicJson ?></div>
   <script>
-    window.__publicWallBuild = '2026.08.19-19';
-    const DATA = JSON.parse(document.getElementById('publicData').textContent || '{}');
+    window.__publicWallBuild = '2026.08.19-21';
+
+    const toast = document.getElementById('toast');
     const recordsPanel = document.getElementById('recordsPanel');
     const streaksPanel = document.getElementById('streaksPanel');
     const likeHint = document.getElementById('likeHint');
-    const toast = document.getElementById('toast');
+
+    let DATA;
+    try {
+      DATA = JSON.parse(document.getElementById('publicData').textContent || '{}');
+    } catch (error) {
+      // 沒有這層保護的話，伺服器資料一有問題就是整頁全白，看不出發生什麼事。
+      document.querySelector('.app').innerHTML =
+        '<div class="empty"><strong>公開頁資料讀取失敗</strong><br>請關閉後回 LINE 重新輸入「公開紀錄」。<br>若持續發生，請截圖這段訊息。</div>';
+      throw error;
+    }
+
     let likeRequestInFlight = false;
+
     document.getElementById('heroDate').textContent = `${DATA.date || ''}・只顯示本人主動公開的內容`;
-    document.getElementById('publicCount').textContent = Number(DATA.summary && DATA.summary.publicCount || 0);
-    document.getElementById('completedCount').textContent = Number(DATA.summary && DATA.summary.completedCount || 0);
-    document.getElementById('rankingCount').textContent = Number(DATA.summary && DATA.summary.rankingCount || 0);
+    document.getElementById('publicCount').textContent = number(DATA.summary && DATA.summary.publicCount);
+    document.getElementById('completedCount').textContent = number(DATA.summary && DATA.summary.completedCount);
+    document.getElementById('rankingCount').textContent = number(DATA.summary && DATA.summary.rankingCount);
     document.getElementById('updated').textContent = `更新時間：${DATA.generatedAt || ''}`;
-    updateLikeHint();
 
     function switchTab(tab) {
       const showRecords = tab === 'records';
+      const recordsTab = document.getElementById('recordsTab');
+      const streaksTab = document.getElementById('streaksTab');
       recordsPanel.hidden = !showRecords;
       streaksPanel.hidden = showRecords;
-      document.getElementById('recordsTab').classList.toggle('active', showRecords);
-      document.getElementById('streaksTab').classList.toggle('active', !showRecords);
+      recordsTab.classList.toggle('active', showRecords);
+      streaksTab.classList.toggle('active', !showRecords);
+      recordsTab.setAttribute('aria-selected', String(showRecords));
+      streaksTab.setAttribute('aria-selected', String(!showRecords));
     }
 
     document.getElementById('recordsTab').addEventListener('click', () => switchTab('records'));
     document.getElementById('streaksTab').addEventListener('click', () => switchTab('streaks'));
 
+    /**
+     * 收合時只顯示名字與熱量，點開才載入餐別與食物細項。
+     * 用原生的 details/summary，鍵盤與螢幕閱讀器都能直接操作。
+     */
     function renderRecords() {
       const records = Array.isArray(DATA.records) ? DATA.records : [];
       if (!records.length) {
         recordsPanel.innerHTML = '<div class="empty">今天還沒有人公開紀錄。<br>每個人的公開設定預設都是關閉的。</div>';
         return;
       }
+
       recordsPanel.innerHTML = records.map(record => {
-        const hasAllowance = Number(record.allowance || 0) > 0;
-        const ratio = hasAllowance ? Math.max(0, Math.min(100, Math.round(Number(record.intake || 0) / Number(record.allowance) * 100))) : 0;
-        const progress = hasAllowance
-          ? `${number(record.intake)} / ${number(record.allowance)} kcal`
-          : `${number(record.intake)} kcal / 額度待設定`;
-        const meals = Array.isArray(record.meals) && record.meals.length ? record.meals.join('、') : '尚未記錄餐點';
+        const intake = Math.max(0, Number(record.intake || 0));
+        const allowance = Math.max(0, Number(record.allowance || 0));
+        const hasAllowance = allowance > 0;
+        const ratio = hasAllowance ? Math.min(100, Math.round(intake / allowance * 100)) : 0;
+        const over = hasAllowance && intake > allowance;
+
+        const kcal = hasAllowance
+          ? '<span class="kcal">' + number(intake) + '<small> / ' + number(allowance) + '</small></span>'
+          : '<span class="kcal">' + number(intake) + '<small> kcal</small></span>';
+
         return [
-          '<article class="record">',
-            '<div class="record-head"><div class="alias">' + escapeHtml(record.alias) + '</div><span class="status ' + (record.isComplete ? 'complete' : '') + '">' + (record.isComplete ? '✅ 已完成' : '📝 打卡中') + '</span></div>',
-            '<div class="progress-row"><span class="progress-label">已攝取 / 今日額度</span><span class="progress-value">' + escapeHtml(progress) + '</span></div>',
-            hasAllowance ? '<div class="bar"><span style="width:' + ratio + '%"></span></div>' : '',
-            '<div class="meal-list">已記錄餐別：' + escapeHtml(meals) + '</div>',
-            foodDetailsHtml(record),
-            '<div class="record-footer">',
-              '<div class="time">最後更新 ' + escapeHtml(record.updatedAt || '—') + '</div>',
-              likeButtonHtml(record),
+          '<details class="person">',
+            '<summary>',
+              '<div class="person-row">',
+                '<span class="dot ' + (record.isComplete ? 'complete' : '') + '" aria-hidden="true"></span>',
+                '<span class="person-name">' + escapeHtml(record.alias) + '</span>',
+                kcal,
+                likeButtonHtml(record),
+                '<span class="chevron" aria-hidden="true">▼</span>',
+              '</div>',
+              hasAllowance
+                ? '<div class="bar ' + (over ? 'over' : '') + '"><span style="width:' + ratio + '%"></span></div>'
+                : '',
+            '</summary>',
+            '<div class="person-body">',
+              personMetaHtml(record, hasAllowance),
+              foodDetailsHtml(record),
             '</div>',
-          '</article>',
+          '</details>',
         ].join('');
       }).join('');
+    }
+
+    function personMetaHtml(record, hasAllowance) {
+      const meals = Array.isArray(record.meals) && record.meals.length
+        ? record.meals.join('、')
+        : '尚未記錄餐點';
+      const parts = [
+        (record.isComplete ? '✅ 已完成' : '📝 打卡中') + '・已記錄：' + escapeHtml(meals),
+        hasAllowance ? '' : '今日額度待設定',
+        '最後更新 ' + escapeHtml(record.updatedAt || '—'),
+      ].filter(Boolean);
+      return '<div class="person-meta">' + parts.join('<br>') + '</div>';
     }
 
     function foodDetailsHtml(record) {
       const mealDetails = Array.isArray(record.mealDetails)
         ? record.mealDetails.filter(meal => meal && Array.isArray(meal.items) && meal.items.length)
         : [];
-      if (!mealDetails.length) return '';
+      if (!mealDetails.length) {
+        return '<div class="no-details">這位夥伴沒有公開食物細項。</div>';
+      }
 
-      const itemCount = mealDetails.reduce((sum, meal) => sum + meal.items.length, 0);
-      const groups = mealDetails.map(meal => {
+      return mealDetails.map(meal => {
         const items = meal.items.map(item => {
           const quantity = Math.max(0, Number(item.quantity || 0));
           const meta = [];
           if (item.portion) meta.push(String(item.portion));
           if (quantity > 1) meta.push('×' + formatQuantity(quantity));
-          return '<div class="food-detail-item">'
-            + '<div class="food-detail-name">' + escapeHtml(item.name || '未命名食物')
-            + (meta.length ? '<span class="food-detail-meta">' + escapeHtml(meta.join('・')) + '</span>' : '')
+          return '<div class="food-item">'
+            + '<div class="food-name">' + escapeHtml(item.name || '未命名食物')
+            + (meta.length ? '<span class="food-meta">' + escapeHtml(meta.join('・')) + '</span>' : '')
             + '</div>'
-            + '<div class="food-detail-kcal">' + number(item.calories) + ' kcal</div>'
+            + '<div class="food-kcal">' + number(item.calories) + ' kcal</div>'
             + '</div>';
         }).join('');
-        return '<section class="meal-detail-group">'
-          + '<div class="meal-detail-title">' + escapeHtml(meal.label || '餐點') + '</div>'
+        return '<section class="meal-group">'
+          + '<div class="meal-title">' + escapeHtml(meal.label || '餐點') + '</div>'
           + items
           + '</section>';
       }).join('');
-
-      return '<details class="food-details">'
-        + '<summary>🍽️ 查看今天吃了什麼（' + number(itemCount) + ' 項）</summary>'
-        + '<div class="food-details-body">' + groups + '</div>'
-        + '</details>';
     }
 
     function renderStreaks() {
@@ -296,19 +371,71 @@
       }).join('') + '</div>';
     }
 
+    function likeButtonHtml(item) {
+      const actionLabel = item.likedByViewer ? '再點一次收回讚' : '送出鼓勵讚';
+      return '<button class="like-button ' + (item.likedByViewer ? 'liked' : '')
+        + '" type="button" data-like-key="' + escapeAttr(item.likeKey) + '" '
+        + 'aria-label="' + actionLabel + '" title="' + actionLabel + '" '
+        + (canToggleLike(item) ? '' : 'disabled') + '>'
+        + '👍 <span class="like-count">' + number(item.likeCount) + '</span></button>';
+    }
+
+    function canToggleLike(item) {
+      return Boolean(
+        DATA.viewer
+        && DATA.viewer.canLike
+        && !likeRequestInFlight
+        && !item.isSelf
+        && (item.likedByViewer || Number(DATA.viewer.remainingLikes || 0) > 0)
+      );
+    }
+
+    function allItems() {
+      return []
+        .concat(Array.isArray(DATA.records) ? DATA.records : [])
+        .concat(Array.isArray(DATA.streaks) ? DATA.streaks : []);
+    }
+
+    /**
+     * 按讚後只更新按鈕本身，不重建整個面板。
+     * 舊版每按一次讚會重繪四次，代價是已展開的細項會被收起來、
+     * 剛按的按鈕失去焦點、長清單還會跳動——按讚不該有這些副作用。
+     */
+    function applyLikeState() {
+      const items = allItems();
+      document.querySelectorAll('[data-like-key]').forEach(button => {
+        const key = button.getAttribute('data-like-key') || '';
+        const item = items.find(entry => entry.likeKey === key);
+        if (!item) return;
+        const actionLabel = item.likedByViewer ? '再點一次收回讚' : '送出鼓勵讚';
+        button.classList.toggle('liked', Boolean(item.likedByViewer));
+        button.disabled = !canToggleLike(item);
+        button.setAttribute('aria-label', actionLabel);
+        button.title = actionLabel;
+        const count = button.querySelector('.like-count');
+        if (count) count.textContent = number(item.likeCount);
+      });
+      updateLikeHint();
+    }
+
     recordsPanel.addEventListener('click', handleLikeClick);
     streaksPanel.addEventListener('click', handleLikeClick);
 
     function handleLikeClick(event) {
       const button = event.target.closest('[data-like-key]');
-      if (!button || button.disabled || likeRequestInFlight) return;
+      if (!button) return;
+      // 讚按鈕在 summary 裡面，不擋住的話按讚會順便把卡片展開或收合。
+      event.preventDefault();
+      event.stopPropagation();
+      if (button.disabled || likeRequestInFlight) return;
+
       const targetKey = button.getAttribute('data-like-key') || '';
-      const allItems = []
-        .concat(Array.isArray(DATA.records) ? DATA.records : [])
-        .concat(Array.isArray(DATA.streaks) ? DATA.streaks : []);
-      const item = allItems.find(entry => entry.likeKey === targetKey);
+      const items = allItems();
+      const item = items.find(entry => entry.likeKey === targetKey);
       if (!item) return;
-      const matchedItems = allItems.filter(entry => entry.likeKey === targetKey);
+
+      // 同一個人可能同時出現在兩個頁籤，兩邊都要一起更新。
+      const matchedItems = items.filter(entry => entry.likeKey === targetKey);
       const previousItems = matchedItems.map(entry => ({
         entry,
         likeCount: Number(entry.likeCount || 0),
@@ -327,10 +454,9 @@
       });
       DATA.viewer.usedLikes = Math.max(0, previousUsedLikes + delta);
       DATA.viewer.remainingLikes = Math.max(0, Math.min(2, previousRemainingLikes - delta));
-      renderRecords();
-      renderStreaks();
-      updateLikeHint();
+      applyLikeState();
       showToast(wasLiked ? '↩️ 已收回' : '👍 已送出', 900);
+
       google.script.run
         .withSuccessHandler(result => {
           likeRequestInFlight = false;
@@ -340,9 +466,7 @@
           });
           DATA.viewer.usedLikes = Number(result.usedLikes || 0);
           DATA.viewer.remainingLikes = Number(result.remainingLikes || 0);
-          renderRecords();
-          renderStreaks();
-          updateLikeHint();
+          applyLikeState();
         })
         .withFailureHandler(error => {
           likeRequestInFlight = false;
@@ -352,9 +476,7 @@
           });
           DATA.viewer.usedLikes = previousUsedLikes;
           DATA.viewer.remainingLikes = previousRemainingLikes;
-          renderRecords();
-          renderStreaks();
-          updateLikeHint();
+          applyLikeState();
           showToast(error && error.message ? error.message : '按讚失敗，請稍後再試。', 2800);
         })
         .likePublicParticipant({
@@ -362,22 +484,6 @@
           sig: DATA.viewer && DATA.viewer.sig || '',
           targetKey,
         });
-    }
-
-    function likeButtonHtml(item) {
-      const canToggleLike = Boolean(
-        DATA.viewer
-        && DATA.viewer.canLike
-        && !likeRequestInFlight
-        && !item.isSelf
-        && (item.likedByViewer || Number(DATA.viewer.remainingLikes || 0) > 0)
-      );
-      const label = '👍 ' + number(item.likeCount);
-      const actionLabel = item.likedByViewer ? '再點一次收回讚' : '送出鼓勵讚';
-      return '<button class="like-button ' + (item.likedByViewer ? 'liked' : '')
-        + '" type="button" data-like-key="' + escapeAttr(item.likeKey) + '" '
-        + 'aria-label="' + actionLabel + '" title="' + actionLabel + '" '
-        + (canToggleLike ? '' : 'disabled') + '>' + label + '</button>';
     }
 
     function showToast(message, duration) {
@@ -395,7 +501,7 @@
           : '今天的讚已送完；點綠色讚可收回名額。';
         return;
       }
-      likeHint.textContent = '想按讚嗎？請回 LINE 對機器人輸入「公開排行」，再由它提供的連結開啟。';
+      likeHint.textContent = '想按讚嗎？請回 LINE 對機器人輸入「公開紀錄」，再由它提供的連結開啟。';
     }
 
     function number(value) { return Math.max(0, Math.round(Number(value || 0))).toLocaleString('zh-TW'); }
@@ -404,7 +510,7 @@
       return Number.isInteger(quantity) ? String(quantity) : quantity.toFixed(1).replace(/\.0$/, '');
     }
     function escapeHtml(value) {
-      return String(value || '').replace(/[&<>"']/g, char => ({
+      return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
       })[char]);
     }
@@ -412,6 +518,7 @@
 
     renderRecords();
     renderStreaks();
+    updateLikeHint();
   </script>
 </body>
 </html>
