@@ -110,6 +110,62 @@
       position: relative;
       z-index: 1;
     }
+    .record-date-picker {
+      margin-top: 12px;
+      padding: 10px;
+      border: 1px solid rgba(120, 86, 10, .18);
+      border-radius: 14px;
+      background: rgba(255,255,255,.78);
+      position: relative;
+      z-index: 2;
+    }
+    .record-date-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .record-date-summary strong { color: #4f3e15; font-size: 13px; }
+    .record-date-toggle {
+      min-height: 36px;
+      padding: 7px 11px;
+      border: 1px solid #d7b13b;
+      border-radius: 11px;
+      background: #fffaf0;
+      color: #6b5110;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .record-date-options {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 9px;
+    }
+    .record-date-option {
+      min-height: 42px;
+      padding: 6px 4px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: #fff;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .record-date-option.active { border-color: #d8a91e; background: var(--yellow); color: var(--ink); }
+    .record-date-option small { display: block; margin-top: 2px; font-size: 9px; font-weight: 700; }
+    .backfill-banner {
+      margin-top: 9px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: #fff0c9;
+      color: #775a0d;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 1.45;
+    }
     .section {
       margin-top: 16px;
       padding: 16px;
@@ -451,6 +507,56 @@
     }
     .search { margin: 10px 0; }
     .food-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .frequent-food-box {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #eadfca;
+      border-radius: 16px;
+      background: #fffdf7;
+    }
+    .frequent-food-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 9px;
+    }
+    .frequent-food-heading strong { font-size: 14px; }
+    .frequent-food-heading span { color: var(--muted); font-size: 11px; font-weight: 700; }
+    .frequent-food-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+    .frequent-food-grid .food-card { min-height: 126px; padding: 8px; border-radius: 14px; }
+    .frequent-food-grid .food-image { height: 42px; margin-bottom: 3px; font-size: 34px; }
+    .frequent-food-grid .food-image img { height: 42px; border-radius: 9px; }
+    .frequent-food-grid .food-name { font-size: 11px; }
+    .frequent-food-grid .food-meta,
+    .frequent-food-grid .food-kcal { font-size: 10px; }
+    .food-entry-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      margin-top: 10px;
+    }
+    .food-entry-actions .entry-mode-button { border: 1px solid var(--line); background: #fff; }
+    .food-entry-actions .entry-mode-button.active { border-color: var(--yellow-dark); background: var(--yellow); }
+    .manual-entry-link {
+      display: block;
+      width: 100%;
+      margin-top: 7px;
+      padding: 5px;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+    .food-library-quick-note {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
     .food-card {
       min-height: 156px;
       padding: 12px;
@@ -652,6 +758,7 @@
       .form-grid.three { grid-template-columns: repeat(3, 1fr); }
     }
     @media (max-width: 500px) {
+      .frequent-food-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .exercise-record-grid { grid-template-columns: minmax(0, 1fr) 82px 92px auto; }
       .exercise-record-grid > label:first-child { grid-column: 1 / -1; }
       .exercise-record-grid .danger-small { min-height: 40px; }
@@ -683,7 +790,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.19-30';
+    window.__dietAppBuild = '2026.08.20-40';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -742,12 +849,24 @@
     }
     const MEMBER = BOOTSTRAP && BOOTSTRAP.member ? BOOTSTRAP.member : {};
     const FOODS = BOOTSTRAP && Array.isArray(BOOTSTRAP.foods) ? BOOTSTRAP.foods : [];
+    const FREQUENT_FOODS = BOOTSTRAP && Array.isArray(BOOTSTRAP.frequentFoods)
+      ? BOOTSTRAP.frequentFoods
+      : [];
     const FOOD_BY_ID = {};
     const foodCardNodes = {};
     FOODS.forEach(food => { FOOD_BY_ID[food.id] = food; });
-    const SAVED_LOG = BOOTSTRAP && BOOTSTRAP.todayLog && BOOTSTRAP.todayLog.exists
-      ? BOOTSTRAP.todayLog
+    const DAILY_LOGS = BOOTSTRAP && BOOTSTRAP.dailyLogs && typeof BOOTSTRAP.dailyLogs === 'object'
+      ? BOOTSTRAP.dailyLogs
+      : {};
+    if (BOOTSTRAP && !Object.prototype.hasOwnProperty.call(DAILY_LOGS, BOOTSTRAP.today)) {
+      DAILY_LOGS[BOOTSTRAP.today] = BOOTSTRAP.todayLog || null;
+    }
+    let activeSavedLog = BOOTSTRAP && DAILY_LOGS[BOOTSTRAP.today] && DAILY_LOGS[BOOTSTRAP.today].exists
+      ? DAILY_LOGS[BOOTSTRAP.today]
       : null;
+    const RECORD_DATES = BOOTSTRAP && Array.isArray(BOOTSTRAP.recordDates)
+      ? BOOTSTRAP.recordDates
+      : [];
     const mealLabels = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', lateNight: '宵夜', snack: '點心' };
     // 必須在啟動時還原今天紀錄前先宣告，否則 normalizeExerciseRecord()
     // 會在 const 的暫時死區（TDZ）被呼叫，導致整個頁面無法載入。
@@ -778,8 +897,16 @@
       autoSaveTimer: null,
       saveInFlight: false,
       queuedUserSave: null,
+      userSubmitPending: false,
+      lastSavedSignature: '',
+      activeSaveSignature: '',
       pendingAutoComplete: false,
+      recordDate: BOOTSTRAP && BOOTSTRAP.today ? BOOTSTRAP.today : '',
+      loadingRecordDate: false,
+      pendingDateSwitch: '',
+      recordDatePickerOpen: false,
       foodLibraryReady: false,
+      photoPanelVisible: false,
     };
 
     const app = document.getElementById('app');
@@ -788,7 +915,7 @@
     const bottomTotal = document.getElementById('bottomTotal');
     const saveStatus = document.getElementById('saveStatus');
     const toast = document.getElementById('toast');
-    let todayIsComplete = Boolean(SAVED_LOG && SAVED_LOG.isComplete);
+    let todayIsComplete = Boolean(activeSavedLog && activeSavedLog.isComplete);
     // renderApp 可能在本段程式的函式宣告完成前就被呼叫，需先完成初始化。
     let keyboardAvoidanceBound = false;
 
@@ -803,7 +930,7 @@
     try {
       if (bootstrapError) throw bootstrapError;
       window.__dietAppStage = '還原今天的紀錄';
-      hydrateStateFromTodayLog();
+      hydrateStateFromDailyLog(activeSavedLog);
       window.__dietAppStage = '建立打卡畫面';
       if (!BOOTSTRAP || !BOOTSTRAP.valid) renderInvalid();
       else renderApp();
@@ -825,25 +952,35 @@
       app.append(box);
     }
 
-    function hydrateStateFromTodayLog() {
-      if (!SAVED_LOG) {
+    function hydrateStateFromDailyLog(savedLog) {
+      activeSavedLog = savedLog && savedLog.exists ? savedLog : null;
+      Object.keys(mealLabels).forEach(mealKey => {
+        state.meals[mealKey] = {};
+        state.aiMeals[mealKey] = [];
+      });
+      state.exerciseRecords = [];
+      state.pendingAiItems = [];
+      state.pendingAiMeal = '';
+      state.analyzing = false;
+      todayIsComplete = Boolean(activeSavedLog && activeSavedLog.isComplete);
+      if (!activeSavedLog) {
         state.exerciseRecords = [newExerciseRecord()];
         return;
       }
       Object.keys(mealLabels).forEach(mealKey => {
-        const savedMeals = SAVED_LOG.meals && Array.isArray(SAVED_LOG.meals[mealKey])
-          ? SAVED_LOG.meals[mealKey]
+        const savedMeals = activeSavedLog.meals && Array.isArray(activeSavedLog.meals[mealKey])
+          ? activeSavedLog.meals[mealKey]
           : [];
         savedMeals.forEach(item => {
           const id = String(item.id || '');
           const quantity = Math.max(0, Number(item.quantity || 0));
           if (id && quantity) state.meals[mealKey][id] = quantity;
         });
-        state.aiMeals[mealKey] = SAVED_LOG.aiMeals && Array.isArray(SAVED_LOG.aiMeals[mealKey])
-          ? SAVED_LOG.aiMeals[mealKey].map(item => Object.assign({}, item))
+        state.aiMeals[mealKey] = activeSavedLog.aiMeals && Array.isArray(activeSavedLog.aiMeals[mealKey])
+          ? activeSavedLog.aiMeals[mealKey].map(item => Object.assign({}, item))
           : [];
       });
-      const legacyExtraKcal = Math.max(0, Number(SAVED_LOG.extraKcal || 0));
+      const legacyExtraKcal = Math.max(0, Number(activeSavedLog.extraKcal || 0));
       if (legacyExtraKcal) {
         state.aiMeals.lateNight.push({
           id: 'legacy_extra_kcal',
@@ -858,16 +995,16 @@
           notes: '',
         });
       }
-      const savedExercises = Array.isArray(SAVED_LOG.exerciseRecords)
-        ? SAVED_LOG.exerciseRecords
+      const savedExercises = Array.isArray(activeSavedLog.exerciseRecords)
+        ? activeSavedLog.exerciseRecords
         : [];
       state.exerciseRecords = savedExercises.map(normalizeExerciseRecord);
       // 舊版只有單一運動欄位，第一次載入時自動轉成一筆清單。
-      if (!state.exerciseRecords.length && (Number(SAVED_LOG.exerciseMinutes || 0) || Number(SAVED_LOG.exerciseKcal || 0) || SAVED_LOG.exerciseName)) {
+      if (!state.exerciseRecords.length && (Number(activeSavedLog.exerciseMinutes || 0) || Number(activeSavedLog.exerciseKcal || 0) || activeSavedLog.exerciseName)) {
         state.exerciseRecords = [normalizeExerciseRecord({
-          name: SAVED_LOG.exerciseName || '',
-          minutes: SAVED_LOG.exerciseMinutes || 0,
-          kcal: SAVED_LOG.exerciseKcal || 0,
+          name: activeSavedLog.exerciseName || '',
+          minutes: activeSavedLog.exerciseMinutes || 0,
+          kcal: activeSavedLog.exerciseKcal || 0,
         })];
       }
       if (!state.exerciseRecords.length) state.exerciseRecords = [newExerciseRecord()];
@@ -1034,7 +1171,7 @@
           state.exerciseRecords.splice(index, 1);
           renderExerciseRecords();
           updateTotals();
-          markRecordChanged(250);
+          markRecordChanged(900);
         });
         grid.append(itemLabel, minutesLabel, kcalLabel, remove);
         card.append(grid);
@@ -1043,11 +1180,18 @@
     }
 
     function renderApp() {
-      const savedNotice = SAVED_LOG
-        ? '<div class="saved-notice">' + (SAVED_LOG.isComplete
-          ? '✅ 今日已完成打卡，可以繼續修改紀錄'
-          : '📝 已載入今天的暫存進度，目前仍為打卡中') + '</div>'
+      const isBackfill = state.recordDate !== BOOTSTRAP.today;
+      const savedNotice = activeSavedLog
+        ? '<div class="saved-notice">' + (activeSavedLog.isComplete
+          ? '✅ ' + (isBackfill ? '這天已完成補登，可繼續修改' : '今日已完成打卡，可以繼續修改紀錄')
+          : '📝 已載入' + (isBackfill ? '這天' : '今天') + '的暫存進度，目前仍為打卡中') + '</div>'
         : '';
+      const dateOptions = RECORD_DATES.map(item => (
+        '<button class="record-date-option' + (item.date === state.recordDate ? ' active' : '') + '" type="button" data-record-date="' + escapeAttr(item.date) + '">' +
+          escapeHtml(item.label) + '<small>' + escapeHtml(item.date.slice(5).replace('-', '/')) + '</small>' +
+        '</button>'
+      )).join('');
+      const currentDateMeta = RECORD_DATES.find(item => item.date === state.recordDate) || { label: '指定日期' };
       const hasBmr = Number(MEMBER.bmr || 0) > 0;
       // 永久公開偏好以成員設定為唯一來源，不再因為換日或舊的每日紀錄而重設。
       const defaultPublishToday = Boolean(MEMBER.defaultPublishToday);
@@ -1056,21 +1200,29 @@
       app.innerHTML = [
         '<section class="hero">',
           '<div class="eyebrow">HEALTH LOG</div>',
-          '<h1>今天吃了啥鬼東東</h1>',
-          '<p>' + escapeHtml(BOOTSTRAP.today) + ' · ' + escapeHtml(MEMBER.name || '成員') + '</p>',
+          '<h1>' + (isBackfill ? '補記這天吃了啥鬼東東' : '今天吃了啥鬼東東') + '</h1>',
+          '<p>' + escapeHtml(state.recordDate) + ' · ' + escapeHtml(MEMBER.name || '成員') + '</p>',
           '<div class="energy-cards">',
             '<div class="energy-card">',
-              '<span class="energy-label">今日猛猛進食</span>',
+              '<span class="energy-label">' + (isBackfill ? '當日猛猛進食' : '今日猛猛進食') + '</span>',
               '<div class="energy-value"><strong id="heroTotal">0</strong><small>kcal</small></div>',
             '</div>',
             '<div class="energy-card">',
-              '<span class="energy-label">今日可以猛猛消耗</span>',
+              '<span class="energy-label">' + (isBackfill ? '當日可以猛猛消耗' : '今日可以猛猛消耗') + '</span>',
               '<div class="energy-value"><strong id="heroTdee">—</strong><small>kcal</small></div>',
               '<em class="energy-badge">TDEE 估算</em>',
             '</div>',
           '</div>',
           '<p class="tdee-note">TDEE:未填運動時以 BMR × 1.2 估算；填入運動消耗後再加上。</p>',
           savedNotice,
+          '<div class="record-date-picker">',
+            '<div class="record-date-summary">',
+              '<strong>' + (isBackfill ? '🕘 補登中：' : '📅 目前紀錄：') + escapeHtml(currentDateMeta.label) + '</strong>',
+              '<button id="recordDateToggle" class="record-date-toggle" type="button">' + (state.recordDatePickerOpen ? '收合日期' : '補記過去紀錄') + '</button>',
+            '</div>',
+            '<div id="recordDateOptions" class="record-date-options"' + (state.recordDatePickerOpen ? '' : ' hidden') + '>' + dateOptions + '</div>',
+            (isBackfill ? '<div class="backfill-banner">這是歷史補登：會更新你的歷史與連續打卡，不會重新發送或改寫當天已公布的群組排行。</div>' : ''),
+          '</div>',
         '</section>',
         '<section class="quick-access" aria-label="快速查看">',
           '<div class="quick-access-heading">🔎 快速查看</div>',
@@ -1081,7 +1233,7 @@
             '</a>',
             '<a class="quick-access-link history" href="' + escapeAttr(BOOTSTRAP.historyUrl || '') + '" target="_top">',
               '<span class="quick-access-icon" aria-hidden="true">📈</span>',
-              '<span class="quick-access-copy"><strong>猛猛消耗的歷史 ↗</strong><small>查看自己的每日變化</small></span>',
+              '<span class="quick-access-copy"><strong>猛猛卡路里歷史 ↗</strong><small>查看自己的每日變化</small></span>',
             '</a>',
           '</div>',
         '</section>',
@@ -1125,19 +1277,26 @@
         '<section class="section meal-entry-section">',
           '<h2 class="section-title">🍽️ 記錄這一餐</h2>',
           '<div id="mealTabs" class="meal-tabs" role="tablist" aria-label="選擇餐別"></div>',
-          '<div class="entry-mode-tabs" role="tablist" aria-label="選擇記錄方式">',
-            '<button id="photoModeButton" class="entry-mode-button active" type="button" role="tab" aria-controls="photoEntryPanel">📸 拍照分析</button>',
-            '<button id="manualModeButton" class="entry-mode-button" type="button" role="tab" aria-controls="manualEntryPanel">✍️ 直接輸入</button>',
+          '<div class="frequent-food-box">',
+            '<div class="frequent-food-heading"><strong>⭐ 常吃的食物</strong><span>點一下快速加入</span></div>',
+            '<div id="frequentFoodGrid" class="food-grid frequent-food-grid"></div>',
+            '<div class="food-entry-actions" role="tablist" aria-label="選擇記錄方式">',
+              '<button id="photoModeButton" class="entry-mode-button active" type="button" aria-controls="photoEntryPanel">📸 直接拍照／上傳</button>',
+              '<button id="foodLibraryToggleButton" class="entry-mode-button" type="button">📚 展開完整食物庫</button>',
+            '</div>',
+            '<button id="manualModeButton" class="manual-entry-link" type="button" role="tab" aria-controls="manualEntryPanel">✍️ 直接輸入熱量</button>',
+            '<p class="food-library-quick-note">常吃食物會依你的使用紀錄個人化</p>',
           '</div>',
+          '<details id="foodLibrary" class="food-library">',
+            '<summary>『這裏』可以展開食物庫手動補充</summary>',
+            '<input id="search" class="search" type="search" name="foodSearchTerm" inputmode="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="搜尋白飯、雞蛋、便當…">',
+            '<div id="categoryChips" class="category-chips"></div>',
+            '<div id="foodGrid" class="food-grid"></div>',
+          '</details>',
           '<div id="photoEntryPanel">',
             '<div class="camera-box">',
-              '<input id="foodPhoto" class="photo-input" type="file" accept="image/*" capture="environment">',
-              '<input id="galleryPhoto" class="photo-input" type="file" accept="image/*">',
-              '<div class="photo-actions">',
-                '<label id="cameraButton" class="camera-button" for="foodPhoto">📷 <span id="cameraMealLabel">拍照分析早餐</span></label>',
-                '<label id="galleryButton" class="camera-button upload-button" for="galleryPhoto">🖼️ <span id="galleryMealLabel">上傳早餐照片</span></label>',
-              '</div>',
-              '<p class="hint">請盡量從正上方拍完整餐盤，不要拍到人臉。AI 結果仍需要你確認。</p>',
+              '<input id="foodPhoto" class="photo-input" type="file" accept="image/*">',
+              '<p class="hint">照片分析結果會顯示在這裡，可直接調整份量；要重新分析請再按上方「直接拍照／上傳」。</p>',
               '<img id="photoPreview" class="photo-preview" alt="餐點照片預覽" hidden>',
               '<div id="aiStatus" class="ai-status"></div>',
               '<div id="aiResult" class="ai-result" hidden></div>',
@@ -1153,12 +1312,6 @@
               '</div>',
             '</div>',
           '</div>',
-          '<details id="foodLibrary" class="food-library">',
-            '<summary>『這裏』可以展開食物庫手動補充</summary>',
-            '<input id="search" class="search" type="search" name="foodSearchTerm" inputmode="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="搜尋白飯、雞蛋、便當…">',
-            '<div id="categoryChips" class="category-chips"></div>',
-            '<div id="foodGrid" class="food-grid"></div>',
-          '</details>',
           '<div class="selected-wrap">',
             '<strong id="selectedTitle">早餐已選</strong>',
             '<div id="selectedList"></div>',
@@ -1183,6 +1336,7 @@
       bindKeyboardAvoidance();
       updatePublicSettingsSummary();
       renderMealTabs();
+      renderFrequentFoods();
       renderEntryMode();
       renderExerciseRecords();
       renderSelected();
@@ -1190,9 +1344,27 @@
     }
 
     function bindStaticEvents() {
+      const recordDateToggle = document.getElementById('recordDateToggle');
+      if (recordDateToggle) {
+        recordDateToggle.addEventListener('click', () => {
+          state.recordDatePickerOpen = !state.recordDatePickerOpen;
+          const options = document.getElementById('recordDateOptions');
+          if (options) options.hidden = !state.recordDatePickerOpen;
+          recordDateToggle.textContent = state.recordDatePickerOpen ? '收合日期' : '補記過去紀錄';
+        });
+      }
+      document.querySelectorAll('[data-record-date]').forEach(button => {
+        button.addEventListener('click', () => requestRecordDateSwitch(button.dataset.recordDate));
+      });
+
       document.getElementById('photoModeButton').addEventListener('click', () => {
         state.entryMode = 'photo';
         renderEntryMode();
+        const input = document.getElementById('foodPhoto');
+        if (input) {
+          input.value = '';
+          input.click();
+        }
       });
 
       document.getElementById('manualModeButton').addEventListener('click', () => {
@@ -1203,6 +1375,8 @@
           document.getElementById('customFoodKcal').focus();
         }, 0);
       });
+
+      document.getElementById('foodLibraryToggleButton').addEventListener('click', openFoodLibrary);
 
       document.getElementById('foodLibrary').addEventListener('toggle', event => {
         if (!event.target.open || state.foodLibraryReady) return;
@@ -1252,7 +1426,7 @@
         .addEventListener('click', () => {
           state.exerciseRecords.push(newExerciseRecord());
           renderExerciseRecords();
-          markRecordChanged(250);
+          markRecordChanged(900);
           const rows = document.querySelectorAll('#exerciseRecords .exercise-record');
           const lastRow = rows[rows.length - 1];
           const minutesInput = lastRow && lastRow.querySelector('input[type="number"]');
@@ -1274,7 +1448,7 @@
           updateTotals();
 
           // 250ms 後自動儲存，並將已完成狀態切回打卡中。
-          markRecordChanged(250);
+          markRecordChanged(900);
 
           showToast('已清除運動紀錄，正在自動儲存。');
         });
@@ -1308,10 +1482,6 @@
 
       document
         .getElementById('foodPhoto')
-        .addEventListener('change', handleFoodPhoto);
-
-      document
-        .getElementById('galleryPhoto')
         .addEventListener('change', handleFoodPhoto);
 
       document
@@ -1384,7 +1554,7 @@
       manualButton.classList.toggle('active', !photoActive);
       photoButton.setAttribute('aria-selected', String(photoActive));
       manualButton.setAttribute('aria-selected', String(!photoActive));
-      document.getElementById('photoEntryPanel').hidden = !photoActive;
+      document.getElementById('photoEntryPanel').hidden = !photoActive || !state.photoPanelVisible;
       document.getElementById('manualEntryPanel').hidden = photoActive;
     }
 
@@ -1439,6 +1609,7 @@
         button.addEventListener('click', () => {
           state.activeMeal = key;
           renderMealTabs();
+          renderFrequentFoods();
           if (state.foodLibraryReady) renderFoods();
           renderSelected();
           updateCameraMealLabel();
@@ -1461,9 +1632,7 @@
 
     function updateCameraMealLabel() {
       const label = document.getElementById('cameraMealLabel');
-      if (label) label.textContent = `拍照分析${mealLabels[state.activeMeal]}`;
-      const galleryLabel = document.getElementById('galleryMealLabel');
-      if (galleryLabel) galleryLabel.textContent = `上傳${mealLabels[state.activeMeal]}照片`;
+      if (label) label.textContent = `直接拍照／上傳${mealLabels[state.activeMeal]}`;
       const customMealLabel = document.getElementById('customMealLabel');
       if (customMealLabel) customMealLabel.textContent = `將加入${mealLabels[state.activeMeal]}，可新增多筆。`;
       const addCustomButton = document.getElementById('addCustomFoodButton');
@@ -1584,6 +1753,9 @@
       }
 
       const targetMeal = state.activeMeal;
+      state.photoPanelVisible = true;
+      const photoPanel = document.getElementById('photoEntryPanel');
+      if (photoPanel) photoPanel.hidden = false;
       setAnalyzing(true, `正在壓縮照片…`);
       compressPhoto(file).then(imageDataUrl => {
         const preview = document.getElementById('photoPreview');
@@ -1664,8 +1836,6 @@
       state.analyzing = busy;
       const button = document.getElementById('cameraButton');
       if (button) button.classList.toggle('busy', busy);
-      const galleryButton = document.getElementById('galleryButton');
-      if (galleryButton) galleryButton.classList.toggle('busy', busy);
       const status = document.getElementById('aiStatus');
       if (status) status.textContent = message || '';
     }
@@ -1796,6 +1966,141 @@
       markRecordChanged();
     }
 
+    function recentFoodIds() {
+      try {
+        // v2 以前的清單可能是舊版自動收集的八項，改版後刻意不沿用。
+        const raw = window.localStorage.getItem(`diet-food-recent:v2:${BOOTSTRAP.uid}`);
+        const ids = JSON.parse(raw || '[]');
+        return Array.isArray(ids) ? ids.map(String) : [];
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function rememberFoodUse(foodId) {
+      const id = String(foodId || '');
+      if (!id) return;
+      const ids = [id, ...recentFoodIds().filter(item => item !== id)].slice(0, 8);
+      try {
+        window.localStorage.setItem(`diet-food-recent:v2:${BOOTSTRAP.uid}`, JSON.stringify(ids));
+      } catch (error) {
+        // LINE 內嵌瀏覽器若禁止 localStorage，仍可正常使用食物庫。
+      }
+    }
+
+    function frequentFoodList() {
+      // 後端只會回傳「新功能啟用後」達到門檻的個人化項目，以及四個預設入口。
+      // 舊版 localStorage 與舊的伺服器清單不再直接混入，避免快捷區回到八張卡片。
+      const defaultFoods = [
+        { id: 'common_yangtao_breakfast', name: '楊桃可口早餐', portion: '1份', kcal: 410, emoji: '🍽️', sort: 1 },
+        { id: 'common_egg_sandwich', name: '煎蛋三明治', portion: '1份', kcal: 350, emoji: '🥪', sort: 2 },
+        { id: 'common_overnight_oats', name: '隔夜燕麥粥', portion: '1碗', kcal: 300, emoji: '🥣', sort: 3 },
+        { id: 'common_boiled_egg', name: '水煮蛋', portion: '1顆', kcal: 70, emoji: '🥚', sort: 4 },
+      ];
+      const byId = new Map(FOODS.map(food => [String(food.id), food]));
+      const defaults = defaultFoods.map(defaultFood => {
+        const food = byId.get(defaultFood.id);
+        return food
+          ? { ...food, name: defaultFood.name }
+          : defaultFood;
+      });
+      const defaultIds = new Set(defaultFoods.map(food => food.id));
+      const personalized = (Array.isArray(FREQUENT_FOODS) ? FREQUENT_FOODS : [])
+        .filter(food => food && food.isManualFrequent && !defaultIds.has(String(food.id)))
+        .map(food => Object.assign({ portion: '自行輸入', emoji: '✍️' }, food));
+      return personalized.concat(defaults).slice(0, 4);
+    }
+
+    function renderFrequentFoods() {
+      const root = document.getElementById('frequentFoodGrid');
+      if (!root) return;
+      const selected = state.meals[state.activeMeal];
+      // 最後一道 UI 防線：快捷區永遠最多顯示四張卡片。
+      const foods = frequentFoodList().slice(0, 4);
+      root.innerHTML = '';
+      if (!foods.length) {
+        root.append(el('div', 'selected-empty', '先從完整食物庫選一項，就會出現在這裡。'));
+        return;
+      }
+      foods.forEach(food => {
+        const quantity = Number(selected[food.id] || 0);
+        const card = el('button', `food-card${quantity ? ' selected' : ''}`);
+        card.type = 'button';
+        const image = el('div', 'food-image');
+        if (food.imageUrl) {
+          const img = document.createElement('img');
+          img.src = food.imageUrl;
+          img.alt = food.name;
+          img.loading = 'lazy';
+          img.onerror = () => { image.textContent = food.emoji || '🍽️'; };
+          image.append(img);
+        } else image.textContent = food.emoji || '🍽️';
+        card.append(image);
+        card.append(el('span', 'food-name', food.name));
+        card.append(el('span', 'food-meta', food.portion));
+        card.append(el('span', 'food-kcal', `${food.kcal} kcal`));
+        card.append(el('span', 'badge', `×${quantity}`));
+        card.addEventListener('click', () => {
+          if (food.isManualFrequent) addManualFrequentFoodToActiveMeal(food);
+          else addFoodToActiveMeal(food);
+        });
+        root.append(card);
+      });
+    }
+
+    function addManualFrequentFoodToActiveMeal(food) {
+      if (!food || !food.name || !Number(food.kcal)) return;
+      const mealKey = state.activeMeal;
+      const fallbackIndex = (state.aiMeals[mealKey] || []).filter(item => item.source === 'manual').length + 1;
+      state.aiMeals[mealKey].push({
+        id: `manual_frequent_${Date.now()}_${fallbackIndex}`,
+        source: 'manual',
+        name: food.name,
+        portion: food.portion || '自行輸入',
+        amount: 0,
+        baseAmount: 0,
+        unit: 'g',
+        baseCalories: Math.round(Number(food.kcal)),
+        baseLow: Math.round(Number(food.kcal)),
+        baseHigh: Math.round(Number(food.kcal)),
+        grams: 0,
+        calories: Math.round(Number(food.kcal)),
+        low: Math.round(Number(food.kcal)),
+        high: Math.round(Number(food.kcal)),
+        confidence: '',
+        notes: '從常吃食物快速加入',
+      });
+      renderMealTabs();
+      renderSelected();
+      updateTotals();
+      markRecordChanged();
+    }
+
+    function addFoodToActiveMeal(food) {
+      if (!food || !food.id) return;
+      const selected = state.meals[state.activeMeal];
+      selected[food.id] = (selected[food.id] || 0) + 1;
+      rememberFoodUse(food.id);
+      renderFrequentFoods();
+      refreshFoodCard(food.id);
+      renderMealTabs();
+      renderSelected();
+      updateTotals();
+      markRecordChanged();
+    }
+
+    function openFoodLibrary() {
+      const library = document.getElementById('foodLibrary');
+      if (!library) return;
+      library.open = true;
+      if (!state.foodLibraryReady) {
+        state.foodLibraryReady = true;
+        renderCategories();
+        renderFoods();
+      }
+      window.setTimeout(() => library.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+    }
+
     function renderCategories() {
       const root = document.getElementById('categoryChips');
       const categories = ['全部', ...new Set(FOODS.map(food => food.category))];
@@ -1849,14 +2154,7 @@
         card.append(el('span', 'food-meta', food.portion));
         card.append(el('span', 'food-kcal', `${food.kcal} kcal`));
         card.append(el('span', 'badge', `×${quantity}`));
-        card.addEventListener('click', () => {
-          selected[food.id] = (selected[food.id] || 0) + 1;
-          refreshFoodCard(food.id);
-          renderMealTabs();
-          renderSelected();
-          updateTotals();
-          markRecordChanged();
-        });
+        card.addEventListener('click', () => addFoodToActiveMeal(food));
         foodCardNodes[food.id] = card;
         root.append(card);
       });
@@ -1957,6 +2255,7 @@
       const selected = state.meals[state.activeMeal];
       selected[foodId] = Math.max(0, (selected[foodId] || 0) + delta);
       if (!selected[foodId]) delete selected[foodId];
+      renderFrequentFoods();
       refreshFoodCard(foodId);
       renderMealTabs();
       renderSelected();
@@ -2028,20 +2327,25 @@
 
     function updateSubmitButtons() {
       // 背景自動儲存時仍允許按「送出完成」；若請求正在進行，會排在下一筆送出。
+      const isBackfill = state.recordDate !== BOOTSTRAP.today;
+      if (state.userSubmitPending) {
+        submitButton.disabled = true;
+        submitButton.textContent = isBackfill ? '補登送出中…' : '打卡送出中…';
+        saveStatus.textContent = isBackfill ? '正在儲存並完成補登…' : '正在儲存並完成打卡…';
+        return;
+      }
       submitButton.disabled = todayIsComplete;
-      submitButton.textContent = todayIsComplete ? '✅ 今日已完成' : '送出打卡完成';
+      submitButton.textContent = todayIsComplete
+        ? (isBackfill ? '✅ 這天已補登' : '✅ 今日已完成')
+        : (isBackfill ? '送出補登完成' : '送出打卡完成');
       saveStatus.textContent = todayIsComplete
-        ? '✅ 已完成'
-        : (state.saveInFlight ? '自動儲存中…' : '📝 打卡中・自動儲存');
+        ? (isBackfill ? '✅ 補登已完成' : '✅ 已完成')
+        : (state.saveInFlight ? '自動儲存中…' : (isBackfill ? '🕘 補登中・自動儲存' : '📝 打卡中・自動儲存'));
     }
 
     function setSavingState(saving) {
-      submitButton.disabled = saving;
-      if (saving) {
-        submitButton.textContent = '送出中…';
-        saveStatus.textContent = '正在送出完成狀態…';
-      }
-      else updateSubmitButtons();
+      state.userSubmitPending = Boolean(saving);
+      updateSubmitButtons();
     }
 
     function markRecordChanged(saveDelayMs) {
@@ -2055,7 +2359,7 @@
 
       const delay = Number.isFinite(saveDelayMs)
         ? saveDelayMs
-        : (changedFromComplete ? 250 : 700);
+        : (changedFromComplete ? 350 : 1200);
 
       window.clearTimeout(state.autoSaveTimer);
 
@@ -2065,7 +2369,9 @@
       );
 
       if (changedFromComplete) {
-        showToast('📝 內容已修改，已切回打卡中並自動儲存。');
+        showToast(state.recordDate === BOOTSTRAP.today
+          ? '📝 內容已修改，已切回打卡中並自動儲存。'
+          : '🕘 補登內容已修改，已切回補登中並自動儲存。');
       }
     }
 
@@ -2076,7 +2382,7 @@
       updateSubmitButtons();
       state.autoSaveTimer = window.setTimeout(
         () => submitLog(todayIsComplete, true),
-        500
+        900
       );
       if (!silent) {
         showToast('🌏 公開設定將自動儲存；群組排行不受影響。');
@@ -2096,10 +2402,68 @@
         window.clearTimeout(state.autoSaveTimer);
         state.autoSaveTimer = window.setTimeout(
           () => submitLog(Boolean(state.pendingAutoComplete), true),
-          800
+          650
         );
+      } else if (state.pendingDateSwitch) {
+        const targetDate = state.pendingDateSwitch;
+        state.pendingDateSwitch = '';
+        loadRecordDate(targetDate);
+        return true;
       }
       return false;
+    }
+
+    function requestRecordDateSwitch(recordDate) {
+      recordDate = String(recordDate || '');
+      if (!recordDate || recordDate === state.recordDate || state.loadingRecordDate) return;
+      window.clearTimeout(state.autoSaveTimer);
+      if (state.saveInFlight || state.mealRevision > state.savedMealRevision) {
+        state.pendingDateSwitch = recordDate;
+        showToast('💾 先儲存目前進度，接著會自動切換日期。');
+        if (!state.saveInFlight) submitLog(todayIsComplete, true);
+        return;
+      }
+      loadRecordDate(recordDate);
+    }
+
+    function loadRecordDate(recordDate) {
+      if (Object.prototype.hasOwnProperty.call(DAILY_LOGS, recordDate)) {
+        applyLoadedRecordDate(recordDate, DAILY_LOGS[recordDate]);
+        return;
+      }
+      state.loadingRecordDate = true;
+      document.querySelectorAll('[data-record-date]').forEach(button => { button.disabled = true; });
+      saveStatus.textContent = '正在載入指定日期…';
+      google.script.run
+        .withSuccessHandler(result => {
+          state.loadingRecordDate = false;
+          const loadedDate = String(result.date || recordDate);
+          DAILY_LOGS[loadedDate] = result.log || null;
+          applyLoadedRecordDate(loadedDate, DAILY_LOGS[loadedDate]);
+        })
+        .withFailureHandler(error => {
+          state.loadingRecordDate = false;
+          document.querySelectorAll('[data-record-date]').forEach(button => { button.disabled = false; });
+          updateSubmitButtons();
+          showToast(`日期載入失敗：${error && error.message ? error.message : error}`);
+        })
+        .getDailyFormForDate({
+          uid: BOOTSTRAP.uid,
+          sig: BOOTSTRAP.sig,
+          recordDate,
+        });
+    }
+
+    function applyLoadedRecordDate(recordDate, savedLog) {
+      state.loadingRecordDate = false;
+      state.recordDate = String(recordDate || BOOTSTRAP.today);
+      state.recordDatePickerOpen = false;
+      state.mealRevision = 0;
+      state.savedMealRevision = 0;
+      state.pendingAutoComplete = false;
+      hydrateStateFromDailyLog(savedLog);
+      renderApp();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function submitLog(markComplete, automatic) {
@@ -2107,19 +2471,21 @@
       if (state.saveInFlight) {
         if (!automatic) {
           state.queuedUserSave = Boolean(markComplete);
-          submitButton.disabled = true;
-          submitButton.textContent = '排程送出中…';
-          saveStatus.textContent = '先完成背景儲存，接著自動送出…';
+          // 背景儲存已在進行時，介面仍只顯示一個「送出中」狀態。
+          // 第一筆結束後會立即送出完成狀態，不再顯示「排程送出中」。
+          setSavingState(true);
         }
         return;
       }
       const bmr = Number(document.getElementById('bmr').value || 0);
       if (markComplete && !bmr) {
+        if (!automatic) setSavingState(false);
         showToast('請先填寫 BMR，或使用「不知道基礎代謝？幫我估算」。');
         document.getElementById('bmrHelper').open = true;
         return;
       }
       if (markComplete && grandTotal() <= 0) {
+        if (!automatic) setSavingState(false);
         showToast('請先拍照辨識食物，或手動填寫食物熱量。');
         return;
       }
@@ -2128,6 +2494,7 @@
       const payload = {
         uid: BOOTSTRAP.uid,
         sig: BOOTSTRAP.sig,
+        recordDate: state.recordDate,
         name: document.getElementById('name').value,
         bmr,
         weightKg: state.exerciseWeightKg || '',
@@ -2148,13 +2515,46 @@
       };
 
       const requestRevision = state.mealRevision;
+      const requestSignature = JSON.stringify(payload);
+      if (automatic && requestSignature === state.lastSavedSignature) {
+        state.savedMealRevision = Math.max(state.savedMealRevision, requestRevision);
+        updateSubmitButtons();
+        return;
+      }
       state.saveInFlight = true;
+      state.activeSaveSignature = requestSignature;
       window.clearTimeout(state.autoSaveTimer);
       if (!automatic) setSavingState(true);
       else updateSubmitButtons();
       google.script.run
         .withSuccessHandler(result => {
+          state.lastSavedSignature = requestSignature;
+          state.activeSaveSignature = '';
           todayIsComplete = Boolean(result.isComplete);
+          const savedSnapshot = {
+            exists: true,
+            meals: payload.meals,
+            aiMeals: payload.aiMeals,
+            extraKcal: 0,
+            waterMl: 0,
+            exerciseName: payload.exerciseName,
+            exerciseMinutes: payload.exerciseMinutes,
+            exerciseKcal: payload.exerciseKcal,
+            exerciseRecords: payload.exerciseRecords,
+            note: '',
+            isComplete: todayIsComplete,
+            isPublic: Boolean(payload.publishToday),
+            publishFoodDetails: Boolean(payload.publishFoodDetails),
+          };
+          DAILY_LOGS[state.recordDate] = savedSnapshot;
+          activeSavedLog = savedSnapshot;
+          MEMBER.name = payload.name;
+          MEMBER.bmr = payload.bmr;
+          MEMBER.weightKg = payload.weightKg;
+          MEMBER.publicAlias = payload.publicAlias;
+          MEMBER.defaultPublishToday = payload.publishToday;
+          MEMBER.defaultPublishFoodDetails = payload.publishFoodDetails;
+          MEMBER.joinPublicRanking = payload.joinPublicRanking;
           const startedQueuedSave = finishSave(requestRevision);
           if (startedQueuedSave) return;
           if (!automatic) setSavingState(false);
@@ -2167,17 +2567,19 @@
           const deficit = result.hasBmr
             ? (result.estimatedDeficit >= 0 ? `估算赤字 ${result.estimatedDeficit} kcal` : `估算超出 ${Math.abs(result.estimatedDeficit)} kcal`)
             : '已儲存，待設定基礎代謝';
-          showToast(`✅ 已完成！攝取 ${result.totalIntake} kcal，${deficit}`);
+          showToast(`${result.isBackfill ? '✅ 補登完成' : '✅ 已完成'}！攝取 ${result.totalIntake} kcal，${deficit}`);
         })
         .withFailureHandler(error => {
           state.saveInFlight = false;
+          state.activeSaveSignature = '';
+          state.pendingDateSwitch = '';
           const queuedComplete = state.queuedUserSave;
           state.queuedUserSave = null;
           if (queuedComplete !== null) {
             submitLog(queuedComplete, false);
             return;
           }
-          if (!automatic) setSavingState(false);
+          if (!automatic || state.userSubmitPending) setSavingState(false);
           else updateSubmitButtons();
           showToast(`儲存失敗：${error && error.message ? error.message : error}`);
         })

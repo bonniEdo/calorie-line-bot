@@ -124,6 +124,15 @@ function doGet(e) {
   const valid = tokenState === 'ok';
   const member = valid ? getMemberById_(uid) : null;
   const foods = valid ? getFoods_() : [];
+  const frequentFoods = valid ? getFrequentFoods_(uid, foods, 4) : [];
+  const recordDates = valid ? allowedRecordDates_().map((date, index) => ({
+    date,
+    label: ['今天', '昨天', '前天', '三天前'][index],
+  })) : [];
+  // 一次讀取四天資料，切換日期時由前端直接還原，不再每次呼叫 Apps Script。
+  const dailyLogs = valid
+    ? getRecentDailyFormData_(uid, foods, recordDates.map(item => item.date))
+    : {};
   const template = HtmlService.createTemplateFromFile('Index');
 
   const bootstrap = {
@@ -133,9 +142,12 @@ function doGet(e) {
     uid,
     sig,
     today: today_(),
+    recordDates,
     member: member || {},
     foods,
-    todayLog: valid ? getTodayFormData_(uid, foods) : null,
+    frequentFoods,
+    todayLog: valid ? (dailyLogs[today_()] || null) : null,
+    dailyLogs,
     publicWallUrl: getPublicWallUrl_(valid ? uid : ''),
     historyUrl: getHistoryUrl_(valid ? uid : ''),
   };
@@ -498,6 +510,7 @@ function saveDailyLog(payload) {
   const sig = String(payload.sig || '');
   const tokenState = inspectAccessToken_(userId, sig, APP.tokenScopes.form);
   if (tokenState !== 'ok') throw new Error(accessTokenErrorMessage_(tokenState));
+  const recordDate = validateRecordDate_(payload.recordDate);
 
   let member = getMemberById_(userId);
   if (!member) throw new Error('尚未綁定成員，請先私訊機器人「綁定」。');
@@ -646,7 +659,7 @@ function saveDailyLog(payload) {
 
   const row = [
     now,
-    today_(),
+    recordDate,
     userId,
     displayName,
     mealTotals.breakfast,
@@ -677,13 +690,17 @@ function saveDailyLog(payload) {
   lock.waitLock(5000);
   try {
     if (pendingMemberUpdate) upsertMember_(pendingMemberUpdate);
-    upsertDailyRow_(today_(), userId, row);
+    upsertDailyRow_(recordDate, userId, row);
+    // 今日紀錄會影響「常吃的食物」統計，儲存後立即清除快捷區快取，
+    // 避免使用者關閉頁面重開時還看到儲存前的四個預設項目。
+    CacheService.getScriptCache().remove(`frequent-foods:v4:${userId}:${today_()}`);
   } finally {
     lock.releaseLock();
   }
   return {
     ok: true,
-    date: today_(),
+    date: recordDate,
+    isBackfill: recordDate !== today_(),
     totalIntake,
     estimatedBurn,
     estimatedDeficit,
@@ -691,6 +708,23 @@ function saveDailyLog(payload) {
     isComplete,
     isPublic,
     publishFoodDetails,
+  };
+}
+
+/** 打卡頁切換日期時懶載本人當日資料；日期範圍一律由後端驗證。 */
+function getDailyFormForDate(payload) {
+  payload = payload || {};
+  const userId = String(payload.uid || '');
+  const sig = String(payload.sig || '');
+  const tokenState = inspectAccessToken_(userId, sig, APP.tokenScopes.form);
+  if (tokenState !== 'ok') throw new Error(accessTokenErrorMessage_(tokenState));
+  const recordDate = validateRecordDate_(payload.recordDate);
+  const foods = getFoods_();
+  return {
+    ok: true,
+    date: recordDate,
+    isBackfill: recordDate !== today_(),
+    log: getDailyFormData_(userId, foods, recordDate),
   };
 }
 
@@ -1566,6 +1600,41 @@ function revokeTodayPublicRecord_(userId) {
 }
 
 function getTodayFormData_(userId, foods) {
+  return getDailyFormData_(userId, foods, today_());
+}
+
+function getRecentDailyFormData_(userId, foods, recordDates) {
+  const dates = (Array.isArray(recordDates) ? recordDates : allowedRecordDates_())
+    .map(validateRecordDate_);
+  const result = {};
+  dates.forEach(date => { result[date] = null; });
+  if (!dates.length) return result;
+
+  const sheet = getSheet_(APP.sheets.logs);
+  ensureLogStatusHeader_(sheet);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return result;
+
+  const wantedDates = new Set(dates);
+  const foundDates = new Set();
+  // 四天補登範圍一次最多讀 500 列，比分別讀四次更快。
+  const rowCount = Math.min(lastRow - 1, 500);
+  const startRow = lastRow - rowCount + 1;
+  const rows = sheet.getRange(startRow, 1, rowCount, APP.headers.logs.length).getValues();
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (String(row[2] || '') !== String(userId)) continue;
+    const date = getLogRowDateKey_(row, null);
+    if (!wantedDates.has(date) || foundDates.has(date)) continue;
+    result[date] = dailyFormDataFromRow_(row, foods, date);
+    foundDates.add(date);
+    if (foundDates.size === wantedDates.size) break;
+  }
+  return result;
+}
+
+function getDailyFormData_(userId, foods, recordDate) {
+  recordDate = validateRecordDate_(recordDate);
   const sheet = getSheet_(APP.sheets.logs);
   ensureLogStatusHeader_(sheet);
   const lastRow = sheet.getLastRow();
@@ -1576,22 +1645,25 @@ function getTodayFormData_(userId, foods) {
   const range = sheet.getRange(startRow, 1, rowCount, APP.headers.logs.length);
   const values = range.getValues();
   let savedRow = null;
-  const today = today_();
 
   for (let index = values.length - 1; index >= 0; index -= 1) {
     const row = values[index];
     if (String(row[2] || '') !== String(userId)) continue;
-    if (getLogRowDateKey_(row, null) !== today) continue;
+    if (getLogRowDateKey_(row, null) !== recordDate) continue;
     savedRow = row;
     break;
   }
   if (!savedRow) return null;
 
+  return dailyFormDataFromRow_(savedRow, foods, recordDate);
+}
+
+function dailyFormDataFromRow_(savedRow, foods, recordDate) {
   let selectedDetails = {};
   try {
     selectedDetails = JSON.parse(String(savedRow[17] || '{}')) || {};
   } catch (error) {
-    console.warn(`今日食物明細無法解析，將使用各餐總熱量還原：${error.message || error}`);
+    console.warn(`${recordDate} 食物明細無法解析，將使用各餐總熱量還原：${error.message || error}`);
     selectedDetails = {};
   }
 
@@ -2316,6 +2388,131 @@ function getFoods_() {
   return foods;
 }
 
+/**
+ * 依本人「新功能啟用後」的每日紀錄統計常吃食物。
+ *
+ * 先固定顯示四個指定入口，避免舊版歷史紀錄直接把快捷區洗成八張卡片。
+ * 之後同一個直接輸入食物累計至少 2 次，就會被加入個人化快捷區，並取代較後面的預設入口。
+ */
+function getFrequentFoods_(userId, foods, limit) {
+  userId = String(userId || '');
+  foods = Array.isArray(foods) ? foods : [];
+  limit = Math.min(4, Math.max(1, Number(limit) || 4));
+  const defaultFoodIds = new Set([
+    'common_yangtao_breakfast',
+    'common_egg_sandwich',
+    'common_overnight_oats',
+    'common_boiled_egg',
+  ]);
+  const fallback = foods
+    .filter(food => defaultFoodIds.has(String(food.id)))
+    .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, 'zh-Hant'));
+  const foodById = new Map(foods.map(food => [String(food.id), food]));
+  if (!userId || !foods.length) return fallback.slice(0, limit);
+
+  const cache = CacheService.getScriptCache();
+  const cacheKey = `frequent-foods:v4:${userId}:${today_()}`;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try {
+      const cachedFoods = JSON.parse(cached);
+      if (Array.isArray(cachedFoods)) return cachedFoods.slice(0, limit);
+    } catch (error) {
+      cache.remove(cacheKey);
+    }
+  }
+
+  // 只統計這個功能啟用後的新紀錄，避免舊版留下的白飯、雞胸肉等資料立即混進來。
+  const props = PropertiesService.getScriptProperties();
+  let startDate = String(props.getProperty('FREQUENT_FOODS_START_DATE') || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    startDate = today_();
+    props.setProperty('FREQUENT_FOODS_START_DATE', startDate);
+  }
+
+  const counts = new Map();
+  const manualCounts = new Map();
+  const sheet = getSheet_(APP.sheets.logs);
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    // 只取近期資料，避免紀錄累積後每次開頁都掃完整張表。
+    const rowCount = Math.min(lastRow - 1, 180);
+    const startRow = lastRow - rowCount + 1;
+    const rows = sheet.getRange(startRow, 1, rowCount, APP.headers.logs.length).getValues();
+    rows.forEach(row => {
+      if (String(row[2] || '') !== userId) return;
+      const dateKey = getLogRowDateKey_(row, null);
+      if (!dateKey || dateKey < startDate) return;
+      let details = {};
+      try {
+        details = JSON.parse(String(row[17] || '{}')) || {};
+      } catch (error) {
+        return;
+      }
+      Object.values(details).forEach(items => {
+        if (!Array.isArray(items)) return;
+        items.forEach(item => {
+          const foodId = String(item && item.id || '');
+          if (foodById.has(foodId)) {
+            counts.set(foodId, (counts.get(foodId) || 0) + 1);
+            return;
+          }
+          // 直接輸入的食物沒有食物庫 FoodId，改用正規化名稱累計。
+          if (String(item && item.source || '').toLowerCase() !== 'manual') return;
+          const name = cleanText_(item && item.name, 60).replace(/\s+/g, ' ').trim();
+          if (!name) return;
+          const key = name.toLocaleLowerCase();
+          const current = manualCounts.get(key) || {
+            name,
+            count: 0,
+            calories: 0,
+            portion: cleanText_(item && item.portion, 80) || '自行輸入',
+          };
+          current.count += 1;
+          current.calories = Math.round(numberInRange_(item && item.calories, 0, 5000)) || current.calories;
+          manualCounts.set(key, current);
+        });
+      });
+    });
+  }
+
+  const rankedLibrary = Array.from(counts.entries())
+    .filter(([foodId, count]) => count >= 2 && !defaultFoodIds.has(foodId))
+    .sort((a, b) => b[1] - a[1] || (foodById.get(a[0]).sort - foodById.get(b[0]).sort))
+    .map(([foodId]) => foodById.get(foodId));
+  const rankedManual = Array.from(manualCounts.values())
+    .filter(item => item.count >= 2 && item.calories > 0)
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-Hant'))
+    .map(item => ({
+      id: manualFrequentId_(item.name),
+      name: item.name,
+      portion: item.portion || '自行輸入',
+      kcal: item.calories,
+      emoji: '✍️',
+      sort: 0,
+      isManualFrequent: true,
+    }));
+
+  const result = [];
+  const seen = new Set();
+  rankedManual.concat(rankedLibrary, fallback).forEach(food => {
+    if (!food || seen.has(String(food.id)) || result.length >= limit) return;
+    seen.add(String(food.id));
+    result.push(food);
+  });
+  cache.put(cacheKey, JSON.stringify(result), 300);
+  return result;
+}
+
+function manualFrequentId_(name) {
+  const bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.MD5,
+    String(name || ''),
+    Utilities.Charset.UTF_8
+  );
+  return `manual_frequent_${Utilities.base64EncodeWebSafe(bytes).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24)}`;
+}
+
 function getSignedFormUrl_(userId) {
   const baseUrl = ScriptApp.getService().getUrl();
   if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
@@ -2824,7 +3021,10 @@ function setConfig_(key, value, description) {
 function seedFoods_() {
   const sheet = getSheet_(APP.sheets.foods);
   const rows = [
-    ['common_yangtao_breakfast', '常見食物', '楊桃可怕早餐', '1份', 410, '🍽️', '', true, '使用者自訂', '中', 1],
+    ['common_yangtao_breakfast', '常見食物', '楊桃可口早餐', '1份', 410, '🍽️', '', true, '示範估算，請依實際內容校正', '中', 1],
+    ['common_egg_sandwich', '常見食物', '煎蛋三明治', '1份', 350, '🥪', '', true, '示範估算，麵包與醬料會有差異', '中', 2],
+    ['common_overnight_oats', '常見食物', '隔夜燕麥粥', '1碗', 300, '🥣', '', true, '示範估算，奶類與配料會有差異', '中', 3],
+    ['common_boiled_egg', '常見食物', '水煮蛋', '1顆', 70, '🥚', '', true, '示範值，蛋的大小會有差異', '中', 4],
     ['staple_rice_half', '主食', '白飯', '半碗', 140, '🍚', '', true, '示範值，請依常用碗校正', '中', 10],
     ['staple_rice_bowl', '主食', '白飯', '1碗', 280, '🍚', '', true, '示範值，請依常用碗校正', '中', 11],
     ['staple_brown_half', '主食', '糙米飯', '半碗', 140, '🍚', '', true, '示範值', '中', 12],
@@ -2857,9 +3057,16 @@ function seedFoods_() {
     ['meal_hotpot', '常見外食', '個人小火鍋', '1鍋不含飲料', 700, '🍲', '', true, '示範估算，湯料差異大', '低', 152],
     ['meal_noodle', '常見外食', '湯麵', '1碗', 500, '🍜', '', true, '示範估算，配料差異大', '低', 153],
   ];
-  const existingIds = sheet.getLastRow() > 1
-    ? new Set(sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues().flat().map(String))
-    : new Set();
+  const existingRows = sheet.getLastRow() > 1
+    ? sheet.getRange(2, 1, sheet.getLastRow() - 1, APP.headers.foods.length).getValues()
+    : [];
+  const existingIds = new Set(existingRows.map(row => String(row[0])));
+  // 之前版本曾把這個入口命名成「楊桃可怕早餐」，只更新這個固定 FoodId，避免留下重複卡片。
+  const oldNameRow = existingRows.findIndex(row => String(row[0]) === 'common_yangtao_breakfast');
+  if (oldNameRow >= 0 && String(existingRows[oldNameRow][2]) !== '楊桃可口早餐') {
+    sheet.getRange(oldNameRow + 2, 3).setValue('楊桃可口早餐');
+    CacheService.getScriptCache().remove('active-foods:v1');
+  }
   const missingRows = rows.filter(row => !existingIds.has(String(row[0])));
   if (missingRows.length) {
     sheet.getRange(sheet.getLastRow() + 1, 1, missingRows.length, APP.headers.foods.length)
@@ -2893,6 +3100,27 @@ function today_() {
     APP.timezone,
     'yyyy-MM-dd'
   );
+}
+
+function dateKeyDaysAgo_(baseDateKey, days) {
+  const matched = String(baseDateKey || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!matched) throw new Error('日期格式錯誤。');
+  const date = new Date(Date.UTC(Number(matched[1]), Number(matched[2]) - 1, Number(matched[3])));
+  date.setUTCDate(date.getUTCDate() - Math.abs(Number(days) || 0));
+  return Utilities.formatDate(date, 'UTC', 'yyyy-MM-dd');
+}
+
+function allowedRecordDates_() {
+  const today = today_();
+  return [0, 1, 2, 3].map(days => dateKeyDaysAgo_(today, days));
+}
+
+function validateRecordDate_(value) {
+  const recordDate = normalizeDateKey_(value || today_());
+  if (!allowedRecordDates_().includes(recordDate)) {
+    throw new Error('只能填寫今天，或補登最近三天的紀錄。');
+  }
+  return recordDate;
 }
 
 function dateDaysAgo_(days, baseDate) {
@@ -2969,6 +3197,11 @@ function invalidateLogCache_(date, userId) {
   cache.remove(`logs-for-date:v4:${date}`);
   cache.remove(`public-wall-base:v2:${date}`);
   cache.remove(`public-wall-base:v3:${date}`);
+  // 補登過去日期可能改變「公開連續打卡」，因此也要清掉今日公開頁快取。
+  if (date && date !== today_()) {
+    cache.remove(`public-wall-base:v2:${today_()}`);
+    cache.remove(`public-wall-base:v3:${today_()}`);
+  }
   if (userId) {
     cache.remove(`history:v1:${userId}:30:${today_()}`);
     try {
