@@ -421,8 +421,13 @@
       border-bottom: 1px solid #f3ecdf;
     }
     .selected-row:last-child { border-bottom: 0; }
+    .selected-ai-row { grid-template-columns: minmax(0, 1fr) auto auto auto; }
     .selected-name { font-size: 13px; font-weight: 800; }
     .selected-name small { display: block; color: var(--muted); font-weight: 500; margin-top: 2px; }
+    .portion-editor { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .portion-editor span { color: var(--muted); font-size: 11px; font-weight: 800; }
+    .portion-editor input { width: 72px; margin: 0; padding: 7px 6px; text-align: right; }
+    .portion-editor select { width: 54px; margin: 0; padding: 7px 3px; }
     .counter { display: flex; align-items: center; gap: 7px; }
     .counter button {
       width: 29px;
@@ -560,6 +565,12 @@
     @media (min-width: 620px) {
       .food-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .form-grid.three { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 500px) {
+      .selected-ai-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+      .selected-ai-row .portion-editor { grid-column: 2; grid-row: 2; }
+      .selected-ai-row .ai-kcal { grid-column: 3; grid-row: 2; }
+      .selected-ai-row .danger-small { grid-column: 2 / span 2; grid-row: 3; justify-self: end; }
     }
   </style>
 </head>
@@ -1116,6 +1127,12 @@
         source: 'manual',
         name,
         portion: '自行輸入',
+        amount: 0,
+        baseAmount: 0,
+        unit: 'g',
+        baseCalories: calories,
+        baseLow: calories,
+        baseHigh: calories,
         grams: 0,
         calories,
         low: calories,
@@ -1130,6 +1147,71 @@
       updateTotals();
       markRecordChanged();
       showToast(`已加入${mealLabels[mealKey]}：${name} ${calories} kcal`);
+    }
+
+    // AI 估算會保留「原始估算份量／熱量」作為基準，使用者改 g 或 ml 時按比例重算。
+    function normalizeAiPortion(item) {
+      const unit = String(item.unit || '').toLowerCase() === 'ml' ? 'ml' : 'g';
+      const hasBaseAmount = item.baseAmount !== undefined && item.baseAmount !== null && Number(item.baseAmount) > 0;
+      const baseAmount = Math.max(0, Number(hasBaseAmount ? item.baseAmount : (item.amount || item.grams || 0)));
+      const hasAmount = item.amount !== undefined && item.amount !== null;
+      const amount = Math.max(0, Number(hasAmount ? item.amount : (item.grams || baseAmount || 0)));
+      const baseCalories = Math.max(0, Number(item.baseCalories || item.originalCalories || item.calories || 0));
+      const baseLow = Math.max(0, Number(item.baseLow || item.low || baseCalories));
+      const baseHigh = Math.max(0, Number(item.baseHigh || item.high || baseCalories));
+      item.unit = unit;
+      item.baseAmount = baseAmount;
+      item.amount = amount;
+      item.baseCalories = baseCalories;
+      item.baseLow = baseLow;
+      item.baseHigh = baseHigh;
+      if (unit === 'g') item.grams = amount;
+      return item;
+    }
+
+    function recalcAiItemCalories(item) {
+      normalizeAiPortion(item);
+      if (item.baseAmount > 0 && item.baseCalories > 0) {
+        item.calories = Math.round(item.baseCalories * item.amount / item.baseAmount);
+        item.low = Math.round(item.baseLow * item.amount / item.baseAmount);
+        item.high = Math.round(item.baseHigh * item.amount / item.baseAmount);
+      }
+      const shownAmount = item.amount > 0 ? `${item.amount} ${item.unit}` : '';
+      if (shownAmount) item.portion = shownAmount;
+    }
+
+    function appendPortionEditor(row, item, onChange) {
+      normalizeAiPortion(item);
+      const editor = el('div', 'portion-editor');
+      editor.append(el('span', '', '調整份量'));
+      const amount = document.createElement('input');
+      amount.type = 'number';
+      amount.min = '0';
+      amount.max = '5000';
+      amount.step = '1';
+      amount.inputMode = 'decimal';
+      amount.value = item.amount > 0 ? item.amount : '';
+      amount.setAttribute('aria-label', `${item.name}份量`);
+      const unit = document.createElement('select');
+      ['g', 'ml'].forEach(value => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        unit.append(option);
+      });
+      unit.value = item.unit;
+      const changed = () => {
+        const next = Number(amount.value || 0);
+        item.unit = unit.value;
+        item.amount = Number.isFinite(next) ? Math.max(0, next) : 0;
+        recalcAiItemCalories(item);
+        onChange(item, amount, unit);
+      };
+      amount.addEventListener('input', changed);
+      unit.addEventListener('change', changed);
+      editor.append(amount, unit);
+      row.append(editor);
+      return { amount, unit };
     }
 
     function handleFoodPhoto(event) {
@@ -1152,23 +1234,37 @@
         google.script.run
           .withSuccessHandler(result => {
             state.analyzing = false;
-            state.pendingAiMeal = targetMeal;
-            state.pendingAiItems = (result.items || []).map((item, index) => ({
+            const recognizedItems = (result.items || []).map((item, index) => ({
               id: `ai_${Date.now()}_${index}`,
               source: 'gemini',
               name: item.name || '',
               portion: item.portion || '',
-              grams: Number(item.estimatedGrams || 0),
+              amount: Number(item.estimatedAmount || item.estimatedGrams || 0),
+              baseAmount: Number(item.estimatedAmount || item.estimatedGrams || 0),
+              unit: item.unit === 'ml' ? 'ml' : 'g',
+              baseCalories: Number(item.estimatedCalories || 0),
+              baseLow: Number(item.caloriesLow || item.estimatedCalories || 0),
+              baseHigh: Number(item.caloriesHigh || item.estimatedCalories || 0),
+              grams: Number(item.estimatedGrams || item.estimatedAmount || 0),
               calories: Number(item.estimatedCalories || 0),
               low: Number(item.caloriesLow || 0),
               high: Number(item.caloriesHigh || 0),
               confidence: item.confidence || '低',
               notes: item.notes || '',
             }));
-            renderAiReview(result);
-            setAnalyzing(false, state.pendingAiItems.length
-              ? `已分析，請確認下方結果。`
-              : `沒有辨識到食物，請換一張清楚的照片。`);
+            if (recognizedItems.length) {
+              // 分析成功後直接加入目前餐別，省略「確認加入」中間步驟，
+              // 讓使用者立刻在下方調整份量、熱量或刪除項目。
+              state.aiMeals[targetMeal].push(...recognizedItems);
+              state.activeMeal = targetMeal;
+              renderMealTabs();
+              renderSelected();
+              updateTotals();
+              markRecordChanged();
+              setAnalyzing(false, `✅ 已加入${mealLabels[targetMeal]}，可直接調整份量。`);
+            } else {
+              setAnalyzing(false, `沒有辨識到食物，請換一張清楚的照片。`);
+            }
           })
           .withFailureHandler(error => {
             setAnalyzing(false, '');
@@ -1235,6 +1331,7 @@
       details.append(el('summary', '', `查看／調整食物細項（${state.pendingAiItems.length} 項）`));
 
       state.pendingAiItems.forEach((item, index) => {
+        normalizeAiPortion(item);
         const row = el('div', 'ai-review-row');
         const grid = el('div', 'ai-review-grid');
         const nameLabel = el('label', '', '食物名稱');
@@ -1252,10 +1349,16 @@
         kcalInput.value = item.calories;
         kcalInput.addEventListener('input', e => {
           item.calories = Math.max(0, Number(e.target.value || 0));
+          if (item.baseAmount > 0) item.baseCalories = item.calories;
           updatePendingAiSummary();
         });
         kcalLabel.append(kcalInput);
         grid.append(nameLabel, kcalLabel);
+
+        appendPortionEditor(row, item, () => {
+          kcalInput.value = item.calories;
+          updatePendingAiSummary();
+        });
 
         const portionLabel = el('label', '', '份量說明');
         const portionInput = document.createElement('input');
@@ -1264,7 +1367,7 @@
         portionInput.addEventListener('input', e => { item.portion = e.target.value; });
         portionLabel.append(portionInput);
         const meta = el('div', 'ai-meta',
-          `估計 ${item.grams || '?'}g · 範圍 ${item.low}～${item.high} kcal · 信心 ${item.confidence}${item.notes ? `\n${item.notes}` : ''}`
+          `估計 ${item.amount || '?'} ${item.unit || 'g'} · 範圍 ${item.low}～${item.high} kcal · 信心 ${item.confidence}${item.notes ? `\n${item.notes}` : ''}`
         );
         const remove = el('button', 'danger-small', '移除這項');
         remove.type = 'button';
@@ -1422,10 +1525,13 @@
         aiRows.forEach((item, index) => {
           const row = el('div', 'selected-row');
           const isManual = item.source === 'manual';
+          if (!isManual) row.classList.add('selected-ai-row');
           const name = el('div', 'selected-name', `${isManual ? '✍️' : '🤖'} ${item.name}`);
-          name.append(el('small', '', isManual
+          const meta = el('small', '', isManual
             ? `${item.portion || '自行輸入'} · 可直接修改熱量`
-            : `${item.portion || '照片估算'} · 信心 ${item.confidence || '低'}`));
+            : `${item.portion || '照片估算'} · 信心 ${item.confidence || '低'}`);
+          name.append(meta);
+          row.append(name);
           const kcal = document.createElement('input');
           kcal.className = 'ai-kcal';
           kcal.type = 'number';
@@ -1436,11 +1542,22 @@
           kcal.setAttribute('aria-label', `${item.name}熱量`);
           kcal.addEventListener('input', event => {
             item.calories = Math.max(0, Number(event.target.value || 0));
+            item.baseCalories = item.baseAmount > 0 ? item.baseCalories : item.calories;
             document.getElementById('mealTotal').textContent = mealTotal(state.activeMeal);
             renderMealTabs();
             updateTotals();
             markRecordChanged();
           });
+          if (!isManual) {
+            appendPortionEditor(row, item, () => {
+              kcal.value = item.calories;
+              meta.textContent = `${item.portion || '照片估算'} · 信心 ${item.confidence || '低'}`;
+              document.getElementById('mealTotal').textContent = mealTotal(state.activeMeal);
+              renderMealTabs();
+              updateTotals();
+              markRecordChanged();
+            });
+          }
           const remove = el('button', 'danger-small', '刪除');
           remove.type = 'button';
           remove.addEventListener('click', () => {
@@ -1450,7 +1567,7 @@
             updateTotals();
             markRecordChanged();
           });
-          row.append(name, kcal, remove);
+          row.append(kcal, remove);
           root.append(row);
         });
 
@@ -1534,7 +1651,13 @@
             source: item.source === 'manual' ? 'manual' : 'gemini',
             name: item.name,
             portion: item.portion,
-            grams: item.grams,
+            grams: Math.round(Number(item.grams || (item.unit === 'g' ? item.amount : 0) || 0)),
+            amount: Math.round(Number(item.amount || 0)),
+            baseAmount: Math.round(Number(item.baseAmount || 0)),
+            unit: item.unit === 'ml' ? 'ml' : 'g',
+            baseCalories: Math.round(Number(item.baseCalories || item.calories || 0)),
+            baseLow: Math.round(Number(item.baseLow || item.low || item.calories || 0)),
+            baseHigh: Math.round(Number(item.baseHigh || item.high || item.calories || 0)),
             calories: Math.round(Number(item.calories)),
             confidence: item.confidence,
             notes: item.notes,
