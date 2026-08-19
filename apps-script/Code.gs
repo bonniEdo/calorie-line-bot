@@ -368,11 +368,34 @@ function handleLineEvent_(event) {
 
   if (/^(打卡|今日打卡|填寫|記錄)$/.test(compact)) {
     if (!userId) return;
-    const member = getMemberById_(userId);
+    let member = getMemberById_(userId);
     if (!member) {
       const name = fetchLineDisplayName_(source) || '成員';
       upsertMember_({ userId, name, isFriend: source.type === 'user' ? true : undefined });
+      member = getMemberById_(userId);
     }
+
+    // 群組不再公開可編輯的個人網址，避免其他成員誤改發送者紀錄。
+    // 個人網址改用 pushMessage_ 私訊給指令發送者；群組只收到結果提示。
+    if (source.type === 'group' && source.groupId) {
+      if (!member || !member.isFriend) {
+        replyMessage_(event.replyToken, [{
+          type: 'text',
+          text: '請先私訊我輸入「綁定」並加入好友，我才能把你的個人打卡連結私訊給你。\n群組內不會顯示可編輯的連結。',
+        }]);
+        return;
+      }
+
+      const pushed = pushMessage_(userId, formButtonMessages_(userId));
+      replyMessage_(event.replyToken, [{
+        type: 'text',
+        text: pushed
+          ? '✅ 已私訊你的個人打卡連結，請到與機器人的聊天室開啟。\n群組內不會共用可編輯連結。'
+          : '⚠️ 私訊打卡連結失敗，請先私訊我輸入「綁定」後再試一次。',
+      }]);
+      return;
+    }
+
     replyMessage_(event.replyToken, formButtonMessages_(userId));
     return;
   }
