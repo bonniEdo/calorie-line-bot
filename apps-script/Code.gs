@@ -124,6 +124,7 @@ function doGet(e) {
   const valid = tokenState === 'ok';
   const member = valid ? getMemberById_(uid) : null;
   const foods = valid ? getFoods_() : [];
+  const frequentFoods = valid ? getFrequentFoods_(uid, foods, 4) : [];
   const template = HtmlService.createTemplateFromFile('Index');
 
   const bootstrap = {
@@ -135,6 +136,7 @@ function doGet(e) {
     today: today_(),
     member: member || {},
     foods,
+    frequentFoods,
     todayLog: valid ? getTodayFormData_(uid, foods) : null,
     publicWallUrl: getPublicWallUrl_(valid ? uid : ''),
     historyUrl: getHistoryUrl_(valid ? uid : ''),
@@ -2316,6 +2318,82 @@ function getFoods_() {
   return foods;
 }
 
+/** 依本人近期每日紀錄統計常吃食物；沒有紀錄時回退到「常見食物」。 */
+function getFrequentFoods_(userId, foods, limit) {
+  userId = String(userId || '');
+  foods = Array.isArray(foods) ? foods : [];
+  limit = Math.min(4, Math.max(1, Number(limit) || 4));
+  const defaultLimit = Math.min(4, limit);
+  const defaultFoodIds = new Set([
+    'common_yangtao_breakfast',
+    'common_egg_sandwich',
+    'common_overnight_oats',
+    'common_boiled_egg',
+  ]);
+  const fallback = foods
+    .filter(food => defaultFoodIds.has(String(food.id)))
+    .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, 'zh-Hant'));
+  const foodById = new Map(foods.map(food => [String(food.id), food]));
+  if (!userId || !foods.length) return fallback.slice(0, defaultLimit);
+
+  const cache = CacheService.getScriptCache();
+  const cacheKey = `frequent-foods:v3:${userId}:${today_()}`;
+  const cached = cache.get(cacheKey);
+  if (cached) {
+    try {
+      const cachedFoods = JSON.parse(cached);
+      if (Array.isArray(cachedFoods)) return cachedFoods.slice(0, limit);
+    } catch (error) {
+      cache.remove(cacheKey);
+    }
+  }
+
+  const counts = new Map();
+  const sheet = getSheet_(APP.sheets.logs);
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    // 只取近期資料，避免歷史紀錄越多，打卡頁越慢。
+    const rowCount = Math.min(lastRow - 1, 180);
+    const startRow = lastRow - rowCount + 1;
+    const rows = sheet.getRange(startRow, 1, rowCount, APP.headers.logs.length).getValues();
+    rows.forEach(row => {
+      if (String(row[2] || '') !== userId) return;
+      let details = {};
+      try {
+        details = JSON.parse(String(row[17] || '{}')) || {};
+      } catch (error) {
+        return;
+      }
+      Object.values(details).forEach(items => {
+        if (!Array.isArray(items)) return;
+        items.forEach(item => {
+          const foodId = String(item && item.id || '');
+          if (foodById.has(foodId)) counts.set(foodId, (counts.get(foodId) || 0) + 1);
+        });
+      });
+    });
+  }
+
+  const ranked = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1] || (foodById.get(a[0]).sort - foodById.get(b[0]).sort))
+    .map(([foodId]) => foodById.get(foodId));
+  // 沒有個人紀錄時固定只露出四個常見入口；使用過後才逐步換成個人常吃清單。
+  if (!counts.size) {
+    const result = fallback.slice(0, defaultLimit);
+    cache.put(cacheKey, JSON.stringify(result), 300);
+    return result;
+  }
+  const result = [];
+  const seen = new Set();
+  ranked.concat(fallback).forEach(food => {
+    if (!food || seen.has(food.id) || result.length >= limit) return;
+    seen.add(food.id);
+    result.push(food);
+  });
+  cache.put(cacheKey, JSON.stringify(result), 300);
+  return result;
+}
+
 function getSignedFormUrl_(userId) {
   const baseUrl = ScriptApp.getService().getUrl();
   if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
@@ -2824,7 +2902,10 @@ function setConfig_(key, value, description) {
 function seedFoods_() {
   const sheet = getSheet_(APP.sheets.foods);
   const rows = [
-    ['common_yangtao_breakfast', '常見食物', '楊桃可怕早餐', '1份', 410, '🍽️', '', true, '使用者自訂', '中', 1],
+    ['common_yangtao_breakfast', '常見食物', '楊桃可口早餐', '1份', 410, '🍽️', '', true, '示範估算，請依實際內容校正', '中', 1],
+    ['common_egg_sandwich', '常見食物', '煎蛋三明治', '1份', 350, '🥪', '', true, '示範估算，麵包與醬料會有差異', '中', 2],
+    ['common_overnight_oats', '常見食物', '隔夜燕麥粥', '1碗', 300, '🥣', '', true, '示範估算，奶類與配料會有差異', '中', 3],
+    ['common_boiled_egg', '常見食物', '水煮蛋', '1顆', 70, '🥚', '', true, '示範值，蛋的大小會有差異', '中', 4],
     ['staple_rice_half', '主食', '白飯', '半碗', 140, '🍚', '', true, '示範值，請依常用碗校正', '中', 10],
     ['staple_rice_bowl', '主食', '白飯', '1碗', 280, '🍚', '', true, '示範值，請依常用碗校正', '中', 11],
     ['staple_brown_half', '主食', '糙米飯', '半碗', 140, '🍚', '', true, '示範值', '中', 12],
@@ -2857,9 +2938,16 @@ function seedFoods_() {
     ['meal_hotpot', '常見外食', '個人小火鍋', '1鍋不含飲料', 700, '🍲', '', true, '示範估算，湯料差異大', '低', 152],
     ['meal_noodle', '常見外食', '湯麵', '1碗', 500, '🍜', '', true, '示範估算，配料差異大', '低', 153],
   ];
-  const existingIds = sheet.getLastRow() > 1
-    ? new Set(sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues().flat().map(String))
-    : new Set();
+  const existingRows = sheet.getLastRow() > 1
+    ? sheet.getRange(2, 1, sheet.getLastRow() - 1, APP.headers.foods.length).getValues()
+    : [];
+  const existingIds = new Set(existingRows.map(row => String(row[0])));
+  // 之前版本曾把這個入口命名成「楊桃可怕早餐」，只更新這個固定 FoodId，避免留下重複卡片。
+  const oldNameRow = existingRows.findIndex(row => String(row[0]) === 'common_yangtao_breakfast');
+  if (oldNameRow >= 0 && String(existingRows[oldNameRow][2]) !== '楊桃可口早餐') {
+    sheet.getRange(oldNameRow + 2, 3).setValue('楊桃可口早餐');
+    CacheService.getScriptCache().remove('active-foods:v1');
+  }
   const missingRows = rows.filter(row => !existingIds.has(String(row[0])));
   if (missingRows.length) {
     sheet.getRange(sheet.getLastRow() + 1, 1, missingRows.length, APP.headers.foods.length)
