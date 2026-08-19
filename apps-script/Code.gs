@@ -125,6 +125,14 @@ function doGet(e) {
   const member = valid ? getMemberById_(uid) : null;
   const foods = valid ? getFoods_() : [];
   const frequentFoods = valid ? getFrequentFoods_(uid, foods, 4) : [];
+  const recordDates = valid ? allowedRecordDates_().map((date, index) => ({
+    date,
+    label: ['今天', '昨天', '前天', '三天前'][index],
+  })) : [];
+  // 一次讀取四天資料，切換日期時由前端直接還原，不再每次呼叫 Apps Script。
+  const dailyLogs = valid
+    ? getRecentDailyFormData_(uid, foods, recordDates.map(item => item.date))
+    : {};
   const template = HtmlService.createTemplateFromFile('Index');
 
   const bootstrap = {
@@ -134,10 +142,12 @@ function doGet(e) {
     uid,
     sig,
     today: today_(),
+    recordDates,
     member: member || {},
     foods,
     frequentFoods,
-    todayLog: valid ? getTodayFormData_(uid, foods) : null,
+    todayLog: valid ? (dailyLogs[today_()] || null) : null,
+    dailyLogs,
     publicWallUrl: getPublicWallUrl_(valid ? uid : ''),
     historyUrl: getHistoryUrl_(valid ? uid : ''),
   };
@@ -500,6 +510,7 @@ function saveDailyLog(payload) {
   const sig = String(payload.sig || '');
   const tokenState = inspectAccessToken_(userId, sig, APP.tokenScopes.form);
   if (tokenState !== 'ok') throw new Error(accessTokenErrorMessage_(tokenState));
+  const recordDate = validateRecordDate_(payload.recordDate);
 
   let member = getMemberById_(userId);
   if (!member) throw new Error('尚未綁定成員，請先私訊機器人「綁定」。');
@@ -648,7 +659,7 @@ function saveDailyLog(payload) {
 
   const row = [
     now,
-    today_(),
+    recordDate,
     userId,
     displayName,
     mealTotals.breakfast,
@@ -679,13 +690,17 @@ function saveDailyLog(payload) {
   lock.waitLock(5000);
   try {
     if (pendingMemberUpdate) upsertMember_(pendingMemberUpdate);
-    upsertDailyRow_(today_(), userId, row);
+    upsertDailyRow_(recordDate, userId, row);
+    // 今日紀錄會影響「常吃的食物」統計，儲存後立即清除快捷區快取，
+    // 避免使用者關閉頁面重開時還看到儲存前的四個預設項目。
+    CacheService.getScriptCache().remove(`frequent-foods:v4:${userId}:${today_()}`);
   } finally {
     lock.releaseLock();
   }
   return {
     ok: true,
-    date: today_(),
+    date: recordDate,
+    isBackfill: recordDate !== today_(),
     totalIntake,
     estimatedBurn,
     estimatedDeficit,
@@ -693,6 +708,23 @@ function saveDailyLog(payload) {
     isComplete,
     isPublic,
     publishFoodDetails,
+  };
+}
+
+/** 打卡頁切換日期時懶載本人當日資料；日期範圍一律由後端驗證。 */
+function getDailyFormForDate(payload) {
+  payload = payload || {};
+  const userId = String(payload.uid || '');
+  const sig = String(payload.sig || '');
+  const tokenState = inspectAccessToken_(userId, sig, APP.tokenScopes.form);
+  if (tokenState !== 'ok') throw new Error(accessTokenErrorMessage_(tokenState));
+  const recordDate = validateRecordDate_(payload.recordDate);
+  const foods = getFoods_();
+  return {
+    ok: true,
+    date: recordDate,
+    isBackfill: recordDate !== today_(),
+    log: getDailyFormData_(userId, foods, recordDate),
   };
 }
 
@@ -1568,6 +1600,41 @@ function revokeTodayPublicRecord_(userId) {
 }
 
 function getTodayFormData_(userId, foods) {
+  return getDailyFormData_(userId, foods, today_());
+}
+
+function getRecentDailyFormData_(userId, foods, recordDates) {
+  const dates = (Array.isArray(recordDates) ? recordDates : allowedRecordDates_())
+    .map(validateRecordDate_);
+  const result = {};
+  dates.forEach(date => { result[date] = null; });
+  if (!dates.length) return result;
+
+  const sheet = getSheet_(APP.sheets.logs);
+  ensureLogStatusHeader_(sheet);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return result;
+
+  const wantedDates = new Set(dates);
+  const foundDates = new Set();
+  // 四天補登範圍一次最多讀 500 列，比分別讀四次更快。
+  const rowCount = Math.min(lastRow - 1, 500);
+  const startRow = lastRow - rowCount + 1;
+  const rows = sheet.getRange(startRow, 1, rowCount, APP.headers.logs.length).getValues();
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (String(row[2] || '') !== String(userId)) continue;
+    const date = getLogRowDateKey_(row, null);
+    if (!wantedDates.has(date) || foundDates.has(date)) continue;
+    result[date] = dailyFormDataFromRow_(row, foods, date);
+    foundDates.add(date);
+    if (foundDates.size === wantedDates.size) break;
+  }
+  return result;
+}
+
+function getDailyFormData_(userId, foods, recordDate) {
+  recordDate = validateRecordDate_(recordDate);
   const sheet = getSheet_(APP.sheets.logs);
   ensureLogStatusHeader_(sheet);
   const lastRow = sheet.getLastRow();
@@ -1578,22 +1645,25 @@ function getTodayFormData_(userId, foods) {
   const range = sheet.getRange(startRow, 1, rowCount, APP.headers.logs.length);
   const values = range.getValues();
   let savedRow = null;
-  const today = today_();
 
   for (let index = values.length - 1; index >= 0; index -= 1) {
     const row = values[index];
     if (String(row[2] || '') !== String(userId)) continue;
-    if (getLogRowDateKey_(row, null) !== today) continue;
+    if (getLogRowDateKey_(row, null) !== recordDate) continue;
     savedRow = row;
     break;
   }
   if (!savedRow) return null;
 
+  return dailyFormDataFromRow_(savedRow, foods, recordDate);
+}
+
+function dailyFormDataFromRow_(savedRow, foods, recordDate) {
   let selectedDetails = {};
   try {
     selectedDetails = JSON.parse(String(savedRow[17] || '{}')) || {};
   } catch (error) {
-    console.warn(`今日食物明細無法解析，將使用各餐總熱量還原：${error.message || error}`);
+    console.warn(`${recordDate} 食物明細無法解析，將使用各餐總熱量還原：${error.message || error}`);
     selectedDetails = {};
   }
 
@@ -3032,6 +3102,27 @@ function today_() {
   );
 }
 
+function dateKeyDaysAgo_(baseDateKey, days) {
+  const matched = String(baseDateKey || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!matched) throw new Error('日期格式錯誤。');
+  const date = new Date(Date.UTC(Number(matched[1]), Number(matched[2]) - 1, Number(matched[3])));
+  date.setUTCDate(date.getUTCDate() - Math.abs(Number(days) || 0));
+  return Utilities.formatDate(date, 'UTC', 'yyyy-MM-dd');
+}
+
+function allowedRecordDates_() {
+  const today = today_();
+  return [0, 1, 2, 3].map(days => dateKeyDaysAgo_(today, days));
+}
+
+function validateRecordDate_(value) {
+  const recordDate = normalizeDateKey_(value || today_());
+  if (!allowedRecordDates_().includes(recordDate)) {
+    throw new Error('只能填寫今天，或補登最近三天的紀錄。');
+  }
+  return recordDate;
+}
+
 function dateDaysAgo_(days, baseDate) {
   const date = baseDate instanceof Date ? baseDate : new Date();
   return Utilities.formatDate(
@@ -3106,6 +3197,11 @@ function invalidateLogCache_(date, userId) {
   cache.remove(`logs-for-date:v4:${date}`);
   cache.remove(`public-wall-base:v2:${date}`);
   cache.remove(`public-wall-base:v3:${date}`);
+  // 補登過去日期可能改變「公開連續打卡」，因此也要清掉今日公開頁快取。
+  if (date && date !== today_()) {
+    cache.remove(`public-wall-base:v2:${today_()}`);
+    cache.remove(`public-wall-base:v3:${today_()}`);
+  }
   if (userId) {
     cache.remove(`history:v1:${userId}:30:${today_()}`);
     try {
