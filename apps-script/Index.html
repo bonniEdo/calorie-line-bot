@@ -120,6 +120,15 @@
     }
     .section-title { margin: 0 0 12px; font-size: 17px; }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .exercise-list { display: grid; gap: 10px; }
+    .exercise-record { padding: 11px; border: 1px solid var(--line); border-radius: 14px; background: #fffdf8; }
+    .exercise-record-grid { display: grid; grid-template-columns: minmax(0, 1fr) 120px 102px auto; gap: 8px; align-items: end; }
+    .exercise-custom-control { display: flex; gap: 6px; align-items: end; }
+    .exercise-custom-control input { flex: 1; min-width: 0; }
+    .exercise-custom-control button { margin-top: 5px; min-height: 44px; padding: 8px 10px; white-space: nowrap; }
+    .exercise-record .danger-small { min-height: 40px; }
+    .exercise-add-row { display: flex; gap: 8px; margin-top: 10px; }
+    .exercise-add-row button { min-height: 40px; }
     .custom-food-grid { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 10px; }
     .custom-food-grid .secondary { grid-column: 1 / -1; width: 100%; }
     label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); }
@@ -178,6 +187,7 @@
       font-weight: 900;
       text-align: center;
     }
+    .exercise-record-grid select { appearance: auto; -webkit-appearance: menulist; }
     .public-settings {
       margin-top: 14px;
       border: 1px solid #b7d3c2;
@@ -287,6 +297,79 @@
       font-size: 12px;
       font-weight: 900;
       text-decoration: none;
+    }
+    .quick-access {
+      margin-top: 14px;
+      padding: 12px 14px 14px;
+      border: 1px solid #e7dcc4;
+      border-radius: 16px;
+      background: #fffdf7;
+    }
+    .quick-access-heading {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 9px;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 900;
+    }
+    .quick-access-heading small {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .quick-access-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .quick-access-link {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+      min-height: 58px;
+      padding: 9px 10px;
+      border: 1px solid #c9dfcf;
+      border-radius: 13px;
+      background: #f5fbf7;
+      color: #35684b;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .quick-access-link.history {
+      border-color: #ead38a;
+      background: #fffaf0;
+      color: #765c17;
+    }
+    .quick-access-icon {
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 31px;
+      height: 31px;
+      border-radius: 10px;
+      background: #dff1e5;
+      font-size: 17px;
+    }
+    .quick-access-link.history .quick-access-icon { background: #ffeab0; }
+    .quick-access-copy { min-width: 0; }
+    .quick-access-copy strong {
+      display: block;
+      font-size: 13px;
+      line-height: 1.3;
+    }
+    .quick-access-copy small {
+      display: block;
+      margin-top: 2px;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.3;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .category-chips {
       display: flex;
@@ -515,6 +598,8 @@
       border-top: 1px solid var(--line);
       backdrop-filter: blur(12px);
     }
+    /* 手機鍵盤開啟時隱藏底部固定列，避免它遮住正在輸入的欄位。 */
+    body.keyboard-open .submit-bar { display: none !important; }
     .submit-inner { max-width: 732px; margin: 0 auto; display: flex; gap: 8px; align-items: center; }
     .submit-summary { flex: 0 0 104px; min-width: 0; font-size: 11px; color: var(--muted); }
     .submit-summary strong { display: block; color: var(--ink); font-size: 18px; }
@@ -567,6 +652,9 @@
       .form-grid.three { grid-template-columns: repeat(3, 1fr); }
     }
     @media (max-width: 500px) {
+      .exercise-record-grid { grid-template-columns: minmax(0, 1fr) 82px 92px auto; }
+      .exercise-record-grid > label:first-child { grid-column: 1 / -1; }
+      .exercise-record-grid .danger-small { min-height: 40px; }
       .selected-ai-row { grid-template-columns: minmax(0, 1fr) auto auto; }
       .selected-ai-row .portion-editor { grid-column: 2; grid-row: 2; }
       .selected-ai-row .ai-kcal { grid-column: 3; grid-row: 2; }
@@ -595,7 +683,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.19-20';
+    window.__dietAppBuild = '2026.08.19-29';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -661,6 +749,18 @@
       ? BOOTSTRAP.todayLog
       : null;
     const mealLabels = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', lateNight: '宵夜', snack: '點心' };
+    // 必須在啟動時還原今天紀錄前先宣告，否則 normalizeExerciseRecord()
+    // 會在 const 的暫時死區（TDZ）被呼叫，導致整個頁面無法載入。
+    const commonExercises = {
+      none: { label: '請選擇運動項目', met: 0 },
+      custom: { label: '其他／自訂運動', met: 0 },
+      strength: { label: '重訓', met: 5 },
+      swim: { label: '游泳', met: 6 },
+      badminton: { label: '打羽球', met: 5.5 },
+      run: { label: '跑步', met: 8 },
+      bicycle: { label: '腳踏車', met: 7.5 },
+      incline: { label: '爬坡', met: 6.5 },
+    };
     const state = {
       activeMeal: 'breakfast',
       entryMode: 'photo',
@@ -668,6 +768,8 @@
       search: '',
       meals: { breakfast: {}, lunch: {}, dinner: {}, lateNight: {}, snack: {} },
       aiMeals: { breakfast: [], lunch: [], dinner: [], lateNight: [], snack: [] },
+      exerciseRecords: [],
+      exerciseWeightKg: Number(MEMBER.weightKg || 0),
       pendingAiItems: [],
       pendingAiMeal: '',
       analyzing: false,
@@ -687,6 +789,8 @@
     const saveStatus = document.getElementById('saveStatus');
     const toast = document.getElementById('toast');
     let todayIsComplete = Boolean(SAVED_LOG && SAVED_LOG.isComplete);
+    // renderApp 可能在本段程式的函式宣告完成前就被呼叫，需先完成初始化。
+    let keyboardAvoidanceBound = false;
 
     function decodeBootstrapFromDom_() {
       const dataNode = document.getElementById('bootstrapData');
@@ -722,7 +826,10 @@
     }
 
     function hydrateStateFromTodayLog() {
-      if (!SAVED_LOG) return;
+      if (!SAVED_LOG) {
+        state.exerciseRecords = [newExerciseRecord()];
+        return;
+      }
       Object.keys(mealLabels).forEach(mealKey => {
         const savedMeals = SAVED_LOG.meals && Array.isArray(SAVED_LOG.meals[mealKey])
           ? SAVED_LOG.meals[mealKey]
@@ -751,6 +858,188 @@
           notes: '',
         });
       }
+      const savedExercises = Array.isArray(SAVED_LOG.exerciseRecords)
+        ? SAVED_LOG.exerciseRecords
+        : [];
+      state.exerciseRecords = savedExercises.map(normalizeExerciseRecord);
+      // 舊版只有單一運動欄位，第一次載入時自動轉成一筆清單。
+      if (!state.exerciseRecords.length && (Number(SAVED_LOG.exerciseMinutes || 0) || Number(SAVED_LOG.exerciseKcal || 0) || SAVED_LOG.exerciseName)) {
+        state.exerciseRecords = [normalizeExerciseRecord({
+          name: SAVED_LOG.exerciseName || '',
+          minutes: SAVED_LOG.exerciseMinutes || 0,
+          kcal: SAVED_LOG.exerciseKcal || 0,
+        })];
+      }
+      if (!state.exerciseRecords.length) state.exerciseRecords = [newExerciseRecord()];
+    }
+
+    function newExerciseRecord() {
+      return { type: 'none', name: '', minutes: '', kcal: '' };
+    }
+
+    function normalizeExerciseRecord(record) {
+      record = record || {};
+      const hasLegacyValue = Boolean(record.name || Number(record.minutes || 0) || Number(record.kcal || record.calories || 0));
+      return {
+        type: Object.prototype.hasOwnProperty.call(commonExercises, record.type)
+          ? record.type
+          : (hasLegacyValue ? 'custom' : 'none'),
+        name: String(record.name || '').slice(0, 60),
+        minutes: Math.max(0, Math.min(1440, Number(record.minutes || 0))) || '',
+        kcal: Math.max(0, Math.min(10000, Number(record.kcal || record.calories || 0))) || '',
+      };
+    }
+
+    function estimateExerciseKcal(record) {
+      const definition = commonExercises[record.type];
+      const minutes = Number(record.minutes || 0);
+      if (!definition || !definition.met || minutes <= 0) return 0;
+      // MET 估算：MET × 3.5 × 體重kg ÷ 200 × 分鐘。
+      const weight = Number(state.exerciseWeightKg || MEMBER.weightKg || 60);
+      return Math.round(definition.met * 3.5 * weight / 200 * minutes);
+    }
+
+    function exerciseSummary() {
+      const records = state.exerciseRecords.map(normalizeExerciseRecord).filter(record => (
+        record.type !== 'none' && (record.name || Number(record.minutes) > 0 || Number(record.kcal) > 0)
+      ));
+      return {
+        records,
+        name: records.map(record => record.name).filter(Boolean).join('、'),
+        minutes: records.reduce((sum, record) => sum + Number(record.minutes || 0), 0),
+        kcal: records.reduce((sum, record) => sum + Number(record.kcal || 0), 0),
+      };
+    }
+
+    function renderExerciseRecords() {
+      const root = document.getElementById('exerciseRecords');
+      if (!root) return;
+      root.innerHTML = '';
+      if (!state.exerciseRecords.length) {
+        root.append(el('div', 'selected-empty', '今天還沒有運動紀錄，可以按「＋新增運動」。'));
+        return;
+      }
+      state.exerciseRecords.forEach((record, index) => {
+        const normalized = normalizeExerciseRecord(record);
+        state.exerciseRecords[index] = normalized;
+        // 後續事件必須修改 state 內的同一個物件；否則重繪或自動儲存時
+        // 會讀回 normalized 舊值，讓選好的運動又跳回「請選擇」。
+        record = normalized;
+        const card = el('div', 'exercise-record');
+        const grid = el('div', 'exercise-record-grid');
+        const itemLabel = el('label', '', '運動項目');
+        if (normalized.type === 'custom') {
+          const customControl = el('div', 'exercise-custom-control');
+          const customInput = document.createElement('input');
+          customInput.type = 'text';
+          customInput.setAttribute('aria-label', '自訂運動名稱');
+          customInput.value = normalized.name;
+          customInput.placeholder = '輸入自訂運動名稱';
+          customInput.maxLength = 60;
+          customInput.addEventListener('input', event => {
+            record.name = event.target.value.slice(0, 60);
+            updateTotals();
+            markRecordChanged();
+          });
+          const chooseButton = el('button', 'secondary', '選常見');
+          chooseButton.type = 'button';
+          chooseButton.addEventListener('click', () => {
+            record.type = 'none';
+            record.name = '';
+            record.kcal = '';
+            renderExerciseRecords();
+            updateTotals();
+            markRecordChanged();
+          });
+          customControl.append(customInput, chooseButton);
+          itemLabel.append(customControl);
+        } else {
+          const typeSelect = document.createElement('select');
+          typeSelect.setAttribute('aria-label', '運動項目');
+          const exerciseChoiceOrder = ['none', 'strength', 'swim', 'badminton', 'run', 'bicycle', 'incline', 'custom'];
+          exerciseChoiceOrder.forEach(key => {
+            const definition = commonExercises[key];
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = definition.label;
+            typeSelect.appendChild(option);
+          });
+          typeSelect.value = normalized.type;
+          let appliedType = normalized.type;
+          const applyTypeSelection = event => {
+            const nextType = String(event.target.value || 'none');
+            if (nextType === appliedType) return;
+            appliedType = nextType;
+            record.type = nextType;
+            const definition = commonExercises[nextType];
+            if (nextType === 'custom') {
+              record.name = '';
+              record.kcal = '';
+              updateTotals();
+              markRecordChanged();
+              window.setTimeout(() => {
+                renderExerciseRecords();
+                const customField = document.querySelector('#exerciseRecords .exercise-custom-control input');
+                if (customField) customField.focus();
+              }, 0);
+              return;
+            } else if (nextType === 'none') {
+              record.name = '';
+              record.kcal = '';
+            } else {
+              record.name = definition.label;
+              record.kcal = estimateExerciseKcal(record) || '';
+            }
+            updateTotals();
+            markRecordChanged();
+          };
+          typeSelect.onchange = applyTypeSelection;
+          itemLabel.append(typeSelect);
+        }
+        const minutesLabel = el('label', '', '時間（分）');
+        const minutesInput = document.createElement('input');
+        minutesInput.type = 'number';
+        minutesInput.inputMode = 'numeric';
+        minutesInput.min = '0';
+        minutesInput.max = '1440';
+        minutesInput.value = normalized.minutes;
+        minutesInput.placeholder = '分鐘';
+        minutesInput.addEventListener('input', event => {
+          record.minutes = Math.max(0, Math.min(1440, Number(event.target.value || 0)));
+          if (record.type !== 'custom' && record.type !== 'none') {
+            record.kcal = estimateExerciseKcal(record) || '';
+            kcalInput.value = record.kcal;
+            updateTotals();
+          }
+          markRecordChanged();
+        });
+        minutesLabel.append(minutesInput);
+        const kcalLabel = el('label', '', '活動熱量');
+        const kcalInput = document.createElement('input');
+        kcalInput.type = 'number';
+        kcalInput.inputMode = 'numeric';
+        kcalInput.min = '0';
+        kcalInput.max = '10000';
+        kcalInput.value = normalized.kcal;
+        kcalInput.placeholder = 'kcal';
+        kcalInput.addEventListener('input', event => {
+          record.kcal = Math.max(0, Math.min(10000, Number(event.target.value || 0)));
+          updateTotals();
+          markRecordChanged();
+        });
+        kcalLabel.append(kcalInput);
+        const remove = el('button', 'danger-small', '刪除');
+        remove.type = 'button';
+        remove.addEventListener('click', () => {
+          state.exerciseRecords.splice(index, 1);
+          renderExerciseRecords();
+          updateTotals();
+          markRecordChanged(250);
+        });
+        grid.append(itemLabel, minutesLabel, kcalLabel, remove);
+        card.append(grid);
+        root.append(card);
+      });
     }
 
     function renderApp() {
@@ -782,6 +1071,19 @@
           '</div>',
           '<p class="tdee-note">TDEE:未填運動時以 BMR × 1.2 估算；填入運動消耗後再加上。</p>',
           savedNotice,
+        '</section>',
+        '<section class="quick-access" aria-label="快速查看">',
+          '<div class="quick-access-heading">🔎 快速查看</div>',
+          '<div class="quick-access-grid">',
+            '<a class="quick-access-link" href="' + escapeAttr(BOOTSTRAP.publicWallUrl || '') + '" target="_top">',
+              '<span class="quick-access-icon" aria-hidden="true">🌍</span>',
+              '<span class="quick-access-copy"><strong>公開紀錄牆 ↗</strong><small>看看大家願意公開的紀錄</small></span>',
+            '</a>',
+            '<a class="quick-access-link history" href="' + escapeAttr(BOOTSTRAP.historyUrl || '') + '" target="_top">',
+              '<span class="quick-access-icon" aria-hidden="true">📈</span>',
+              '<span class="quick-access-copy"><strong>猛猛消耗的歷史 ↗</strong><small>查看自己的每日變化</small></span>',
+            '</a>',
+          '</div>',
         '</section>',
         '<section class="section">',
           '<h2 class="section-title">👤 個人設定</h2>',
@@ -817,8 +1119,6 @@
               '<label class="privacy-toggle"><input id="publishToday" type="checkbox" ' + (defaultPublishToday ? 'checked' : '') + '><span><strong>公開我的飲控紀錄</strong><br>開啟後每天沿用，只公開暱稱、已攝取／今日額度、餐別與完成狀態。</span></label>',
               '<label class="privacy-toggle"><input id="publishFoodDetails" type="checkbox" ' + (defaultPublishFoodDetails ? 'checked' : '') + '><span><strong>同時公開我吃了什麼</strong><br>開啟後每天沿用，顯示食物名稱、份量與估算熱量；不會顯示照片。</span></label>',
               '<label class="privacy-toggle"><input id="joinPublicRanking" type="checkbox" ' + (MEMBER.joinPublicRanking ? 'checked' : '') + '><span><strong>參加公開連續打卡排行</strong><br>只比較完成打卡的連續天數，不比較誰吃得最少。</span></label>',
-              '<a class="public-wall-link" href="' + escapeAttr(BOOTSTRAP.publicWallUrl || '') + '" target="_top">查看公開頁面 ↗</a>',
-              '<a class="history-link" href="' + escapeAttr(BOOTSTRAP.historyUrl || '') + '" target="_top">查看卡路里歷史 ↗</a>',
             '</div>',
           '</details>',
         '</section>',
@@ -854,7 +1154,7 @@
             '</div>',
           '</div>',
           '<details id="foodLibrary" class="food-library">',
-            '<summary>找不到或 AI 辨識錯誤？展開食物庫手動補充</summary>',
+            '<summary>『這裏』可以展開食物庫手動補充</summary>',
             '<input id="search" class="search" type="search" placeholder="搜尋白飯、雞蛋、便當…">',
             '<div id="categoryChips" class="category-chips"></div>',
             '<div id="foodGrid" class="food-grid"></div>',
@@ -867,12 +1167,12 @@
         '</section>',
         '<section class="section">',
           '<h2 class="section-title">🏋️ 運動</h2>',
-          '<div class="form-grid">',
-            '<label>運動時間<input id="exerciseMinutes" type="number" inputmode="numeric" min="0" max="1440" value="' + escapeAttr(SAVED_LOG ? SAVED_LOG.exerciseMinutes : '') + '" placeholder="分鐘"></label>',
-            '<label>運動消耗<input id="exerciseKcal" type="number" inputmode="numeric" min="0" max="5000" value="' + escapeAttr(SAVED_LOG ? SAVED_LOG.exerciseKcal : '') + '" placeholder="手錶顯示 kcal"></label>',
+          '<div id="exerciseRecords" class="exercise-list"></div>',
+          '<div class="exercise-add-row">',
+            '<button id="addExerciseButton" class="secondary" type="button">＋ 新增運動</button>',
+            '<button id="clearExerciseButton" class="danger-small" type="button">全部清除</button>',
           '</div>',
-          '<button id="clearExerciseButton" class="danger-small" type="button">清除運動紀錄</button>',
-          '<p class="hint">如果使用運動手錶，請填「活動熱量」，不要填包含基礎代謝的總消耗。</p>',
+          '<p class="hint">運動項目是一格輸入欄：點一下可選常見運動，也可以直接輸入自訂名稱；填寫分鐘後會自動估算熱量。</p>',
         '</section>',
         '<p class="hint" style="padding:0 8px">食物熱量與每日赤字皆為估算。排行榜用於一起養成紀錄習慣，不代表赤字越大越好。</p>',
       ].join('');
@@ -880,9 +1180,11 @@
       submitBar.hidden = false;
       updateSubmitButtons();
       bindStaticEvents();
+      bindKeyboardAvoidance();
       updatePublicSettingsSummary();
       renderMealTabs();
       renderEntryMode();
+      renderExerciseRecords();
       renderSelected();
       updateTotals();
     }
@@ -933,13 +1235,11 @@
       [
         'name',
         'bmr',
-        'exerciseMinutes',
-        'exerciseKcal',
       ].forEach(id => {
         const input = document.getElementById(id);
 
         input.addEventListener('input', () => {
-          if (id === 'bmr' || id === 'exerciseKcal') {
+          if (id === 'bmr') {
             updateTotals();
           }
 
@@ -948,21 +1248,27 @@
       });
 
       document
+        .getElementById('addExerciseButton')
+        .addEventListener('click', () => {
+          state.exerciseRecords.push(newExerciseRecord());
+          renderExerciseRecords();
+          markRecordChanged(250);
+          const rows = document.querySelectorAll('#exerciseRecords .exercise-record');
+          const lastRow = rows[rows.length - 1];
+          const minutesInput = lastRow && lastRow.querySelector('input[type="number"]');
+          if (minutesInput) minutesInput.focus();
+        });
+
+      document
         .getElementById('clearExerciseButton')
         .addEventListener('click', () => {
-          const exerciseMinutes =
-            document.getElementById('exerciseMinutes');
-
-          const exerciseKcal =
-            document.getElementById('exerciseKcal');
-
-          if (!exerciseMinutes.value && !exerciseKcal.value) {
+          if (!exerciseSummary().records.length) {
             showToast('目前沒有運動紀錄。');
             return;
           }
 
-          exerciseMinutes.value = '';
-          exerciseKcal.value = '';
+          state.exerciseRecords = [];
+          renderExerciseRecords();
 
           // 立即把 TDEE 更新成不包含運動消耗的數字。
           updateTotals();
@@ -1017,6 +1323,59 @@
       });
     }
 
+    function bindKeyboardAvoidance() {
+      if (keyboardAvoidanceBound) return;
+      keyboardAvoidanceBound = true;
+
+      const isEditable = element => element && (
+        (element.matches('input, select, textarea')
+          && element.type !== 'hidden'
+          && element.type !== 'file')
+      );
+
+      const scrollFocusedFieldIntoView = () => {
+        const field = document.activeElement;
+        if (!isEditable(field)) return;
+
+        window.setTimeout(() => {
+          if (!isEditable(document.activeElement)) return;
+          document.activeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+          // visualViewport 能反映手機鍵盤出現後真正可視的高度。
+          window.setTimeout(() => {
+            const active = document.activeElement;
+            const viewport = window.visualViewport;
+            if (!isEditable(active) || !viewport) return;
+            const rect = active.getBoundingClientRect();
+            const safeBottom = viewport.height - 12;
+            if (rect.bottom > safeBottom) {
+              window.scrollBy({ top: rect.bottom - safeBottom, behavior: 'smooth' });
+            }
+          }, 120);
+        }, 260);
+      };
+
+      document.addEventListener('focusin', event => {
+        if (!isEditable(event.target)) return;
+        document.body.classList.add('keyboard-open');
+        scrollFocusedFieldIntoView();
+      });
+
+      document.addEventListener('focusout', () => {
+        window.setTimeout(() => {
+          if (!isEditable(document.activeElement)) {
+            document.body.classList.remove('keyboard-open');
+          }
+        }, 180);
+      });
+
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', () => {
+          if (isEditable(document.activeElement)) scrollFocusedFieldIntoView();
+        });
+      }
+    }
+
     function renderEntryMode() {
       const photoActive = state.entryMode === 'photo';
       const photoButton = document.getElementById('photoModeButton');
@@ -1054,6 +1413,7 @@
         return;
       }
       const estimate = Math.round(10 * weight + 6.25 * height - 5 * age + (sex === 'male' ? 5 : -161));
+      state.exerciseWeightKg = weight;
       document.getElementById('bmr').value = estimate;
       updateTotals();
       const result = document.getElementById('bmrResult');
@@ -1624,7 +1984,7 @@
     function updateTotals() {
       const total = grandTotal();
       const bmr = Math.max(0, Number(document.getElementById('bmr').value || 0));
-      const exerciseKcal = Math.max(0, Number(document.getElementById('exerciseKcal').value || 0));
+      const exerciseKcal = exerciseSummary().kcal;
       const estimatedTdee = bmr ? Math.round(bmr * 1.2 + exerciseKcal) : 0;
       document.getElementById('heroTotal').textContent = total;
       document.getElementById('heroTdee').textContent = estimatedTdee || '—';
@@ -1764,18 +2124,21 @@
         return;
       }
 
+      const exercise = exerciseSummary();
       const payload = {
         uid: BOOTSTRAP.uid,
         sig: BOOTSTRAP.sig,
         name: document.getElementById('name').value,
         bmr,
+        weightKg: state.exerciseWeightKg || '',
         meals: serializeMeals(),
         aiMeals: serializeAiMeals(),
         extraKcal: 0,
         waterMl: '',
-        exerciseName: '',
-        exerciseMinutes: document.getElementById('exerciseMinutes').value,
-        exerciseKcal: document.getElementById('exerciseKcal').value,
+        exerciseName: exercise.name,
+        exerciseMinutes: exercise.minutes,
+        exerciseKcal: exercise.kcal,
+        exerciseRecords: exercise.records,
         note: '',
         isComplete: Boolean(markComplete),
         publicAlias: document.getElementById('publicAlias').value,

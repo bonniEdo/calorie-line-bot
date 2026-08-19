@@ -33,7 +33,7 @@ const APP = Object.freeze({
       '晚餐kcal', '點心kcal', '宵夜kcal', '總攝取kcal', '飲水ml',
       '運動項目', '運動分鐘', '活動熱量kcal', '基礎代謝BMR',
       '估算總消耗kcal', '估算赤字kcal', '食物明細JSON', '備註', '更新時間',
-      '打卡狀態', '公開紀錄', '公開時間', '公開食物細項',
+      '打卡狀態', '公開紀錄', '公開時間', '公開食物細項', '運動明細JSON',
     ],
     publicLikes: ['日期', '按讚者UserId', '被按讚者UserId', '建立時間', '更新時間'],
   },
@@ -615,9 +615,26 @@ function saveDailyLog(payload) {
   }
   const totalIntake = mealKeys.reduce((sum, key) => sum + mealTotals[key], 0);
   const waterMl = Math.round(numberInRange_(payload.waterMl, 0, 10000));
-  const exerciseName = cleanText_(payload.exerciseName, 80);
-  const exerciseMinutes = Math.round(numberInRange_(payload.exerciseMinutes, 0, 1440));
-  const exerciseKcal = Math.round(numberInRange_(payload.exerciseKcal, 0, 5000));
+  const exerciseRecords = (Array.isArray(payload.exerciseRecords) ? payload.exerciseRecords : [])
+    .slice(0, 20)
+    .map(record => ({
+      name: cleanText_(record && record.name, 60),
+      minutes: Math.round(numberInRange_(record && record.minutes, 0, 1440)),
+      kcal: Math.round(numberInRange_(record && (record.kcal !== undefined ? record.kcal : record.calories), 0, 10000)),
+    }))
+    .filter(record => record.name || record.minutes > 0 || record.kcal > 0);
+  // 相容舊版頁面：若沒有 exerciseRecords，仍讀取原本的三個運動欄位。
+  if (!exerciseRecords.length) {
+    const legacyExercise = {
+      name: cleanText_(payload.exerciseName, 60),
+      minutes: Math.round(numberInRange_(payload.exerciseMinutes, 0, 1440)),
+      kcal: Math.round(numberInRange_(payload.exerciseKcal, 0, 10000)),
+    };
+    if (legacyExercise.name || legacyExercise.minutes || legacyExercise.kcal) exerciseRecords.push(legacyExercise);
+  }
+  const exerciseName = exerciseRecords.map(record => record.name).filter(Boolean).join('、');
+  const exerciseMinutes = exerciseRecords.reduce((sum, record) => sum + record.minutes, 0);
+  const exerciseKcal = exerciseRecords.reduce((sum, record) => sum + record.kcal, 0);
   const estimatedBurn = finalBmr ? Math.round(finalBmr * 1.2 + exerciseKcal) : '';
   const estimatedDeficit = finalBmr ? Math.round(estimatedBurn - totalIntake) : '';
   const now = new Date();
@@ -652,6 +669,7 @@ function saveDailyLog(payload) {
     isPublic,
     isPublic ? now : '',
     publishFoodDetails,
+    JSON.stringify(exerciseRecords),
   ];
 
   // 只在真正寫入工作表時持有全域鎖，避免自動儲存長時間卡住公開頁按讚。
@@ -1646,11 +1664,36 @@ function getTodayFormData_(userId, foods) {
     exerciseName: cleanText_(savedRow[11], 80),
     exerciseMinutes: Math.round(numberInRange_(savedRow[12], 0, 1440)),
     exerciseKcal: Math.round(numberInRange_(savedRow[13], 0, 5000)),
+    exerciseRecords: parseExerciseRecords_(savedRow[24], savedRow[11], savedRow[12], savedRow[13]),
     note: cleanText_(savedRow[18], 500),
     isComplete: isLogComplete_(savedRow[20]),
     isPublic: savedRow[21] === true || String(savedRow[21]).toUpperCase() === 'TRUE',
     publishFoodDetails: savedRow[23] === true || String(savedRow[23]).toUpperCase() === 'TRUE',
   };
+}
+
+function parseExerciseRecords_(json, legacyName, legacyMinutes, legacyKcal) {
+  let records = [];
+  try {
+    const parsed = JSON.parse(String(json || '[]'));
+    if (Array.isArray(parsed)) records = parsed;
+  } catch (error) {
+    records = [];
+  }
+  records = records.map(record => ({
+    name: cleanText_(record && record.name, 60),
+    minutes: Math.round(numberInRange_(record && record.minutes, 0, 1440)),
+    kcal: Math.round(numberInRange_(record && (record.kcal !== undefined ? record.kcal : record.calories), 0, 10000)),
+  })).filter(record => record.name || record.minutes || record.kcal);
+  if (!records.length) {
+    const legacy = {
+      name: cleanText_(legacyName, 60),
+      minutes: Math.round(numberInRange_(legacyMinutes, 0, 1440)),
+      kcal: Math.round(numberInRange_(legacyKcal, 0, 10000)),
+    };
+    if (legacy.name || legacy.minutes || legacy.kcal) records.push(legacy);
+  }
+  return records;
 }
 
 /** 只讀取本人最近一段時間的每日紀錄，供歷史頁使用。 */
@@ -1734,12 +1777,12 @@ function historyMealTotals_(detailsJson, fallbackTotals) {
 }
 
 /**
- * 新版在「每日紀錄」最後增加狀態欄。
+ * 新版在「每日紀錄」最後增加狀態與運動明細欄。
  * 舊紀錄的狀態為空白，為了相容舊資料會視為已完成。
  */
 function ensureLogStatusHeader_(sheet) {
   const cache = CacheService.getScriptCache();
-  if (cache.get('log-headers:v4') === 'ok') return;
+  if (cache.get('log-headers:v5') === 'ok') return;
   const current = sheet.getRange(1, 1, 1, APP.headers.logs.length).getValues()[0];
   let changed = false;
   APP.headers.logs.forEach((header, index) => {
@@ -1753,7 +1796,7 @@ function ensureLogStatusHeader_(sheet) {
       .setFontWeight('bold')
       .setHorizontalAlignment('center');
   }
-  cache.put('log-headers:v4', 'ok', 21600);
+  cache.put('log-headers:v5', 'ok', 21600);
 }
 
 function isLogComplete_(value) {
