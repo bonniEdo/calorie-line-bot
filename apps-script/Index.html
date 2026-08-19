@@ -734,7 +734,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.19-35';
+    window.__dietAppBuild = '2026.08.19-36';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1128,7 +1128,7 @@
           savedNotice,
         '</section>',
         '<section class="quick-access" aria-label="快速查看">',
-          '<div class="quick-access-heading">🔎 快速查看 <small>不用展開公開分享</small></div>',
+          '<div class="quick-access-heading">🔎 快速查看</div>',
           '<div class="quick-access-grid">',
             '<a class="quick-access-link" href="' + escapeAttr(BOOTSTRAP.publicWallUrl || '') + '" target="_top">',
               '<span class="quick-access-icon" aria-hidden="true">🌍</span>',
@@ -1136,7 +1136,7 @@
             '</a>',
             '<a class="quick-access-link history" href="' + escapeAttr(BOOTSTRAP.historyUrl || '') + '" target="_top">',
               '<span class="quick-access-icon" aria-hidden="true">📈</span>',
-              '<span class="quick-access-copy"><strong>卡路里歷史 ↗</strong><small>查看自己的每日變化</small></span>',
+              '<span class="quick-access-copy"><strong>猛猛卡路里歷史 ↗</strong><small>查看自己的每日變化</small></span>',
             '</a>',
           '</div>',
         '</section>',
@@ -1879,8 +1879,8 @@
     }
 
     function frequentFoodList() {
-      // 目前先固定顯示四個指定入口，避免舊版歷史資料或 localStorage 混入。
-      // 之後若要開啟個人化，只需在這裡改成讀取 recentFoodIds() 即可。
+      // 後端只會回傳「新功能啟用後」達到門檻的個人化項目，以及四個預設入口。
+      // 舊版 localStorage 與舊的伺服器清單不再直接混入，避免快捷區回到八張卡片。
       const defaultFoods = [
         { id: 'common_yangtao_breakfast', name: '楊桃可口早餐', portion: '1份', kcal: 410, emoji: '🍽️', sort: 1 },
         { id: 'common_egg_sandwich', name: '煎蛋三明治', portion: '1份', kcal: 350, emoji: '🥪', sort: 2 },
@@ -1888,12 +1888,17 @@
         { id: 'common_boiled_egg', name: '水煮蛋', portion: '1顆', kcal: 70, emoji: '🥚', sort: 4 },
       ];
       const byId = new Map(FOODS.map(food => [String(food.id), food]));
-      return defaultFoods.map(defaultFood => {
+      const defaults = defaultFoods.map(defaultFood => {
         const food = byId.get(defaultFood.id);
         return food
           ? { ...food, name: defaultFood.name }
           : defaultFood;
       });
+      const defaultIds = new Set(defaultFoods.map(food => food.id));
+      const personalized = (Array.isArray(FREQUENT_FOODS) ? FREQUENT_FOODS : [])
+        .filter(food => food && food.isManualFrequent && !defaultIds.has(String(food.id)))
+        .map(food => Object.assign({ portion: '自行輸入', emoji: '✍️' }, food));
+      return personalized.concat(defaults).slice(0, 4);
     }
 
     function renderFrequentFoods() {
@@ -1925,9 +1930,40 @@
         card.append(el('span', 'food-meta', food.portion));
         card.append(el('span', 'food-kcal', `${food.kcal} kcal`));
         card.append(el('span', 'badge', `×${quantity}`));
-        card.addEventListener('click', () => addFoodToActiveMeal(food));
+        card.addEventListener('click', () => {
+          if (food.isManualFrequent) addManualFrequentFoodToActiveMeal(food);
+          else addFoodToActiveMeal(food);
+        });
         root.append(card);
       });
+    }
+
+    function addManualFrequentFoodToActiveMeal(food) {
+      if (!food || !food.name || !Number(food.kcal)) return;
+      const mealKey = state.activeMeal;
+      const fallbackIndex = (state.aiMeals[mealKey] || []).filter(item => item.source === 'manual').length + 1;
+      state.aiMeals[mealKey].push({
+        id: `manual_frequent_${Date.now()}_${fallbackIndex}`,
+        source: 'manual',
+        name: food.name,
+        portion: food.portion || '自行輸入',
+        amount: 0,
+        baseAmount: 0,
+        unit: 'g',
+        baseCalories: Math.round(Number(food.kcal)),
+        baseLow: Math.round(Number(food.kcal)),
+        baseHigh: Math.round(Number(food.kcal)),
+        grams: 0,
+        calories: Math.round(Number(food.kcal)),
+        low: Math.round(Number(food.kcal)),
+        high: Math.round(Number(food.kcal)),
+        confidence: '',
+        notes: '從常吃食物快速加入',
+      });
+      renderMealTabs();
+      renderSelected();
+      updateTotals();
+      markRecordChanged();
     }
 
     function addFoodToActiveMeal(food) {

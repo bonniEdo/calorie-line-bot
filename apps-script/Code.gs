@@ -2318,12 +2318,16 @@ function getFoods_() {
   return foods;
 }
 
-/** 依本人近期每日紀錄統計常吃食物；沒有紀錄時回退到「常見食物」。 */
+/**
+ * 依本人「新功能啟用後」的每日紀錄統計常吃食物。
+ *
+ * 先固定顯示四個指定入口，避免舊版歷史紀錄直接把快捷區洗成八張卡片。
+ * 之後同一個直接輸入食物累計至少 2 次，就會被加入個人化快捷區，並取代較後面的預設入口。
+ */
 function getFrequentFoods_(userId, foods, limit) {
   userId = String(userId || '');
   foods = Array.isArray(foods) ? foods : [];
   limit = Math.min(4, Math.max(1, Number(limit) || 4));
-  const defaultLimit = Math.min(4, limit);
   const defaultFoodIds = new Set([
     'common_yangtao_breakfast',
     'common_egg_sandwich',
@@ -2334,10 +2338,10 @@ function getFrequentFoods_(userId, foods, limit) {
     .filter(food => defaultFoodIds.has(String(food.id)))
     .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, 'zh-Hant'));
   const foodById = new Map(foods.map(food => [String(food.id), food]));
-  if (!userId || !foods.length) return fallback.slice(0, defaultLimit);
+  if (!userId || !foods.length) return fallback.slice(0, limit);
 
   const cache = CacheService.getScriptCache();
-  const cacheKey = `frequent-foods:v3:${userId}:${today_()}`;
+  const cacheKey = `frequent-foods:v4:${userId}:${today_()}`;
   const cached = cache.get(cacheKey);
   if (cached) {
     try {
@@ -2348,16 +2352,27 @@ function getFrequentFoods_(userId, foods, limit) {
     }
   }
 
+  // 只統計這個功能啟用後的新紀錄，避免舊版留下的白飯、雞胸肉等資料立即混進來。
+  const props = PropertiesService.getScriptProperties();
+  let startDate = String(props.getProperty('FREQUENT_FOODS_START_DATE') || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    startDate = today_();
+    props.setProperty('FREQUENT_FOODS_START_DATE', startDate);
+  }
+
   const counts = new Map();
+  const manualCounts = new Map();
   const sheet = getSheet_(APP.sheets.logs);
   const lastRow = sheet.getLastRow();
   if (lastRow >= 2) {
-    // 只取近期資料，避免歷史紀錄越多，打卡頁越慢。
+    // 只取近期資料，避免紀錄累積後每次開頁都掃完整張表。
     const rowCount = Math.min(lastRow - 1, 180);
     const startRow = lastRow - rowCount + 1;
     const rows = sheet.getRange(startRow, 1, rowCount, APP.headers.logs.length).getValues();
     rows.forEach(row => {
       if (String(row[2] || '') !== userId) return;
+      const dateKey = getLogRowDateKey_(row, null);
+      if (!dateKey || dateKey < startDate) return;
       let details = {};
       try {
         details = JSON.parse(String(row[17] || '{}')) || {};
@@ -2368,30 +2383,64 @@ function getFrequentFoods_(userId, foods, limit) {
         if (!Array.isArray(items)) return;
         items.forEach(item => {
           const foodId = String(item && item.id || '');
-          if (foodById.has(foodId)) counts.set(foodId, (counts.get(foodId) || 0) + 1);
+          if (foodById.has(foodId)) {
+            counts.set(foodId, (counts.get(foodId) || 0) + 1);
+            return;
+          }
+          // 直接輸入的食物沒有食物庫 FoodId，改用正規化名稱累計。
+          if (String(item && item.source || '').toLowerCase() !== 'manual') return;
+          const name = cleanText_(item && item.name, 60).replace(/\s+/g, ' ').trim();
+          if (!name) return;
+          const key = name.toLocaleLowerCase();
+          const current = manualCounts.get(key) || {
+            name,
+            count: 0,
+            calories: 0,
+            portion: cleanText_(item && item.portion, 80) || '自行輸入',
+          };
+          current.count += 1;
+          current.calories = Math.round(numberInRange_(item && item.calories, 0, 5000)) || current.calories;
+          manualCounts.set(key, current);
         });
       });
     });
   }
 
-  const ranked = Array.from(counts.entries())
+  const rankedLibrary = Array.from(counts.entries())
+    .filter(([foodId, count]) => count >= 2 && !defaultFoodIds.has(foodId))
     .sort((a, b) => b[1] - a[1] || (foodById.get(a[0]).sort - foodById.get(b[0]).sort))
     .map(([foodId]) => foodById.get(foodId));
-  // 沒有個人紀錄時固定只露出四個常見入口；使用過後才逐步換成個人常吃清單。
-  if (!counts.size) {
-    const result = fallback.slice(0, defaultLimit);
-    cache.put(cacheKey, JSON.stringify(result), 300);
-    return result;
-  }
+  const rankedManual = Array.from(manualCounts.values())
+    .filter(item => item.count >= 2 && item.calories > 0)
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh-Hant'))
+    .map(item => ({
+      id: manualFrequentId_(item.name),
+      name: item.name,
+      portion: item.portion || '自行輸入',
+      kcal: item.calories,
+      emoji: '✍️',
+      sort: 0,
+      isManualFrequent: true,
+    }));
+
   const result = [];
   const seen = new Set();
-  ranked.concat(fallback).forEach(food => {
-    if (!food || seen.has(food.id) || result.length >= limit) return;
-    seen.add(food.id);
+  rankedManual.concat(rankedLibrary, fallback).forEach(food => {
+    if (!food || seen.has(String(food.id)) || result.length >= limit) return;
+    seen.add(String(food.id));
     result.push(food);
   });
   cache.put(cacheKey, JSON.stringify(result), 300);
   return result;
+}
+
+function manualFrequentId_(name) {
+  const bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.MD5,
+    String(name || ''),
+    Utilities.Charset.UTF_8
+  );
+  return `manual_frequent_${Utilities.base64EncodeWebSafe(bytes).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24)}`;
 }
 
 function getSignedFormUrl_(userId) {
