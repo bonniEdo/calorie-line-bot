@@ -102,8 +102,24 @@ function doGet(e) {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
   }
-  const uid = String((e && e.parameter && e.parameter.uid) || '');
-  const sig = String((e && e.parameter && e.parameter.sig) || '');
+  if (view === 'history') {
+    const testAccess = getTestWebAccess_(e);
+    const historyUid = testAccess ? testAccess.uid : String((e && e.parameter && e.parameter.uid) || '');
+    const historySig = testAccess ? testAccess.sig : String((e && e.parameter && e.parameter.sig) || '');
+    const tokenState = inspectAccessToken_(historyUid, historySig, APP.tokenScopes.form);
+    const historyTemplate = HtmlService.createTemplateFromFile('History');
+    historyTemplate.historyJson = JSON.stringify(tokenState === 'ok'
+      ? getHistoryData_(historyUid, 30)
+      : { valid: false, invalidReason: tokenState });
+    return historyTemplate.evaluate()
+      .setTitle('卡路里歷史紀錄')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+  }
+  // 測試專案可用 ?test=1 直接開啟指定測試帳號；正式環境沒有 TEST_MODE 時仍必須使用 LINE 發出的簽章網址。
+  const testAccess = getTestWebAccess_(e);
+  const uid = testAccess ? testAccess.uid : String((e && e.parameter && e.parameter.uid) || '');
+  const sig = testAccess ? testAccess.sig : String((e && e.parameter && e.parameter.sig) || '');
   const tokenState = inspectAccessToken_(uid, sig, APP.tokenScopes.form);
   const valid = tokenState === 'ok';
   const member = valid ? getMemberById_(uid) : null;
@@ -121,6 +137,7 @@ function doGet(e) {
     foods,
     todayLog: valid ? getTodayFormData_(uid, foods) : null,
     publicWallUrl: getPublicWallUrl_(valid ? uid : ''),
+    historyUrl: getHistoryUrl_(valid ? uid : ''),
   };
   // 新版頁面從隱藏的 HTML 文字節點讀取。
   template.bootstrapJson = JSON.stringify(bootstrap);
@@ -130,6 +147,94 @@ function doGet(e) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
   console.log(`打卡頁產生完成：${Date.now() - startedAt} ms`);
   return output;
+}
+
+/**
+ * 測試環境專用：啟用後可直接開啟 /exec?test=1，不影響正式環境。
+ * 會挑選測試表中第一位已加好友成員作為測試帳號。
+ */
+function enableTestWebAccess() {
+  const member = getMembers_().find(item => item.isFriend) || getMembers_()[0];
+  if (!member || !member.userId) throw new Error('測試表中找不到成員，請先讓測試帳號完成綁定。');
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('TEST_MODE', 'true');
+  props.setProperty('TEST_USER_ID', String(member.userId));
+  const baseUrl = ScriptApp.getService().getUrl();
+  return {
+    ok: true,
+    user: member.name || member.userId,
+    url: baseUrl ? `${baseUrl}?test=1` : '請先部署 Web app，再重新執行此函式。',
+  };
+}
+
+/** 測試完成後可執行，關閉直接進入測試頁。 */
+function disableTestWebAccess() {
+  const props = PropertiesService.getScriptProperties();
+  props.deleteProperty('TEST_MODE');
+  props.deleteProperty('TEST_USER_ID');
+  return { ok: true, message: '測試網頁直入模式已關閉。' };
+}
+
+/** 測試環境專用：產生最近 7 天假資料，方便預覽歷史頁。 */
+function seedTestHistoryData() {
+  const props = PropertiesService.getScriptProperties();
+  if (String(props.getProperty('TEST_MODE') || '').toLowerCase() !== 'true') {
+    throw new Error('這個函式只允許在 TEST_MODE=true 的測試專案執行。');
+  }
+  const memberId = String(props.getProperty('TEST_USER_ID') || '');
+  const member = getMemberById_(memberId) || getMembers_().find(item => item.isFriend) || getMembers_()[0];
+  if (!member || !member.userId) throw new Error('測試表中找不到成員。');
+
+  const samples = [
+    [520, 680, 610, 0, 0, '快走', 30, 180],
+    [430, 720, 560, 180, 0, '重訓', 45, 260],
+    [480, 590, 760, 0, 220, '未填寫', 0, 0],
+    [350, 640, 540, 160, 0, '羽球', 60, 420],
+    [620, 580, 690, 0, 0, '快走', 25, 150],
+    [410, 760, 510, 0, 180, '重訓', 40, 230],
+    [500, 630, 550, 0, 0, '未填寫', 0, 0],
+  ];
+  const now = new Date();
+  samples.forEach((sample, index) => {
+    const breakfast = sample[0];
+    const lunch = sample[1];
+    const dinner = sample[2];
+    const snack = sample[3];
+    const lateNight = sample[4];
+    const exerciseName = sample[5] === '未填寫' ? '' : sample[5];
+    const exerciseMinutes = sample[6];
+    const exerciseKcal = sample[7];
+    const intake = breakfast + lunch + dinner + snack + lateNight;
+    const bmr = numberInRange_(member.bmr || 1334, 500, 5000);
+    const tdee = Math.round(bmr * 1.2 + exerciseKcal);
+    const date = dateDaysAgo_(index + 1);
+    const details = JSON.stringify({
+      breakfast: [{ name: '測試早餐', calories: breakfast, source: 'manual' }],
+      lunch: [{ name: '測試午餐', calories: lunch, source: 'manual' }],
+      dinner: [{ name: '測試晚餐', calories: dinner, source: 'manual' }],
+      snack: snack ? [{ name: '測試點心', calories: snack, source: 'manual' }] : [],
+      lateNight: lateNight ? [{ name: '測試宵夜', calories: lateNight, source: 'manual' }] : [],
+    });
+    upsertDailyRow_(date, member.userId, [
+      now, date, member.userId, member.name,
+      breakfast, lunch, dinner, snack, lateNight, intake,
+      1500, exerciseName, exerciseMinutes, exerciseKcal, bmr,
+      tdee, tdee - intake, details, '測試歷史資料', now,
+      index === 2 ? '打卡中' : '完成', false, '', false,
+    ]);
+  });
+  return { ok: true, user: member.name, days: samples.length, message: '已建立最近 7 天測試歷史資料。' };
+}
+
+function getTestWebAccess_(e) {
+  const requested = String((e && e.parameter && e.parameter.test) || '') === '1';
+  const props = PropertiesService.getScriptProperties();
+  const enabled = String(props.getProperty('TEST_MODE') || '').toLowerCase() === 'true';
+  if (!requested || !enabled) return null;
+  const userId = String(props.getProperty('TEST_USER_ID') || '');
+  if (!userId) throw new Error('測試模式缺少 TEST_USER_ID，請先執行 enableTestWebAccess。');
+  const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
+  return { uid: userId, sig: token };
 }
 
 /** Cloudflare Worker 驗證 LINE 簽章後，把原始 JSON 轉送到這裡。 */
@@ -308,6 +413,7 @@ function welcomeMessages_(userId, name) {
         text: '不知道 BMR 沒關係：輸入生理性別、年齡、身高與體重即可估算。四項資料只在手機計算、不會上傳，系統只儲存 BMR。',
         actions: [
           { type: 'uri', label: '開始今天打卡', uri: getSignedFormUrl_(userId) },
+          { type: 'uri', label: '查看歷史紀錄', uri: getHistoryUrl_(userId) },
           { type: 'uri', label: '查看公開紀錄', uri: getPublicWallUrl_(userId) },
         ],
       },
@@ -324,6 +430,7 @@ function bindSuccessMessages_(userId, name) {
       text: `${name} 重新綁定完成 ✅\n可用拍照或相簿記錄；同一天再次開啟會載入已儲存內容。`,
       actions: [
         { type: 'uri', label: '開啟今日打卡', uri: getSignedFormUrl_(userId) },
+        { type: 'uri', label: '查看歷史紀錄', uri: getHistoryUrl_(userId) },
         { type: 'uri', label: '查看公開紀錄', uri: getPublicWallUrl_(userId) },
       ],
     },
@@ -339,6 +446,7 @@ function formButtonMessages_(userId) {
       text: `今天是 ${today_()}。可拍照或從相簿上傳；同一天可多次開啟、補充並更新紀錄。`,
       actions: [
         { type: 'uri', label: '填寫今日紀錄', uri: getSignedFormUrl_(userId) },
+        { type: 'uri', label: '查看歷史紀錄', uri: getHistoryUrl_(userId) },
         { type: 'uri', label: '查看公開紀錄', uri: getPublicWallUrl_(userId) },
       ],
     },
@@ -1510,6 +1618,86 @@ function getTodayFormData_(userId, foods) {
   };
 }
 
+/** 只讀取本人最近一段時間的每日紀錄，供歷史頁使用。 */
+function getHistoryData_(userId, dayCount) {
+  userId = String(userId || '');
+  const days = Math.min(90, Math.max(7, Number(dayCount) || 30));
+  const cacheKey = `history:v1:${userId}:${days}:${today_()}`;
+  const cached = readJsonCache_(cacheKey);
+  if (cached) return cached;
+
+  const today = today_();
+  const firstDate = dateDaysAgo_(days - 1);
+  const sheet = getSheet_(APP.sheets.logs);
+  ensureLogStatusHeader_(sheet);
+  const latestByDate = new Map();
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const rowCount = Math.min(lastRow - 1, 1000);
+    const startRow = lastRow - rowCount + 1;
+    const rows = sheet.getRange(startRow, 1, rowCount, APP.headers.logs.length).getValues();
+    for (let index = rows.length - 1; index >= 0; index -= 1) {
+      const row = rows[index];
+      if (String(row[2] || '') !== userId) continue;
+      const date = getLogRowDateKey_(row, null);
+      if (!date || date < firstDate || date > today || latestByDate.has(date)) continue;
+      latestByDate.set(date, row);
+    }
+  }
+
+  const records = Array.from(latestByDate.keys()).sort().reverse().map(date => {
+    const row = latestByDate.get(date);
+    return {
+      date,
+      intake: Math.round(numberInRange_(row[9], 0, 20000)),
+      tdee: Math.round(numberInRange_(row[15], 0, 20000)),
+      deficit: Math.round(numberInRange_(row[16], -20000, 20000)),
+      exerciseKcal: Math.round(numberInRange_(row[13], 0, 10000)),
+      exerciseMinutes: Math.round(numberInRange_(row[12], 0, 1440)),
+      exerciseName: cleanText_(row[11], 80),
+      waterMl: Math.round(numberInRange_(row[10], 0, 20000)),
+      status: isLogComplete_(row[20]) ? '完成' : '打卡中',
+      meals: historyMealTotals_(row[17], [row[4], row[5], row[6], row[8], row[7]]),
+    };
+  });
+
+  const completedDays = records.filter(record => record.status === '完成').length;
+  const average = key => records.length
+    ? Math.round(records.reduce((sum, record) => sum + Number(record[key] || 0), 0) / records.length)
+    : 0;
+  const result = {
+    valid: true,
+    today,
+    days,
+    records,
+    summary: {
+      loggedDays: records.length,
+      completedDays,
+      averageIntake: average('intake'),
+      averageTdee: average('tdee'),
+      averageDeficit: average('deficit'),
+    },
+  };
+  writeJsonCache_(cacheKey, result, 60);
+  return result;
+}
+
+function historyMealTotals_(detailsJson, fallbackTotals) {
+  const definitions = [
+    ['breakfast', '早餐'], ['lunch', '午餐'], ['dinner', '晚餐'],
+    ['lateNight', '宵夜'], ['snack', '點心'],
+  ];
+  let details = {};
+  try { details = JSON.parse(String(detailsJson || '{}')) || {}; } catch (error) { details = {}; }
+  return definitions.map((definition, index) => {
+    const items = Array.isArray(details[definition[0]]) ? details[definition[0]] : [];
+    const detailKcal = items.reduce((sum, item) => sum + numberInRange_(item && item.calories, 0, 10000), 0);
+    const kcal = Math.round(detailKcal || numberInRange_(fallbackTotals[index], 0, 10000));
+    const names = items.map(item => cleanText_(item && item.name, 60)).filter(Boolean).slice(0, 5);
+    return { key: definition[0], label: definition[1], kcal, names };
+  }).filter(meal => meal.kcal > 0 || meal.names.length > 0);
+}
+
 /**
  * 新版在「每日紀錄」最後增加狀態欄。
  * 舊紀錄的狀態為空白，為了相容舊資料會視為已完成。
@@ -2056,6 +2244,15 @@ function getSignedFormUrl_(userId) {
   // token 每次發放都不同，本身就會讓網址唯一，不需要額外的 v= 參數。
   const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
   return `${baseUrl}?uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(token)}`;
+}
+
+function getHistoryUrl_(userId) {
+  const baseUrl = ScriptApp.getService().getUrl();
+  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
+  userId = String(userId || '');
+  if (!userId) return `${baseUrl}?view=history`;
+  const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
+  return `${baseUrl}?view=history&uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(token)}`;
 }
 
 /**
@@ -2682,6 +2879,7 @@ function invalidateLogCache_(date, userId) {
   cache.remove(`public-wall-base:v2:${date}`);
   cache.remove(`public-wall-base:v3:${date}`);
   if (userId) {
+    cache.remove(`history:v1:${userId}:30:${today_()}`);
     try {
       cache.remove(`public-like-target:v2:${publicLikeTargetKey_(userId)}`);
     } catch (error) {

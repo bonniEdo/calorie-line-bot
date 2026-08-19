@@ -274,6 +274,20 @@
       font-weight: 900;
       text-decoration: none;
     }
+    .history-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin: 8px 0 0 6px;
+      padding: 9px 12px;
+      border: 1px solid #e5ca70;
+      border-radius: 11px;
+      background: #fffaf0;
+      color: #765c17;
+      font-size: 12px;
+      font-weight: 900;
+      text-decoration: none;
+    }
     .category-chips {
       display: flex;
       gap: 8px;
@@ -570,7 +584,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.19-19';
+    window.__dietAppBuild = '2026.08.19-20';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -793,6 +807,7 @@
               '<label class="privacy-toggle"><input id="publishFoodDetails" type="checkbox" ' + (defaultPublishFoodDetails ? 'checked' : '') + '><span><strong>同時公開我吃了什麼</strong><br>開啟後每天沿用，顯示食物名稱、份量與估算熱量；不會顯示照片。</span></label>',
               '<label class="privacy-toggle"><input id="joinPublicRanking" type="checkbox" ' + (MEMBER.joinPublicRanking ? 'checked' : '') + '><span><strong>參加公開連續打卡排行</strong><br>只比較完成打卡的連續天數，不比較誰吃得最少。</span></label>',
               '<a class="public-wall-link" href="' + escapeAttr(BOOTSTRAP.publicWallUrl || '') + '" target="_top">查看公開頁面 ↗</a>',
+              '<a class="history-link" href="' + escapeAttr(BOOTSTRAP.historyUrl || '') + '" target="_top">查看卡路里歷史 ↗</a>',
             '</div>',
           '</details>',
         '</section>',
