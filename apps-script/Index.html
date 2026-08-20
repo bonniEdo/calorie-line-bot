@@ -23,6 +23,7 @@
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
     }
+    body.bmr-modal-open { overflow: hidden; }
     button, input, select, textarea { font: inherit; }
     button { touch-action: manipulation; }
     .app { max-width: 760px; margin: 0 auto; padding: 18px 14px 120px; }
@@ -207,23 +208,136 @@
       background: #fffdf8;
       outline: none;
     }
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      padding-right: 38px;
+      background-image: linear-gradient(45deg, transparent 50%, #776f64 50%), linear-gradient(135deg, #776f64 50%, transparent 50%);
+      background-position: calc(100% - 17px) 52%, calc(100% - 11px) 52%;
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+    }
+    select:disabled { opacity: .62; }
     input:focus, select:focus, textarea:focus { border-color: var(--yellow-dark); box-shadow: 0 0 0 3px rgba(230,188,66,.16); }
     textarea { min-height: 82px; resize: vertical; }
     .hint { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
     .bmr-helper {
-      margin-top: 12px;
-      padding: 12px;
+      min-width: 0;
+      margin: 0;
+      padding: 0;
       border: 1px solid #e5ca70;
       border-radius: 15px;
       background: #fff9e6;
+      overflow: hidden;
+      position: relative;
+    }
+    .bmr-field-heading {
+      display: block;
+      margin-bottom: 4px;
+    }
+    .bmr-field-heading > label {
+      margin: 0;
+    }
+    .bmr-input-wrap {
+      position: relative;
+    }
+    .bmr-input-wrap > input {
+      padding-right: 82px;
+    }
+    .bmr-input-wrap > .bmr-helper {
+      position: absolute;
+      top: 50%;
+      right: 8px;
+      z-index: 2;
+      width: auto;
+      transform: translateY(-50%);
+    }
+    .bmr-helper:not([open]) {
+      border-color: transparent;
+      background: transparent;
+      overflow: visible;
     }
     .bmr-helper summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      width: 100%;
+      min-height: 38px;
+      padding: 7px 10px;
       color: #765c17;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 900;
       cursor: pointer;
+      list-style: none;
+      border-radius: 11px;
     }
-    .bmr-helper[open] summary { margin-bottom: 12px; }
+    .bmr-helper summary::-webkit-details-marker { display: none; }
+    .bmr-helper summary::marker {
+      display: none;
+      content: '';
+    }
+    .bmr-helper:not([open]) summary {
+      width: fit-content;
+      min-height: 32px;
+      margin: 0;
+      padding: 6px 11px;
+      border: 1px solid #e5ca70;
+      background: #fff9e6;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .bmr-helper[open] {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      right: auto;
+      z-index: 1000;
+      width: min(560px, calc(100vw - 28px));
+      max-height: calc(100vh - 32px);
+      margin: 0;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 20px 50px rgba(48, 37, 16, .24), 0 0 0 100vmax rgba(38, 31, 19, .38);
+      overflow: auto;
+      overscroll-behavior: contain;
+    }
+    .bmr-helper[open] summary {
+      min-height: 48px;
+      padding-right: 52px;
+      border-bottom: 1px solid #eadb9e;
+      border-radius: 0;
+      background: #fff5d5;
+    }
+    .bmr-helper[open] .bmr-helper-body { padding-bottom: 16px; }
+    .bmr-helper[open] .bmr-helper-action { display: none; }
+    .bmr-helper[open] .bmr-helper-close { top: 10px; right: 11px; }
+    .bmr-helper-title { min-width: 0; }
+    .bmr-helper-action { color: #9b8653; font-size: 10px; font-weight: 800; white-space: nowrap; }
+    .bmr-helper:not([open]) .bmr-helper-action { display: none; }
+    .bmr-helper-body { padding: 0 13px 13px; }
+    .bmr-helper-close {
+      position: absolute;
+      top: 7px;
+      right: 10px;
+      display: inline-grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid #d9c891;
+      border-radius: 999px;
+      background: #fffdf8;
+      color: #765c17;
+      font-size: 20px;
+      font-weight: 800;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .bmr-helper-close:hover { background: #fff0bd; }
+    .bmr-helper-close:focus-visible { outline: 3px solid rgba(230,188,66,.28); outline-offset: 1px; }
+    .bmr-helper-body .form-grid { margin-top: 11px; }
+    .bmr-field-group { min-width: 0; }
+    .bmr-inline-hint { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; font-weight: 700; line-height: 1.35; }
     .bmr-calc-button {
       width: 100%;
       min-height: 46px;
@@ -252,7 +366,8 @@
       font-weight: 900;
       text-align: center;
     }
-    .exercise-record-grid select { appearance: auto; -webkit-appearance: menulist; }
+    .personal-form-grid { align-items: start; }
+    .exercise-record-grid select { appearance: none; -webkit-appearance: none; }
     .public-settings {
       margin-top: 14px;
       border: 1px solid #b7d3c2;
@@ -523,8 +638,10 @@
       border-radius: 16px;
       background: #fffdf7;
     }
-    .frequent-food-box > summary { list-style: none; cursor: pointer; }
-    .frequent-food-box > summary::-webkit-details-marker { display: none; }
+    .frequent-food-box > summary,
+    details.food-library > summary { list-style: none; cursor: pointer; }
+    .frequent-food-box > summary::-webkit-details-marker,
+    details.food-library > summary::-webkit-details-marker { display: none; }
     .frequent-food-summary {
       display: flex;
       align-items: center;
@@ -536,7 +653,8 @@
     .frequent-food-summary strong { font-size: 14px; }
     .frequent-food-summary span { color: var(--muted); font-size: 11px; font-weight: 700; }
     .frequent-food-summary::after { content: '⌄'; color: var(--muted); font-size: 18px; line-height: 1; transition: transform .15s ease; }
-    .frequent-food-box[open] .frequent-food-summary::after { transform: rotate(180deg); }
+    .frequent-food-box[open] .frequent-food-summary::after,
+    details.food-library[open] .frequent-food-summary::after { transform: rotate(180deg); }
     .frequent-food-box[open] .frequent-food-grid { margin-top: 10px; }
     .frequent-food-heading {
       display: flex;
@@ -566,12 +684,13 @@
       display: block;
       width: 100%;
       margin-top: 7px;
-      padding: 5px;
+      min-height: 42px;
+      padding: 8px;
       border: 0;
       background: transparent;
       color: var(--muted);
-      font-size: 11px;
-      font-weight: 800;
+      font-size: 13px;
+      font-weight: 900;
       text-decoration: underline;
       cursor: pointer;
     }
@@ -582,12 +701,20 @@
       line-height: 1.4;
     }
     .primary-entry-actions { margin-top: 12px; }
+    .library-entry-button { width: 100%; margin-top: 10px; }
     .primary-entry-actions .manual-entry-link { grid-column: 1 / -1; margin-top: 0; }
     .photo-entry-panel { margin-top: 10px; }
     .water-heading-row {
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .water-title-group {
+      display: flex;
+      align-items: center;
       gap: 7px;
+      min-width: 0;
     }
     .water-heading-row .section-title { margin-bottom: 0; }
     .optional-badge {
@@ -600,21 +727,89 @@
       font-size: 10px;
       font-weight: 900;
     }
-    .water-toggle { margin-top: 10px; }
+    .water-enable-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .water-enable-toggle input {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      accent-color: var(--green);
+    }
+    .water-section {
+      border-color: #b9ddec;
+      background: linear-gradient(180deg, #fbfeff 0%, #f5fbff 100%);
+    }
     .water-panel { margin-top: 10px; }
+    .water-dashboard {
+      display: grid;
+      grid-template-columns: 112px minmax(0, 1fr);
+      gap: 16px;
+      align-items: center;
+      padding: 14px;
+      border: 1px solid #c5e6f0;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #eefaff 0%, #f9fdff 100%);
+    }
+    .water-cup-stage {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 132px;
+      padding: 8px;
+      border: 1px solid #d8edf4;
+      border-radius: 18px;
+      background: rgba(255,255,255,.84);
+    }
+    .water-cup-svg { display: block; width: 96px; height: 108px; }
+    .water-cup-shadow { fill: #d8eaf0; opacity: .8; }
+    .water-cup-fill { fill: url(#waterCupGradient); transition: y .25s ease, height .25s ease; }
+    .water-cup-surface { fill: #8ee0f3; opacity: 0; transition: cy .25s ease, opacity .2s ease; }
+    .water-cup-outline { fill: rgba(255,255,255,.55); stroke: #4b96b5; stroke-width: 3; stroke-linejoin: round; }
+    .water-cup-rim { fill: none; stroke: #79bfd3; stroke-width: 4; stroke-linecap: round; }
+    .water-cup-mark { fill: none; stroke: #79bfd3; stroke-width: 2; stroke-linecap: round; opacity: .9; }
+    .water-cup-percent { color: #177b9a; font-size: 12px; font-weight: 900; }
+    .water-dashboard-main { min-width: 0; }
+    .water-main-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+    .water-main-heading span { color: #517586; font-size: 12px; font-weight: 900; }
+    .water-main-heading strong { color: #195b78; font-size: 25px; line-height: 1.1; white-space: nowrap; }
+    .water-goal-control { display: block; margin-top: 10px; color: #517586; font-size: 11px; font-weight: 900; }
+    .water-goal-control input { margin-top: 5px; border-color: #b9ddec; background: rgba(255,255,255,.85); }
     .water-progress {
       margin-top: 10px;
       padding: 9px 11px;
       border-radius: 12px;
-      background: #eef8f1;
-      color: #35684b;
+      background: #eaf7fb;
+      color: #246b83;
       font-size: 11px;
       font-weight: 800;
     }
     .water-progress-top { display: flex; justify-content: space-between; gap: 10px; }
-    .water-progress-track { height: 7px; margin: 7px 0 5px; overflow: hidden; border-radius: 999px; background: #d7eadc; }
-    .water-progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--green); transition: width .2s ease; }
-    .water-progress small { color: #5b7865; font-weight: 700; }
+    .water-progress-track { height: 7px; margin: 7px 0 5px; overflow: hidden; border-radius: 999px; background: #d5edf4; }
+    .water-progress-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #52b7d6, #257eaf); transition: width .2s ease; }
+    .water-progress small { color: #517586; font-weight: 700; }
+    .water-add-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: end; margin-top: 12px; }
+    .water-add-row label { margin: 0; }
+    .water-add-row button { min-height: 42px; white-space: nowrap; }
+    .water-add-row .secondary { border-color: #78b8cc; background: #eaf8fc; color: #17647d; }
+    .water-add-row .danger-small { border-color: #e8b4ae; background: #fff; color: #b4534b; }
+    @media (max-width: 560px) {
+      .water-dashboard { grid-template-columns: 94px minmax(0, 1fr); gap: 11px; padding: 11px; }
+      .water-cup-stage { min-height: 122px; }
+      .water-cup-svg { width: 82px; height: 96px; }
+      .water-main-heading { display: block; }
+      .water-main-heading strong { display: block; margin-top: 3px; font-size: 22px; }
+      .water-add-row { grid-template-columns: 1fr 1fr; }
+      .water-add-row label { grid-column: 1 / -1; }
+    }
     .food-card {
       min-height: 156px;
       padding: 12px;
@@ -668,7 +863,11 @@
       border-bottom: 1px solid #f3ecdf;
     }
     .selected-row:last-child { border-bottom: 0; }
-    .selected-ai-row { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+    .selected-ai-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+    .selected-ai-details { grid-column: 1 / -1; margin-top: 3px; border-top: 1px dashed #eadfca; }
+    .selected-ai-details summary { padding: 7px 0 2px; color: var(--muted); font-size: 11px; font-weight: 800; cursor: pointer; }
+    .selected-ai-details .portion-editor { justify-content: flex-start; margin-top: 5px; }
+    .selected-ai-details .ai-meta { margin: 7px 0 2px; }
     .selected-name { font-size: 13px; font-weight: 800; }
     .selected-name small { display: block; color: var(--muted); font-weight: 500; margin-top: 2px; }
     .portion-editor { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
@@ -751,24 +950,24 @@
     .ai-kcal { width: 82px; margin: 0; padding: 7px; text-align: right; }
     details.food-library {
       max-height: min(58vh, 560px);
-      margin-top: 14px;
-      padding: 10px 10px 0;
+      margin-top: 12px;
+      padding: 12px;
       overflow-y: auto;
       overscroll-behavior: contain;
       border: 1px solid #eadfca;
       border-radius: 16px;
       background: #fffdf8;
     }
-    details.food-library summary {
+    details.food-library:not([open]) {
+      max-height: none;
+      overflow: visible;
+    }
+    details.food-library[open] > summary {
       position: sticky;
-      top: -10px;
+      top: -12px;
       z-index: 2;
-      margin: -10px -10px 0;
-      padding: 11px 10px;
-      cursor: pointer;
-      color: var(--muted);
-      font-size: 13px;
-      font-weight: 800;
+      margin: -12px -12px 0;
+      padding: 12px;
       background: rgba(255,253,248,.96);
     }
     .food-library-actions {
@@ -777,7 +976,7 @@
       z-index: 2;
       display: flex;
       justify-content: center;
-      margin: 12px -10px 0;
+      margin: 12px -12px 0;
       padding: 10px;
       border-top: 1px solid #eadfca;
       background: rgba(255,253,248,.96);
@@ -799,15 +998,15 @@
       position: fixed;
       left: 0;
       right: 0;
-      bottom: 0;
+      bottom: var(--keyboard-offset, 0px);
       z-index: 10;
       padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
       background: rgba(255,250,240,.94);
       border-top: 1px solid var(--line);
       backdrop-filter: blur(12px);
     }
-    /* 手機鍵盤開啟時隱藏底部固定列，避免它遮住正在輸入的欄位。 */
-    body.keyboard-open .submit-bar { display: none !important; }
+    /* 鍵盤開啟時仍保留送出列，並由 JS 將它抬到鍵盤上方，避免輸入運動時按鈕消失。 */
+    body.keyboard-open .submit-bar { display: block !important; visibility: visible; opacity: 1; }
     .submit-inner { max-width: 732px; margin: 0 auto; display: flex; gap: 8px; align-items: center; }
     .submit-summary { flex: 0 0 104px; min-width: 0; font-size: 11px; color: var(--muted); }
     .submit-summary strong { display: block; color: var(--ink); font-size: 18px; }
@@ -860,14 +1059,14 @@
       .form-grid.three { grid-template-columns: repeat(3, 1fr); }
     }
     @media (max-width: 500px) {
+      .personal-form-grid { grid-template-columns: 1fr; }
+      .bmr-helper-body .form-grid { grid-template-columns: 1fr; }
       .frequent-food-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .exercise-record-grid { grid-template-columns: minmax(0, 1fr) 82px 92px auto; }
       .exercise-record-grid > label:first-child { grid-column: 1 / -1; }
       .exercise-record-grid .danger-small { min-height: 40px; }
       .selected-ai-row { grid-template-columns: minmax(0, 1fr) auto auto; }
-      .selected-ai-row .portion-editor { grid-column: 2; grid-row: 2; }
-      .selected-ai-row .ai-kcal { grid-column: 3; grid-row: 2; }
-      .selected-ai-row .danger-small { grid-column: 2 / span 2; grid-row: 3; justify-self: end; }
+      .selected-ai-details { grid-column: 1 / -1; }
     }
   </style>
 </head>
@@ -892,7 +1091,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.20-43';
+    window.__dietAppBuild = '2026.08.20-55';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -993,7 +1192,8 @@
       meals: { breakfast: {}, lunch: {}, dinner: {}, lateNight: {}, snack: {} },
       aiMeals: { breakfast: [], lunch: [], dinner: [], lateNight: [], snack: [] },
       exerciseRecords: [],
-      exerciseWeightKg: Number(MEMBER.weightKg || 0),
+      // 體重只留在本機，用來估算運動熱量；不從 Google Sheet 讀取。
+      exerciseWeightKg: loadLocalWeightKg_(),
       pendingAiItems: [],
       pendingAiMeal: '',
       analyzing: false,
@@ -1145,7 +1345,7 @@
       const minutes = Number(record.minutes || 0);
       if (!definition || !definition.met || minutes <= 0) return 0;
       // MET 估算：MET × 3.5 × 體重kg ÷ 200 × 分鐘。
-      const weight = Number(state.exerciseWeightKg || MEMBER.weightKg || 60);
+      const weight = Number(state.exerciseWeightKg || 60);
       return Math.round(definition.met * 3.5 * weight / 200 * minutes);
     }
 
@@ -1338,11 +1538,11 @@
           '</details>',
         '</section>',
         '<section class="quick-access" aria-label="快速查看">',
-          '<div class="quick-access-heading">🔎 快速查看 <small>不用展開公開分享</small></div>',
+          '<div class="quick-access-heading">🔎 快速查看</div>',
           '<div class="quick-access-grid">',
             '<a class="quick-access-link" href="' + escapeAttr(BOOTSTRAP.publicWallUrl || '') + '" target="_top">',
               '<span class="quick-access-icon" aria-hidden="true">🌍</span>',
-              '<span class="quick-access-copy"><strong>公開紀錄牆 ↗</strong><small>看看大家願意公開的紀錄</small></span>',
+              '<span class="quick-access-copy"><strong>公開紀錄牆 ↗</strong><small>看看大家公開的紀錄</small></span>',
             '</a>',
             '<a class="quick-access-link history" href="' + escapeAttr(BOOTSTRAP.historyUrl || '') + '" target="_top">',
               '<span class="quick-access-icon" aria-hidden="true">📈</span>',
@@ -1352,34 +1552,42 @@
         '</section>',
         '<section class="section">',
           '<h2 class="section-title">👤 個人設定</h2>',
-          '<div class="form-grid">',
+          '<div class="form-grid personal-form-grid">',
             '<label>顯示名稱<input id="name" maxlength="40" value="' + escapeAttr(MEMBER.name || '') + '" placeholder="例如 Bonnie"></label>',
-            '<label>基礎代謝 BMR<input id="bmr" type="number" inputmode="decimal" min="500" max="5000" value="' + escapeAttr(MEMBER.bmr || '') + '" placeholder="例如 1334"></label>',
-          '</div>',
-          '<p class="hint">BMR 是維持生命的基礎消耗，只用來估算上方消耗，不會顯示在排行榜。</p>',
-          '<details id="bmrHelper" class="bmr-helper" ' + (hasBmr ? '' : 'open') + '>',
-            '<summary>' + (hasBmr ? '重新估算 BMR' : '不知道基礎代謝？幫我估算') + '</summary>',
-            '<div class="form-grid">',
-              '<label>生理性別<select id="bmrCalcSex"><option value="">請選擇</option><option value="female">女性</option><option value="male">男性</option></select></label>',
-              '<label>年齡<input id="bmrCalcAge" type="number" inputmode="numeric" min="18" max="100" placeholder="歲"></label>',
-              '<label>身高<input id="bmrCalcHeight" type="number" inputmode="decimal" min="100" max="250" step="0.1" placeholder="cm"></label>',
-              '<label>體重（不會有人知道）<input id="bmrCalcWeight" type="number" inputmode="decimal" min="20" max="500" step="0.1" placeholder="kg"></label>',
+            '<div class="bmr-field-group">',
+              '<div class="bmr-field-heading"><label for="bmr">基礎代謝 BMR</label></div>',
+              '<div class="bmr-input-wrap">',
+                '<input id="bmr" type="number" inputmode="decimal" min="500" max="5000" value="' + escapeAttr(MEMBER.bmr || '') + '" placeholder="例如 1334">',
+                '<details id="bmrHelper" class="bmr-helper" ' + (hasBmr ? '' : 'open') + '>',
+                    '<summary><span class="bmr-helper-title">重算</span><span class="bmr-helper-action">展開估算</span></summary>',
+                    '<button id="closeBmrHelper" class="bmr-helper-close" type="button" aria-label="取消並收合 BMR 估算">×</button>',
+                    '<div class="bmr-helper-body">',
+                    '<div class="form-grid">',
+                      '<label>生理性別<select id="bmrCalcSex"><option value="">請選擇</option><option value="female">女性</option><option value="male">男性</option></select></label>',
+                      '<label>年齡<input id="bmrCalcAge" type="number" inputmode="numeric" min="18" max="100" placeholder="歲"></label>',
+                      '<label>身高<input id="bmrCalcHeight" type="number" inputmode="decimal" min="100" max="250" step="0.1" placeholder="cm"></label>',
+                      '<label>體重（不會有人知道）<input id="bmrCalcWeight" type="number" inputmode="decimal" min="20" max="500" step="0.1" placeholder="kg"></label>',
+                    '</div>',
+                    '<p class="privacy-note">🔒 四項資料只在你的手機上計算；系統只儲存算出的 BMR。</p>',
+                    '<button id="calculateBmrButton" class="bmr-calc-button" type="button">幫我估算 BMR</button>',
+                    '<div id="bmrResult" class="bmr-result" hidden></div>',
+                    '</div>',
+                '</details>',
+              '</div>',
+              '<span class="bmr-inline-hint">用來估算 TDEE，不會顯示在群組排行。</span>',
             '</div>',
-            '<p class="privacy-note">🔒 這四項只在你的手機上計算，不會傳到 Google Sheet、LINE 群組或排行榜；系統只儲存算出的 BMR。</p>',
-            '<button id="calculateBmrButton" class="bmr-calc-button" type="button">幫我估算 BMR</button>',
-            '<div id="bmrResult" class="bmr-result" hidden></div>',
-          '</details>',
+          '</div>',
           '<details id="publicSettings" class="public-settings">',
             '<summary class="public-settings-summary">',
               '<span class="public-settings-icon" aria-hidden="true">🌍</span>',
               '<span>',
-                '<span class="public-settings-heading"><strong>公開分享</strong><em class="public-settings-badge">選填</em></span>',
+                '<span class="public-settings-heading"><strong>我要上公開牆</strong><em class="public-settings-badge">選填</em></span>',
                 '<small id="publicSettingsStatus" class="public-settings-status"></small>',
               '</span>',
               '<span class="public-settings-chevron" aria-hidden="true">⌄</span>',
             '</summary>',
             '<div class="public-settings-body">',
-              '<p class="hint">公開選擇會記住並沿用到隔天，直到你主動關閉；且不影響任何群組排行。公開頁永遠不會顯示體重、BMR、UserId 或照片。</p>',
+              '<p class="hint">公開選擇會記住並沿用到隔天，直到你主動關閉；且不影響任何群組排行。公開頁會顯示 BMR＋運動消耗估算，不會顯示體重、UserId 或照片。</p>',
               '<label>公開暱稱<input id="publicAlias" maxlength="40" value="' + escapeAttr(MEMBER.publicAlias || MEMBER.name || '') + '" placeholder="例如：檸檬夥伴"></label>',
               '<label class="privacy-toggle"><input id="publishToday" type="checkbox" ' + (defaultPublishToday ? 'checked' : '') + '><span><strong>公開我的飲控紀錄</strong><br>開啟後每天沿用，只公開暱稱、已攝取／今日額度、餐別與完成狀態。</span></label>',
               '<label class="privacy-toggle"><input id="publishFoodDetails" type="checkbox" ' + (defaultPublishFoodDetails ? 'checked' : '') + '><span><strong>同時公開我吃了什麼</strong><br>開啟後每天沿用，顯示食物名稱、份量與估算熱量；不會顯示照片。</span></label>',
@@ -1390,15 +1598,16 @@
         '<section class="section meal-entry-section">',
           '<h2 class="section-title">🍽️ 記錄這一餐</h2>',
           '<div id="mealTabs" class="meal-tabs" role="tablist" aria-label="選擇餐別"></div>',
-          '<div class="food-entry-actions primary-entry-actions" role="tablist" aria-label="選擇記錄方式">',
-            '<button id="photoModeButton" class="entry-mode-button active" type="button" aria-controls="photoEntryPanel">📸 拍照／上傳食物</button>',
-            '<button id="foodLibraryToggleButton" class="entry-mode-button" type="button">📚 開啟食物庫</button>',
+          '<div class="food-entry-actions primary-entry-actions" aria-label="選擇記錄方式">',
+            '<button id="cameraCaptureButton" class="entry-mode-button active" type="button" aria-controls="photoEntryPanel">📷 直接拍照</button>',
+            '<button id="uploadPhotoButton" class="entry-mode-button" type="button" aria-controls="photoEntryPanel">🖼️ 上傳照片</button>',
             '<button id="manualModeButton" class="manual-entry-link" type="button" role="tab" aria-controls="manualEntryPanel">✍️ 直接輸入熱量</button>',
           '</div>',
           '<div id="photoEntryPanel" class="photo-entry-panel">',
             '<div class="camera-box">',
-              '<input id="foodPhoto" class="photo-input" type="file" accept="image/*">',
-              '<p class="hint">照片分析結果會顯示在這裡，可直接調整份量；要重新分析請再按上方「拍照／上傳食物」。</p>',
+              '<input id="foodPhotoCamera" class="photo-input" type="file" accept="image/*" capture="environment">',
+              '<input id="foodPhotoUpload" class="photo-input" type="file" accept="image/*">',
+              '<p class="hint">可直接拍照或從相簿上傳；分析結果會顯示在這裡，可展開細節調整份量。</p>',
               '<img id="photoPreview" class="photo-preview" alt="餐點照片預覽" hidden>',
               '<div id="aiStatus" class="ai-status"></div>',
               '<div id="aiResult" class="ai-result" hidden></div>',
@@ -1410,7 +1619,7 @@
             '<p class="food-library-quick-note">第一次先提供常見入口，之後會依你實際使用的食物個人化。</p>',
           '</details>',
           '<details id="foodLibrary" class="food-library">',
-            '<summary>『這裏』可以展開食物庫手動補充</summary>',
+            '<summary class="frequent-food-summary" aria-controls="foodLibrary" aria-expanded="false"><strong>📚 食物庫</strong><span>搜尋或手動補充</span></summary>',
             '<input id="search" class="search" type="search" name="foodSearchTerm" inputmode="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="搜尋白飯、雞蛋、便當…">',
             '<div id="categoryChips" class="category-chips"></div>',
             '<div id="foodGrid" class="food-grid"></div>',
@@ -1442,17 +1651,31 @@
           '<p class="hint">常見運動會保留在下拉選單；一天多練幾次可按「新增運動」，選「其他／自訂運動」即可自己填寫。</p>',
         '</section>',
         '<section class="section water-section">',
-          '<div class="water-heading-row"><h2 class="section-title">💧 喝水紀錄</h2><span class="optional-badge">選填</span></div>',
-          '<label class="privacy-toggle water-toggle"><input id="waterTrackingEnabled" type="checkbox" ' + (state.waterEnabled ? 'checked' : '') + '><span><strong>我要記錄喝水</strong><br><small>只顯示在自己的頁面，不影響群組或公開排行。</small></span></label>',
+          '<div class="water-heading-row"><div class="water-title-group"><h2 class="section-title">💧 喝水紀錄</h2><span class="optional-badge">選填</span></div><label class="water-enable-toggle"><span>啟用</span><input id="waterTrackingEnabled" type="checkbox" ' + (state.waterEnabled ? 'checked' : '') + ' aria-label="啟用喝水紀錄"></label></div>',
           '<div id="waterTrackingPanel" class="water-panel"' + (state.waterEnabled ? '' : ' hidden') + '>',
-            '<div class="form-grid">',
-              '<label>今日喝水量（ml）<input id="waterMl" type="number" inputmode="numeric" min="0" max="10000" step="50" value="' + escapeAttr(state.waterMl || '') + '" placeholder="例如 1500"></label>',
-              '<label>每日目標（ml）<input id="waterGoalMl" type="number" inputmode="numeric" min="500" max="10000" step="100" value="' + escapeAttr(state.waterGoalMl || 2000) + '" placeholder="例如 2000"></label>',
+            '<div class="water-dashboard">',
+              '<div class="water-cup-stage" aria-hidden="true">',
+                '<svg class="water-cup-svg" viewBox="0 0 120 130" role="img" aria-label="喝水進度量杯">',
+                  '<defs><linearGradient id="waterCupGradient" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#79d4ef"></stop><stop offset="1" stop-color="#248bb7"></stop></linearGradient><clipPath id="waterCupClip"><path d="M22 18 H98 L87 113 H33 Z"></path></clipPath></defs>',
+                  '<ellipse class="water-cup-shadow" cx="60" cy="119" rx="35" ry="5"></ellipse>',
+                  '<rect id="waterCupFill" class="water-cup-fill" x="22" y="113" width="76" height="0" clip-path="url(#waterCupClip)"></rect>',
+                  '<ellipse id="waterCupSurface" class="water-cup-surface" cx="60" cy="113" rx="38" ry="4" clip-path="url(#waterCupClip)"></ellipse>',
+                  '<path class="water-cup-outline" d="M22 18 H98 L87 113 H33 Z"></path>',
+                  '<path class="water-cup-rim" d="M18 18 H102"></path>',
+                  '<path class="water-cup-mark" d="M30 48 H43 M28 70 H43 M26 92 H43"></path>',
+                '</svg>',
+                '<strong id="waterCupPercent" class="water-cup-percent">0%</strong>',
+              '</div>',
+              '<div class="water-dashboard-main">',
+                '<div class="water-main-heading"><span>今日喝水總量</span><strong id="waterCurrentTotal">' + escapeHtml(String(Math.max(0, Math.round(Number(state.waterMl || 0)))) + ' ml') + '</strong></div>',
+                '<label class="water-goal-control">每日目標（ml）<input id="waterGoalMl" type="number" inputmode="numeric" min="500" max="10000" step="100" value="' + escapeAttr(state.waterGoalMl || 2000) + '" placeholder="例如 2000"></label>',
+                '<div id="waterProgress" class="water-progress"></div>',
+              '</div>',
             '</div>',
-            '<div id="waterProgress" class="water-progress"></div>',
+            '<div class="water-add-row"><label>我喝進去／我吐出來（ml）<input id="waterAmount" type="number" inputmode="numeric" min="1" max="10000" step="50" value="250" placeholder="例如 250"></label><button id="addWaterButton" class="secondary" type="button">＋ 加水</button><button id="removeWaterButton" class="danger-small" type="button">− 扣除</button></div>',
           '</div>',
         '</section>',
-        '<p class="hint" style="padding:0 8px">食物熱量與每日赤字皆為估算。排行榜用於一起養成紀錄習慣，不代表赤字越大越好。</p>',
+        '<p class="hint" style="padding:0 8px">食物熱量與每日赤字皆為估算。排行榜用於一起『養成紀錄習慣』，不代表赤字越大越好。</p>',
       ].join('');
 
       submitBar.hidden = false;
@@ -1482,15 +1705,19 @@
         button.addEventListener('click', () => requestRecordDateSwitch(button.dataset.recordDate));
       });
 
-      document.getElementById('photoModeButton').addEventListener('click', () => {
+      const openPhotoPicker = inputId => {
         state.entryMode = 'photo';
+        state.photoPanelVisible = true;
         renderEntryMode();
-        const input = document.getElementById('foodPhoto');
+        const input = document.getElementById(inputId);
         if (input) {
           input.value = '';
           input.click();
         }
-      });
+      };
+
+      document.getElementById('cameraCaptureButton').addEventListener('click', () => openPhotoPicker('foodPhotoCamera'));
+      document.getElementById('uploadPhotoButton').addEventListener('click', () => openPhotoPicker('foodPhotoUpload'));
 
       document.getElementById('manualModeButton').addEventListener('click', () => {
         state.entryMode = 'manual';
@@ -1500,8 +1727,6 @@
           document.getElementById('customFoodKcal').focus();
         }, 0);
       });
-
-      document.getElementById('foodLibraryToggleButton').addEventListener('click', openFoodLibrary);
 
       const foodLibraryCloseButton = document.getElementById('foodLibraryCloseButton');
       if (foodLibraryCloseButton) {
@@ -1514,6 +1739,8 @@
       }
 
       document.getElementById('foodLibrary').addEventListener('toggle', event => {
+        const summary = event.target.querySelector('summary');
+        if (summary) summary.setAttribute('aria-expanded', event.target.open ? 'true' : 'false');
         if (!event.target.open || state.foodLibraryReady) return;
 
         state.foodLibraryReady = true;
@@ -1624,13 +1851,8 @@
           markRecordChanged(500);
         });
 
-      document
-        .getElementById('waterMl')
-        .addEventListener('input', event => {
-          state.waterMl = Math.max(0, Math.min(10000, Number(event.target.value || 0)));
-          renderWaterProgress();
-          markRecordChanged();
-        });
+      document.getElementById('addWaterButton').addEventListener('click', () => adjustWater(1));
+      document.getElementById('removeWaterButton').addEventListener('click', () => adjustWater(-1));
 
       document
         .getElementById('waterGoalMl')
@@ -1640,13 +1862,29 @@
           markRecordChanged(500);
         });
 
-      document
-        .getElementById('foodPhoto')
-        .addEventListener('change', handleFoodPhoto);
+      document.getElementById('foodPhotoCamera').addEventListener('change', handleFoodPhoto);
+      document.getElementById('foodPhotoUpload').addEventListener('change', handleFoodPhoto);
 
       document
         .getElementById('calculateBmrButton')
         .addEventListener('click', calculateBmrEstimate);
+
+      document
+        .getElementById('closeBmrHelper')
+        .addEventListener('click', event => {
+          event.preventDefault();
+          document.getElementById('bmrHelper').open = false;
+        });
+
+      const bmrHelper = document.getElementById('bmrHelper');
+      const syncBmrModalState = () => {
+        document.body.classList.toggle('bmr-modal-open', Boolean(bmrHelper.open));
+      };
+      bmrHelper.addEventListener('toggle', syncBmrModalState);
+      syncBmrModalState();
+      document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && bmrHelper.open) bmrHelper.open = false;
+      });
 
       submitButton.addEventListener('click', () => {
         submitLog(true);
@@ -1660,24 +1898,67 @@
       if (toggle) toggle.checked = state.waterEnabled;
       const root = document.getElementById('waterProgress');
       if (!root) return;
+      const total = document.getElementById('waterCurrentTotal');
+      const percentEl = document.getElementById('waterCupPercent');
+      const fill = document.getElementById('waterCupFill');
+      const surface = document.getElementById('waterCupSurface');
       if (!state.waterEnabled) {
         root.innerHTML = '';
+        if (total) total.textContent = '0 ml';
+        if (percentEl) percentEl.textContent = '0%';
+        if (fill) {
+          fill.setAttribute('y', '113');
+          fill.setAttribute('height', '0');
+        }
+        if (surface) {
+          surface.setAttribute('cy', '113');
+          surface.style.opacity = '0';
+        }
         return;
       }
       const current = Math.max(0, Math.round(Number(state.waterMl || 0)));
       const goal = Math.max(500, Math.round(Number(state.waterGoalMl || 2000)));
       const percent = Math.min(100, Math.round(current / goal * 100));
       const remaining = Math.max(0, goal - current);
+      if (total) total.textContent = current + ' ml';
+      if (percentEl) percentEl.textContent = percent + '%';
+      if (fill) {
+        const cupHeight = 95;
+        const fillHeight = Math.round(cupHeight * percent / 100);
+        fill.setAttribute('y', String(113 - fillHeight));
+        fill.setAttribute('height', String(fillHeight));
+        if (surface) {
+          surface.setAttribute('cy', String(113 - fillHeight));
+          surface.style.opacity = fillHeight > 0 ? '0.95' : '0';
+        }
+      }
       root.innerHTML = [
-        '<div class="water-progress-top"><strong>今日 ' + current + ' / ' + goal + ' ml</strong><span>' + percent + '%</span></div>',
+        '<div class="water-progress-top"><strong>' + percent + '%</strong><span>' + (remaining ? '還差 ' + remaining + ' ml' : '今日已達標') + '</span></div>',
         '<div class="water-progress-track"><span style="width:' + percent + '%"></span></div>',
-        '<small>' + (remaining ? '還差 ' + remaining + ' ml' : '✅ 今日已達標') + '</small>',
+        '<small>目標 ' + goal + ' ml</small>',
       ].join('');
+    }
+
+    function adjustWater(direction) {
+      const amountInput = document.getElementById('waterAmount');
+      const amount = Math.max(1, Math.min(10000, Math.round(Number(amountInput && amountInput.value || 0))));
+      if (!amount) return;
+      state.waterMl = Math.max(0, Math.min(10000, Math.round(Number(state.waterMl || 0) + direction * amount)));
+      renderWaterProgress();
+      markRecordChanged(250);
     }
 
     function bindKeyboardAvoidance() {
       if (keyboardAvoidanceBound) return;
       keyboardAvoidanceBound = true;
+
+      const updateKeyboardOffset = () => {
+        const viewport = window.visualViewport;
+        const offset = viewport
+          ? Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop))
+          : 0;
+        document.documentElement.style.setProperty('--keyboard-offset', offset + 'px');
+      };
 
       const isEditable = element => element && (
         (element.matches('input, select, textarea')
@@ -1710,6 +1991,7 @@
       document.addEventListener('focusin', event => {
         if (!isEditable(event.target)) return;
         document.body.classList.add('keyboard-open');
+        updateKeyboardOffset();
         scrollFocusedFieldIntoView();
       });
 
@@ -1717,24 +1999,31 @@
         window.setTimeout(() => {
           if (!isEditable(document.activeElement)) {
             document.body.classList.remove('keyboard-open');
+            document.documentElement.style.setProperty('--keyboard-offset', '0px');
           }
         }, 180);
       });
 
       if (window.visualViewport) {
+        updateKeyboardOffset();
         window.visualViewport.addEventListener('resize', () => {
+          updateKeyboardOffset();
           if (isEditable(document.activeElement)) scrollFocusedFieldIntoView();
         });
+        window.visualViewport.addEventListener('scroll', updateKeyboardOffset);
       }
     }
 
     function renderEntryMode() {
       const photoActive = state.entryMode === 'photo';
-      const photoButton = document.getElementById('photoModeButton');
+      const cameraButton = document.getElementById('cameraCaptureButton');
+      const uploadButton = document.getElementById('uploadPhotoButton');
       const manualButton = document.getElementById('manualModeButton');
-      photoButton.classList.toggle('active', photoActive);
+      if (cameraButton) cameraButton.classList.toggle('active', photoActive);
+      if (uploadButton) uploadButton.classList.toggle('active', photoActive);
       manualButton.classList.toggle('active', !photoActive);
-      photoButton.setAttribute('aria-selected', String(photoActive));
+      if (cameraButton) cameraButton.setAttribute('aria-selected', String(photoActive));
+      if (uploadButton) uploadButton.setAttribute('aria-selected', String(photoActive));
       manualButton.setAttribute('aria-selected', String(!photoActive));
       document.getElementById('photoEntryPanel').hidden = !photoActive || !state.photoPanelVisible;
       document.getElementById('manualEntryPanel').hidden = photoActive;
@@ -1766,6 +2055,7 @@
       }
       const estimate = Math.round(10 * weight + 6.25 * height - 5 * age + (sex === 'male' ? 5 : -161));
       state.exerciseWeightKg = weight;
+      saveLocalWeightKg_(weight);
       document.getElementById('bmr').value = estimate;
       updateTotals();
       const result = document.getElementById('bmrResult');
@@ -1773,6 +2063,27 @@
       result.hidden = false;
       markRecordChanged();
       showToast(`已填入估算 BMR：${estimate} kcal／天`);
+    }
+
+    function localWeightStorageKey_() {
+      return `diet-local-weight:v1:${BOOTSTRAP && BOOTSTRAP.uid ? BOOTSTRAP.uid : 'anonymous'}`;
+    }
+
+    function loadLocalWeightKg_() {
+      try {
+        const value = Number(window.localStorage.getItem(localWeightStorageKey_()) || 0);
+        return value >= 20 && value <= 500 ? value : 0;
+      } catch (error) {
+        return 0;
+      }
+    }
+
+    function saveLocalWeightKg_(value) {
+      try {
+        window.localStorage.setItem(localWeightStorageKey_(), String(value));
+      } catch (error) {
+        // LINE 內嵌瀏覽器若禁止 localStorage，仍可正常使用 BMR 與運動紀錄。
+      }
     }
 
     function renderMealTabs() {
@@ -2016,8 +2327,10 @@
 
     function setAnalyzing(busy, message) {
       state.analyzing = busy;
-      const button = document.getElementById('cameraButton');
-      if (button) button.classList.toggle('busy', busy);
+      ['cameraCaptureButton', 'uploadPhotoButton'].forEach(id => {
+        const button = document.getElementById(id);
+        if (button) button.classList.toggle('busy', busy);
+      });
       const status = document.getElementById('aiStatus');
       if (status) status.textContent = message || '';
     }
@@ -2099,7 +2412,7 @@
       confirm.addEventListener('click', confirmAiItems);
       const retry = el('button', 'danger-small', '重新拍照');
       retry.type = 'button';
-      retry.addEventListener('click', () => document.getElementById('foodPhoto').click());
+      retry.addEventListener('click', () => document.getElementById('foodPhotoCamera').click());
       actions.append(confirm, retry);
       root.append(actions);
       updatePendingAiSummary();
@@ -2271,9 +2584,13 @@
       markRecordChanged();
     }
 
-    function openFoodLibrary() {
+    function toggleFoodLibrary() {
       const library = document.getElementById('foodLibrary');
       if (!library) return;
+      if (library.open) {
+        library.open = false;
+        return;
+      }
       library.open = true;
       if (!state.foodLibraryReady) {
         state.foodLibraryReady = true;
@@ -2367,10 +2684,8 @@
           const isManual = item.source === 'manual';
           if (!isManual) row.classList.add('selected-ai-row');
           const name = el('div', 'selected-name', `${isManual ? '✍️' : '🤖'} ${item.name}`);
-          const meta = el('small', '', isManual
-            ? `${item.portion || '自行輸入'} · 可直接修改熱量`
-            : `${item.portion || '照片估算'} · 信心 ${item.confidence || '低'}`);
-          name.append(meta);
+          if (isManual) name.append(el('small', '', `${item.portion || '自行輸入'} · 可直接修改熱量`));
+          else name.append(el('small', '', 'AI 辨識 · 點開可調整份量'));
           row.append(name);
           const kcal = document.createElement('input');
           kcal.className = 'ai-kcal';
@@ -2388,16 +2703,6 @@
             updateTotals();
             markRecordChanged();
           });
-          if (!isManual) {
-            appendPortionEditor(row, item, () => {
-              kcal.value = item.calories;
-              meta.textContent = `${item.portion || '照片估算'} · 信心 ${item.confidence || '低'}`;
-              document.getElementById('mealTotal').textContent = mealTotal(state.activeMeal);
-              renderMealTabs();
-              updateTotals();
-              markRecordChanged();
-            });
-          }
           const remove = el('button', 'danger-small', '刪除');
           remove.type = 'button';
           remove.addEventListener('click', () => {
@@ -2408,6 +2713,26 @@
             markRecordChanged();
           });
           row.append(kcal, remove);
+          if (!isManual) {
+            const details = document.createElement('details');
+            details.className = 'selected-ai-details';
+            details.append(el('summary', '', '查看／調整份量與辨識細節'));
+            const detailBody = el('div', 'selected-ai-detail-body');
+            const detailMeta = el('div', 'ai-meta',
+              `估計 ${item.amount || '?'} ${item.unit || 'g'} · 範圍 ${item.low || 0}～${item.high || 0} kcal · 信心 ${item.confidence || '低'}${item.notes ? `\n${item.notes}` : ''}`
+            );
+            appendPortionEditor(detailBody, item, () => {
+              kcal.value = item.calories;
+              detailMeta.textContent = `估計 ${item.amount || '?'} ${item.unit || 'g'} · 範圍 ${item.low || 0}～${item.high || 0} kcal · 信心 ${item.confidence || '低'}${item.notes ? `\n${item.notes}` : ''}`;
+              document.getElementById('mealTotal').textContent = mealTotal(state.activeMeal);
+              renderMealTabs();
+              updateTotals();
+              markRecordChanged();
+            });
+            detailBody.append(detailMeta);
+            details.append(detailBody);
+            row.append(details);
+          }
           root.append(row);
         });
 
@@ -2692,7 +3017,6 @@
         recordDate: state.recordDate,
         name: document.getElementById('name').value,
         bmr,
-        weightKg: state.exerciseWeightKg || '',
         meals: serializeMeals(),
         aiMeals: serializeAiMeals(),
         extraKcal: 0,
@@ -2749,7 +3073,6 @@
           activeSavedLog = savedSnapshot;
           MEMBER.name = payload.name;
           MEMBER.bmr = payload.bmr;
-          MEMBER.weightKg = payload.weightKg;
           MEMBER.publicAlias = payload.publicAlias;
           MEMBER.defaultPublishToday = payload.publishToday;
           MEMBER.defaultPublishFoodDetails = payload.publishFoodDetails;
