@@ -90,6 +90,19 @@
       font-size: 12px;
       line-height: 1.6;
     }
+    .energy-line {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      margin-top: 7px;
+      padding: 5px 8px;
+      border-radius: 9px;
+      background: #eef8f1;
+      color: #35684b;
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .energy-line small { color: #5b7865; font-size: 10px; font-weight: 700; }
     .meal-group { padding-top: 10px; }
     .meal-group + .meal-group { margin-top: 8px; border-top: 1px solid #f3ecde; }
     .meal-title { margin-bottom: 3px; color: var(--green); font-size: 12px; font-weight: 900; }
@@ -225,7 +238,7 @@
 
     <details class="privacy">
       <summary>🔒 這裡會顯示什麼、不會顯示什麼</summary>
-      <p>這是自願公開區，每個人的公開設定預設都是關閉的。食物細項只有本人另外勾選時才會出現；不顯示 LINE 身分、群組、體重、BMR 或照片。群組排行仍只在各自群組內計算。</p>
+      <p>這是自願公開區，每個人的公開設定預設都是關閉的。食物細項只有本人另外勾選時才會出現；公開紀錄若有 BMR 與運動資料，會顯示「BMR＋運動消耗」估算，不顯示 LINE 身分、群組、體重或照片。群組排行仍只在各自群組內計算。</p>
     </details>
     <div id="updated" class="updated"></div>
   </main>
@@ -238,7 +251,7 @@
   -->
   <div id="publicData" hidden><?= publicJson ?></div>
   <script>
-    window.__publicWallBuild = '2026.08.20-22';
+    window.__publicWallBuild = '2026.08.20-55';
 
     const toast = document.getElementById('toast');
     const recordsPanel = document.getElementById('recordsPanel');
@@ -344,7 +357,13 @@
         hasAllowance ? '' : '今日額度待設定',
         '最後更新 ' + escapeHtml(record.updatedAt || '—'),
       ].filter(Boolean);
-      return '<div class="person-meta">' + parts.join('<br>') + '</div>';
+      const bmr = Math.max(0, Number(record.bmr || 0));
+      const exerciseKcal = Math.max(0, Number(record.exerciseKcal || 0));
+      const tdeeEstimate = Math.max(0, Number(record.tdeeEstimate || 0));
+      const energyLine = bmr > 0
+        ? '<div class="energy-line">⚡ BMR ' + number(bmr) + ' × 1.2 ＋運動 ' + number(exerciseKcal) + ' ＝ ' + number(tdeeEstimate || Math.round(bmr * 1.2 + exerciseKcal)) + ' kcal <small>TDEE 估算</small></div>'
+        : (exerciseKcal > 0 ? '<div class="energy-line">⚡ 運動消耗 ' + number(exerciseKcal) + ' kcal</div>' : '');
+      return '<div class="person-meta">' + parts.join('<br>') + energyLine + '</div>';
     }
 
     function foodDetailsHtml(record) {

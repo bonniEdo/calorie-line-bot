@@ -27,12 +27,17 @@
     .section-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
     .section-head h2 { margin:0; }
     .chart-wrap { margin-top:13px; padding:10px 4px 2px; overflow:hidden; border-radius:16px; background:#fffaf0; }
-    .chart-svg { display:block; width:100%; height:auto; min-height:210px; }
+    .chart-svg { display:block; width:100%; height:auto; min-height:230px; }
     .chart-grid { stroke:#eadfca; stroke-width:1; stroke-dasharray:3 4; }
     .chart-axis { fill:#9a8d7a; font-size:10px; }
     .chart-line-intake { fill:none; stroke:#e59a32; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
     .chart-line-tdee { fill:none; stroke:#4e8b69; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
     .chart-dot-intake { fill:#fff; stroke:#e59a32; stroke-width:2; }
+    .chart-water { pointer-events:none; }
+    .chart-water-outline { fill:#fffaf0; stroke:#a8977d; stroke-width:1.35; stroke-linejoin:round; }
+    .chart-water-fill { fill:#67b4d7; opacity:.92; }
+    .chart-water.half .chart-water-outline { stroke:#377b99; }
+    .chart-water.full .chart-water-outline { stroke:#267246; }
     .chart-dot-tdee { fill:#fff; stroke:#4e8b69; stroke-width:2; }
     .chart-legend { display:flex; justify-content:center; gap:18px; margin-top:8px; color:var(--muted); font-size:12px; font-weight:800; }
     .legend-item { display:inline-flex; align-items:center; gap:5px; }
@@ -43,17 +48,17 @@
     .hint { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
     .record { border-top:1px solid var(--line); padding:13px 0 0; margin-top:13px; }
     .record:first-child { border-top:0; margin-top:0; padding-top:0; }
-    .record summary { display:grid; grid-template-columns:82px minmax(0,1fr) auto; gap:8px; align-items:center; cursor:pointer; list-style:none; }
+    .record summary { display:grid; grid-template-columns:112px minmax(0,1fr) auto; gap:8px; align-items:center; cursor:pointer; list-style:none; }
     .record summary::-webkit-details-marker { display:none; }
     .history-more { margin-top:14px; border-top:1px dashed var(--line); padding-top:12px; }
     .history-more > summary { color:#765c17; font-size:13px; font-weight:900; cursor:pointer; }
-    .date { color:var(--muted); font-size:13px; font-weight:800; }
+    .date { display:flex; flex-direction:column; align-items:flex-start; gap:4px; color:var(--muted); font-size:13px; font-weight:800; }
     .energy { min-width:0; }
     .energy strong { font-size:17px; }
     .energy small { display:block; color:var(--muted); font-size:11px; }
     .status { padding:4px 8px; border-radius:999px; background:#e5f2e8; color:#35684b; font-size:11px; font-weight:900; white-space:nowrap; }
     .status.progress { background:#fff4d4; color:#765c17; }
-    .detail { margin:12px 0 0 90px; padding:11px 12px; border-radius:14px; background:#fffaf0; }
+    .detail { margin:12px 0 0 120px; padding:11px 12px; border-radius:14px; background:#fffaf0; }
     .detail-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:7px; }
     .detail-item { color:var(--muted); font-size:12px; }
     .detail-item strong { display:block; color:var(--ink); font-size:14px; }
@@ -62,7 +67,7 @@
     .meal span:last-child { font-weight:900; }
     .empty, .error { padding:22px 10px; text-align:center; color:var(--muted); line-height:1.6; }
     .error { color:var(--red); }
-    @media (max-width:420px) { .summary-card strong { font-size:17px; } .record summary { grid-template-columns:70px minmax(0,1fr) auto; } .detail { margin-left:0; } }
+    @media (max-width:420px) { .summary-card strong { font-size:17px; } .record summary { grid-template-columns:96px minmax(0,1fr) auto; gap:6px; } .detail { margin-left:0; } }
   </style>
 </head>
 <body>
@@ -89,10 +94,10 @@
       let html = '<section class="hero">'
         + '<div class="eyebrow">CALORIE HISTORY</div>'
         + '<h1>📊 卡路里歷史紀錄</h1>'
-        + '<p>最近 ' + number(data.days || 30) + ' 天・只顯示自己的資料</p>'
+        + '<p>最近 ' + number(data.days || 30) + ' 天・只顯示自己的資料・平均值只計已完成日</p>'
         + '<div class="summary">'
-        + '<div class="summary-card"><strong>' + number(summary.averageIntake) + '</strong><span>平均攝取 kcal</span></div>'
-        + '<div class="summary-card"><strong>' + number(summary.averageTdee) + '</strong><span>平均 TDEE kcal</span></div>'
+        + '<div class="summary-card"><strong>' + number(summary.averageIntake) + '</strong><span>完成日平均攝取 kcal</span></div>'
+        + '<div class="summary-card"><strong>' + number(summary.averageTdee) + '</strong><span>完成日平均 TDEE kcal</span></div>'
         + '<div class="summary-card"><strong>' + number(summary.completedDays) + '/' + number(summary.loggedDays) + '</strong><span>完成紀錄</span></div>'
         + '</div></section>';
       html += '<section class="section chart-section"><div class="section-head"><div><h2>📈 攝取趨勢</h2><p class="hint">橘線是已攝取，綠線是每日可攝取總量（TDEE）。</p></div></div>';
@@ -129,14 +134,17 @@
 
       function renderRecord(record) {
         const progress = record.status !== '完成';
+        const waterMl = Math.max(0, Number(record.waterMl || 0));
+        const waterGoalMl = Math.max(0, Number(record.waterGoalMl || 0));
+        const waterTracked = Boolean(record.waterTracked && waterGoalMl > 0);
         let result = '<details class="record"><summary>'
-          + '<span class="date">' + dateLabel(record.date) + '</span>'
+          + '<span class="date"><strong>' + dateLabel(record.date) + '</strong></span>'
           + '<span class="energy"><strong>' + number(record.intake) + ' / ' + number(record.tdee) + ' kcal</strong><small>差額 ' + signed(record.deficit) + ' kcal</small></span>'
           + '<span class="status ' + (progress ? 'progress' : '') + '">' + (progress ? '打卡中' : '已完成') + '</span>'
           + '</summary><div class="detail"><div class="detail-grid">'
           + '<div class="detail-item"><strong>' + number(record.exerciseKcal) + ' kcal</strong>運動消耗</div>'
           + '<div class="detail-item"><strong>' + number(record.exerciseMinutes) + ' 分鐘</strong>運動時間</div>'
-          + '<div class="detail-item"><strong>' + number(record.waterMl) + ' ml</strong>飲水量</div>'
+          + '<div class="detail-item"><strong>' + (waterTracked ? number(waterMl) + ' / ' + number(waterGoalMl) + ' ml' : '未啟用') + '</strong>飲水量</div>'
           + '<div class="detail-item"><strong>' + (record.exerciseName || '未填寫') + '</strong>運動項目</div>'
           + '</div><div class="meal-list">';
         (record.meals || []).forEach(meal => {
@@ -148,8 +156,8 @@
       function buildTrendChart(items) {
         const ordered = items.slice().reverse();
         const width = 680;
-        const height = 270;
-        const pad = { left: 44, right: 14, top: 18, bottom: 38 };
+        const height = 300;
+        const pad = { left: 44, right: 14, top: 18, bottom: 62 };
         const plotWidth = width - pad.left - pad.right;
         const plotHeight = height - pad.top - pad.bottom;
         const max = Math.max(100, ...ordered.map(item => Math.max(Number(item.intake) || 0, Number(item.tdee) || 0)));
@@ -165,14 +173,30 @@
             + '<text class="chart-axis" x="' + (pad.left - 7) + '" y="' + (Number(lineY) + 3) + '" text-anchor="end">' + number(value) + '</text>';
         }).join('');
         const dots = (key, klass) => ordered.map((item, index) => '<circle class="' + klass + '" cx="' + x(index).toFixed(1) + '" cy="' + y(item[key]).toFixed(1) + '" r="3.5" />').join('');
+        const waterIcons = ordered.map((item, index) => {
+          const show = ordered.length <= 10 || index === 0 || index === ordered.length - 1 || index % Math.ceil(ordered.length / 6) === 0;
+          const waterMl = Math.max(0, Number(item.waterMl || 0));
+          const waterGoalMl = Math.max(0, Number(item.waterGoalMl || 0));
+          if (!show || !item.waterTracked || waterGoalMl <= 0) return '';
+          const state = waterMl >= waterGoalMl ? 'full' : waterMl > 0 ? 'half' : 'empty';
+          const label = state === 'full' ? '飲水達標' : state === 'half' ? '飲水未達標' : '尚未喝水';
+          const top = height - 24;
+          const fill = state === 'full'
+            ? '<path class="chart-water-fill" d="M-5 1 H5 L4 14 H-4 Z" />'
+            : state === 'half'
+              ? '<path class="chart-water-fill" d="M-4.5 8 H4.5 L4 14 H-4 Z" />'
+              : '';
+          return '<g class="chart-water ' + state + '" transform="translate(' + x(index).toFixed(1) + ',' + top + ')" role="img" aria-label="' + label + '">'
+            + '<path class="chart-water-outline" d="M-6 0 H6 L5 15 H-5 Z" />' + fill + '</g>';
+        }).join('');
         const labels = ordered.map((item, index) => {
           const show = ordered.length <= 10 || index === 0 || index === ordered.length - 1 || index % Math.ceil(ordered.length / 6) === 0;
-          return show ? '<text class="chart-axis" x="' + x(index).toFixed(1) + '" y="' + (height - 12) + '" text-anchor="middle">' + dateLabel(item.date) + '</text>' : '';
+          return show ? '<text class="chart-axis" x="' + x(index).toFixed(1) + '" y="' + (height - 40) + '" text-anchor="middle">' + dateLabel(item.date) + '</text>' : '';
         }).join('');
         return '<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="每日攝取與TDEE趨勢圖">'
           + grid + '<path class="chart-line-tdee" d="' + path('tdee') + '" />'
           + '<path class="chart-line-intake" d="' + path('intake') + '" />'
-          + dots('tdee', 'chart-dot-tdee') + dots('intake', 'chart-dot-intake') + labels
+          + dots('tdee', 'chart-dot-tdee') + dots('intake', 'chart-dot-intake') + labels + waterIcons
           + '</svg><div class="chart-legend"><span class="legend-item"><i class="legend-dot legend-intake"></i>已攝取</span><span class="legend-item"><i class="legend-dot legend-tdee"></i>可攝取總量 TDEE</span></div></div>';
       }
     }());

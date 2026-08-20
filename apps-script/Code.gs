@@ -1,6 +1,6 @@
-// 應用程式版本：2026.08.20-43
+// 應用程式版本：2026.08.20-55
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.20-43';
+const APP_BUILD = '2026.08.20-55';
 
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
@@ -37,7 +37,7 @@ const APP = Object.freeze({
       '晚餐kcal', '點心kcal', '宵夜kcal', '總攝取kcal', '飲水ml',
       '運動項目', '運動分鐘', '活動熱量kcal', '基礎代謝BMR',
       '估算總消耗kcal', '估算赤字kcal', '食物明細JSON', '備註', '更新時間',
-      '打卡狀態', '公開紀錄', '公開時間', '公開食物細項', '運動明細JSON',
+      '打卡狀態', '公開紀錄', '公開時間', '公開食物細項', '運動明細JSON', '飲水目標ml',
     ],
     publicLikes: ['日期', '按讚者UserId', '被按讚者UserId', '建立時間', '更新時間'],
   },
@@ -70,6 +70,7 @@ function setupProject() {
   ensureSheet_(APP.sheets.foods, APP.headers.foods);
   ensureSheet_(APP.sheets.logs, APP.headers.logs);
   ensureSheet_(APP.sheets.publicLikes, APP.headers.publicLikes);
+  migrateStoredWeightPrivacy_();
   seedFoods_();
 
   setConfig_('GROUP_ID', getConfig_('GROUP_ID') || '', '舊版單群組 ID（保留相容，不再使用）');
@@ -246,7 +247,9 @@ function seedTestHistoryData() {
       breakfast, lunch, dinner, snack, lateNight, intake,
       1500, exerciseName, exerciseMinutes, exerciseKcal, bmr,
       tdee, tdee - intake, details, '測試歷史資料', now,
-      index === 2 ? '打卡中' : '完成', false, '', false,
+      index === 2 ? '打卡中' : '完成', false, '', false, JSON.stringify([
+        exerciseName ? { name: exerciseName, minutes: exerciseMinutes, kcal: exerciseKcal } : null,
+      ].filter(Boolean)), 2000,
     ]);
   });
   return { ok: true, user: member.name, days: samples.length, message: '已建立最近 7 天測試歷史資料。' };
@@ -531,9 +534,7 @@ function saveDailyLog(payload) {
 
   const displayName = cleanText_(payload.name || member.name, 40) || member.name;
   const bmr = numberInRange_(payload.bmr, 0, 5000);
-  const weightKg = numberInRange_(payload.weightKg, 0, 500);
   const finalBmr = bmr || numberInRange_(member.bmr, 0, 5000);
-  const finalWeightKg = weightKg || numberInRange_(member.weightKg, 0, 500);
   const requestedPublicAlias = payload.publicAlias === undefined
     ? String(member.publicAlias || '')
     : cleanText_(payload.publicAlias, 40);
@@ -560,7 +561,6 @@ function saveDailyLog(payload) {
   )) || 2000;
   const memberChanged = displayName !== member.name
     || (finalBmr && finalBmr !== Number(member.bmr || 0))
-    || (finalWeightKg && finalWeightKg !== Number(member.weightKg || 0))
     || requestedPublicAlias !== String(member.publicAlias || '')
     || requestedPublicRanking !== Boolean(member.joinPublicRanking)
     || requestedDefaultPublishToday !== Boolean(member.defaultPublishToday)
@@ -570,7 +570,6 @@ function saveDailyLog(payload) {
       userId,
       name: displayName,
       bmr: finalBmr,
-      weightKg: finalWeightKg,
       publicAlias: requestedPublicAlias,
       joinPublicRanking: requestedPublicRanking,
       defaultPublishToday: requestedDefaultPublishToday,
@@ -708,6 +707,7 @@ function saveDailyLog(payload) {
     isPublic ? now : '',
     publishFoodDetails,
     JSON.stringify(exerciseRecords),
+    waterEnabled ? waterGoalMl : '',
   ];
 
   // 只在真正寫入工作表時持有全域鎖，避免自動儲存長時間卡住公開頁按讚。
@@ -1208,6 +1208,10 @@ function getPublicWallData_(viewerId, viewerSignature) {
     alias: item.alias,
     intake: item.intake,
     allowance: item.allowance,
+    bmr: item.bmr,
+    exerciseKcal: item.exerciseKcal,
+    bmrPlusExercise: item.bmrPlusExercise,
+    tdeeEstimate: item.tdeeEstimate,
     meals: item.meals,
     mealDetails: Array.isArray(item.mealDetails) ? item.mealDetails : [],
     isComplete: item.isComplete,
@@ -1269,7 +1273,7 @@ function getPublicWallData_(viewerId, viewerSignature) {
  */
 function getPublicWallBaseData_(today, members) {
   today = String(today || today_());
-  const cacheKey = `public-wall-base:v3:${today}`;
+  const cacheKey = `public-wall-base:v5:${today}`;
   const cached = readJsonCache_(cacheKey);
   if (cached && Array.isArray(cached.records) && Array.isArray(cached.streaks)) {
     return cached;
@@ -1308,6 +1312,8 @@ function getPublicWallBaseData_(today, members) {
     const member = memberById.get(userId) || {};
     const intake = Math.round(numberInRange_(row[9], 0, 100000));
     const allowance = row[15] === '' ? null : Math.round(numberInRange_(row[15], 0, 100000));
+    const bmr = Math.round(numberInRange_(row[14], 0, 10000));
+    const exerciseKcal = Math.round(numberInRange_(row[13], 0, 10000));
     const meals = [];
     [[4, '早餐'], [5, '午餐'], [6, '晚餐'], [8, '宵夜'], [7, '點心']]
       .forEach(([column, label]) => {
@@ -1319,6 +1325,10 @@ function getPublicWallBaseData_(today, members) {
       alias: publicAliasForMember_(member),
       intake,
       allowance,
+      bmr,
+      exerciseKcal,
+      bmrPlusExercise: bmr > 0 ? bmr + exerciseKcal : 0,
+      tdeeEstimate: bmr > 0 ? Math.round(bmr * 1.2 + exerciseKcal) : 0,
       meals,
       mealDetails: publishFoodDetails ? buildPublicMealDetails_(row[17]) : [],
       isComplete: isLogComplete_(row[20]),
@@ -1768,6 +1778,8 @@ function dailyFormDataFromRow_(savedRow, foods, recordDate) {
     aiMeals,
     extraKcal: 0,
     waterMl: Math.round(numberInRange_(savedRow[10], 0, 10000)),
+    waterGoalMl: Math.round(numberInRange_(savedRow[25], 500, 10000)),
+    waterEnabled: savedRow[25] !== '' && savedRow[25] !== null,
     exerciseName: cleanText_(savedRow[11], 80),
     exerciseMinutes: Math.round(numberInRange_(savedRow[12], 0, 1440)),
     exerciseKcal: Math.round(numberInRange_(savedRow[13], 0, 5000)),
@@ -1807,7 +1819,7 @@ function parseExerciseRecords_(json, legacyName, legacyMinutes, legacyKcal) {
 function getHistoryData_(userId, dayCount) {
   userId = String(userId || '');
   const days = Math.min(90, Math.max(7, Number(dayCount) || 30));
-  const cacheKey = `history:v1:${userId}:${days}:${today_()}`;
+  const cacheKey = `history:v2:${userId}:${days}:${today_()}`;
   const cached = readJsonCache_(cacheKey);
   if (cached) return cached;
 
@@ -1815,6 +1827,7 @@ function getHistoryData_(userId, dayCount) {
   const firstDate = dateDaysAgo_(days - 1);
   const sheet = getSheet_(APP.sheets.logs);
   ensureLogStatusHeader_(sheet);
+  const waterSettings = getWaterSettings_(userId);
   const latestByDate = new Map();
   const lastRow = sheet.getLastRow();
   if (lastRow >= 2) {
@@ -1832,6 +1845,10 @@ function getHistoryData_(userId, dayCount) {
 
   const records = Array.from(latestByDate.keys()).sort().reverse().map(date => {
     const row = latestByDate.get(date);
+    const waterMl = Math.round(numberInRange_(row[10], 0, 20000));
+    const storedWaterGoalMl = Math.round(numberInRange_(row[25], 500, 10000));
+    // v44 以前沒有逐日目標欄位；若舊紀錄確實有喝水數字，暫用目前目標補足顯示。
+    const waterGoalMl = storedWaterGoalMl || (waterMl > 0 && waterSettings.enabled ? waterSettings.goalMl : 0);
     return {
       date,
       intake: Math.round(numberInRange_(row[9], 0, 20000)),
@@ -1840,15 +1857,19 @@ function getHistoryData_(userId, dayCount) {
       exerciseKcal: Math.round(numberInRange_(row[13], 0, 10000)),
       exerciseMinutes: Math.round(numberInRange_(row[12], 0, 1440)),
       exerciseName: cleanText_(row[11], 80),
-      waterMl: Math.round(numberInRange_(row[10], 0, 20000)),
+      waterMl,
+      waterGoalMl,
+      waterTracked: waterGoalMl > 0 && (storedWaterGoalMl > 0 || waterMl > 0),
       status: isLogComplete_(row[20]) ? '完成' : '打卡中',
       meals: historyMealTotals_(row[17], [row[4], row[5], row[6], row[8], row[7]]),
     };
   });
 
   const completedDays = records.filter(record => record.status === '完成').length;
-  const average = key => records.length
-    ? Math.round(records.reduce((sum, record) => sum + Number(record[key] || 0), 0) / records.length)
+  // 平均只計入「已完成」的日子；補登前幾天或尚在打卡中的暫存，不會拉低平均。
+  const completedRecords = records.filter(record => record.status === '完成');
+  const average = key => completedRecords.length
+    ? Math.round(completedRecords.reduce((sum, record) => sum + Number(record[key] || 0), 0) / completedRecords.length)
     : 0;
   const result = {
     valid: true,
@@ -1861,6 +1882,7 @@ function getHistoryData_(userId, dayCount) {
       averageIntake: average('intake'),
       averageTdee: average('tdee'),
       averageDeficit: average('deficit'),
+      averageBasis: '完成日',
     },
   };
   writeJsonCache_(cacheKey, result, 60);
@@ -1889,7 +1911,7 @@ function historyMealTotals_(detailsJson, fallbackTotals) {
  */
 function ensureLogStatusHeader_(sheet) {
   const cache = CacheService.getScriptCache();
-  if (cache.get('log-headers:v5') === 'ok') return;
+  if (cache.get('log-headers:v6') === 'ok') return;
   const current = sheet.getRange(1, 1, 1, APP.headers.logs.length).getValues()[0];
   let changed = false;
   APP.headers.logs.forEach((header, index) => {
@@ -1903,7 +1925,7 @@ function ensureLogStatusHeader_(sheet) {
       .setFontWeight('bold')
       .setHorizontalAlignment('center');
   }
-  cache.put('log-headers:v5', 'ok', 21600);
+  cache.put('log-headers:v6', 'ok', 21600);
 }
 
 function isLogComplete_(value) {
@@ -1972,7 +1994,8 @@ function getMembers_() {
       userId: String(row[0]),
       name: String(row[1] || '成員'),
       bmr: row[2] === '' ? '' : Number(row[2]),
-      weightKg: row[3] === '' ? '' : Number(row[3]),
+      // 體重只在使用者裝置端暫存，用來估算運動熱量，不再從試算表讀出。
+      weightKg: '',
       heightCm: row[4] === '' ? '' : Number(row[4]),
       age: row[5] === '' ? '' : Number(row[5]),
       sex: String(row[6] || ''),
@@ -2000,6 +2023,21 @@ function ensureMemberGroupHeader_(sheet) {
     .setHorizontalAlignment('center');
   initializePublicDefaultsFromLogs_(sheet);
   cache.put('member-headers:v3', 'ok', 21600);
+}
+
+/**
+ * 隱私遷移：舊版曾把 BMR 計算用的體重寫入「成員設定」D 欄。
+ * 新版體重只留在使用者裝置端，因此第一次執行 setupProject 時清除舊欄位。
+ */
+function migrateStoredWeightPrivacy_() {
+  const props = PropertiesService.getScriptProperties();
+  if (props.getProperty('WEIGHT_PRIVACY_MIGRATED') === '1') return;
+  const sheet = getSheet_(APP.sheets.members);
+  if (sheet.getLastRow() >= 2) {
+    sheet.getRange(2, 4, sheet.getLastRow() - 1, 1).clearContent();
+  }
+  CacheService.getScriptCache().remove('members:v4');
+  props.setProperty('WEIGHT_PRIVACY_MIGRATED', '1');
 }
 
 /**
@@ -2387,7 +2425,7 @@ function upsertMember_(data) {
   row[0] = data.userId || row[0];
   if (data.name !== undefined && data.name !== '') row[1] = cleanText_(data.name, 40);
   if (data.bmr !== undefined && data.bmr !== '') row[2] = Number(data.bmr);
-  if (data.weightKg !== undefined && data.weightKg !== '') row[3] = Number(data.weightKg);
+  // 不儲存體重。舊版傳入的 weightKg 也刻意忽略。
   if (data.heightCm !== undefined && data.heightCm !== '') row[4] = Number(data.heightCm);
   if (data.age !== undefined && data.age !== '') row[5] = Number(data.age);
   if (data.sex !== undefined && data.sex !== '') row[6] = cleanText_(data.sex, 20);
@@ -2416,6 +2454,8 @@ function upsertMember_(data) {
   cache.remove('members:v4');
   cache.remove(`public-wall-base:v2:${today_()}`);
   cache.remove(`public-wall-base:v3:${today_()}`);
+  cache.remove(`public-wall-base:v4:${today_()}`);
+  cache.remove(`public-wall-base:v5:${today_()}`);
   try {
     cache.remove(`public-like-target:v2:${publicLikeTargetKey_(data.userId)}`);
   } catch (error) {
@@ -3263,13 +3303,18 @@ function invalidateLogCache_(date, userId) {
   cache.remove(`logs-for-date:v4:${date}`);
   cache.remove(`public-wall-base:v2:${date}`);
   cache.remove(`public-wall-base:v3:${date}`);
+  cache.remove(`public-wall-base:v4:${date}`);
+  cache.remove(`public-wall-base:v5:${date}`);
   // 補登過去日期可能改變「公開連續打卡」，因此也要清掉今日公開頁快取。
   if (date && date !== today_()) {
     cache.remove(`public-wall-base:v2:${today_()}`);
     cache.remove(`public-wall-base:v3:${today_()}`);
+    cache.remove(`public-wall-base:v4:${today_()}`);
+    cache.remove(`public-wall-base:v5:${today_()}`);
   }
   if (userId) {
     cache.remove(`history:v1:${userId}:30:${today_()}`);
+    cache.remove(`history:v2:${userId}:30:${today_()}`);
     try {
       cache.remove(`public-like-target:v2:${publicLikeTargetKey_(userId)}`);
     } catch (error) {
