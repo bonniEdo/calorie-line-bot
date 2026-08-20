@@ -1,13 +1,13 @@
-// 應用程式版本：2026.08.20-61
+// 應用程式版本：2026.08.20-62
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.20-61';
+const APP_BUILD = '2026.08.20-62';
 
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
   // 連結憑證的用途範圍。form 可讀寫今天的紀錄；wall 只能看公開頁與按讚。
   tokenScopes: { form: 'form', wall: 'wall' },
   // 連結的有效時間。過期後成員回 LINE 輸入「打卡」即可取得新連結。
-  tokenTtlSeconds: { form: 24 * 60 * 60, wall: 24 * 60 * 60 },
+  tokenTtlSeconds: { form: 72 * 60 * 60, wall: 24 * 60 * 60 },
   // 照片辨識共用同一組 Gemini 免費額度，需要上限避免單一連結外流後被無限呼叫。
   photoQuota: { perUserPerDay: 40, totalPerDay: 300 },
   sheets: {
@@ -2970,7 +2970,7 @@ function validateFormSignature_(userId, token, scope) {
 
 function accessTokenErrorMessage_(state) {
   if (state === 'expired') {
-    return '這個連結已經過期了（連結有效 24 小時）。請回 LINE 輸入「打卡」取得新連結。';
+    return '這個連結已經過期了（打卡連結有效 72 小時）。請回 LINE 輸入「打卡」取得新連結。';
   }
   return '連結驗證失敗，請回 LINE 重新輸入「打卡」。';
 }
@@ -3097,10 +3097,10 @@ function consumePhotoQuota_(userId) {
     const total = Number(counts.__total || 0);
 
     if (used >= limits.perUserPerDay) {
-      throw new Error(`今天的照片辨識已達每人上限 ${limits.perUserPerDay} 次，明天會重新計算。你仍然可以手動輸入熱量。`);
+      throw new Error(`今天的照片辨識已達每人上限 ${limits.perUserPerDay} 次，明天會重新計算。你仍然可以手輸熱量。`);
     }
     if (total >= limits.totalPerDay) {
-      throw new Error('今天大家的照片辨識額度已經用完了，明天會重新計算。你仍然可以手動輸入熱量。');
+      throw new Error('今天大家的照片辨識額度已經用完了，明天會重新計算。你仍然可以手輸熱量。');
     }
 
     counts[userId] = used + 1;

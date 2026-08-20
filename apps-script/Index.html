@@ -35,15 +35,8 @@
       position: relative;
       overflow: hidden;
     }
-    .hero::after {
-      content: "🍋";
-      position: absolute;
-      right: -6px;
-      bottom: -22px;
-      font-size: 88px;
-      opacity: .22;
-      transform: rotate(-15deg);
-    }
+    /* 提醒設定位於 hero 內，避免裝飾圖覆蓋右側箭頭與點擊區。 */
+    .hero::after { display: none; pointer-events: none; }
     .eyebrow { font-size: 12px; font-weight: 800; letter-spacing: .12em; color: #765c17; }
     h1 { margin: 7px 0 4px; font-size: 27px; line-height: 1.15; }
     .hero p { margin: 0; color: #6b571f; }
@@ -462,6 +455,8 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
+      width: 100%;
+      box-sizing: border-box;
       min-height: 54px;
       padding: 10px 14px;
       color: #21677f;
@@ -472,7 +467,7 @@
     }
     .reminder-settings > summary::-webkit-details-marker { display: none; }
     .reminder-settings > summary::marker { display: none; content: ''; }
-    .reminder-settings > summary::after { content: '⌄'; font-size: 20px; color: #568da5; }
+    .reminder-settings > summary::after { content: '⌄'; font-size: 20px; color: #568da5; pointer-events: none; }
     .reminder-settings[open] > summary { border-bottom: 1px solid #d8eaf2; background: #edf8fc; }
     .reminder-settings[open] > summary::after { transform: rotate(180deg); }
     .reminder-settings-body { padding: 10px 14px 14px; }
@@ -1182,7 +1177,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.20-58';
+    window.__dietAppBuild = '2026.08.20-62';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1354,7 +1349,7 @@
       const box = el('div', 'notice');
       box.append(el('h2', '', expired ? '這個打卡連結已經過期了' : '打卡連結無效或已被修改'));
       box.append(el('p', '', expired
-        ? '為了保護你的紀錄，每個連結只有 24 小時有效。請回到 LINE 私訊機器人「打卡」，就會拿到新的連結，先前存好的內容都還在。'
+        ? '為了保護你的紀錄，每個打卡連結有 72 小時有效。請回到 LINE 私訊機器人「打卡」，就會拿到新的連結，先前存好的內容都還在。'
         : '請回到 LINE 私訊機器人「打卡」，再從新的按鈕進入。'));
       app.append(box);
     }
@@ -1711,7 +1706,7 @@
           '<div class="food-entry-actions primary-entry-actions" aria-label="選擇記錄方式">',
             '<button id="cameraCaptureButton" class="entry-mode-button active" type="button" aria-controls="photoEntryPanel">📷 直接拍照</button>',
             '<button id="uploadPhotoButton" class="entry-mode-button" type="button" aria-controls="photoEntryPanel">🖼️ 上傳照片</button>',
-            '<button id="manualModeButton" class="entry-mode-button manual-entry-link" type="button" role="tab" aria-controls="manualEntryPanel">✍️ 直接輸入熱量</button>',
+            '<button id="manualModeButton" class="entry-mode-button manual-entry-link" type="button" role="tab" aria-controls="manualEntryPanel">✍️ 手輸熱量</button>',
           '</div>',
           '<div id="manualEntryPanel" hidden>',
             '<div class="manual-entry-box">',
@@ -1784,7 +1779,7 @@
                 '<div id="waterProgress" class="water-progress"></div>',
               '</div>',
             '</div>',
-            '<div class="water-add-row"><label>我喝一大口（ml）<input id="waterAmount" type="number" inputmode="numeric" min="1" max="10000" step="50" value="250" placeholder="例如 250"></label><button id="addWaterButton" class="secondary" type="button">＋ 加水</button><button id="removeWaterButton" class="danger-small" type="button">− 扣除</button></div>',
+            '<div class="water-add-row"><label>我喝進去／我吐出來（ml）<input id="waterAmount" type="number" inputmode="numeric" min="1" max="10000" step="50" value="250" placeholder="例如 250"></label><button id="addWaterButton" class="secondary" type="button">＋ 加水</button><button id="removeWaterButton" class="danger-small" type="button">− 扣除</button></div>',
           '</div>',
         '</section>',
         '<p class="hint" style="padding:0 8px">食物熱量與每日赤字皆為估算。排行榜用於一起『養成紀錄習慣』，不代表赤字越大越好。</p>',
@@ -1811,6 +1806,16 @@
           state.recordDatePickerOpen = recordDatePicker.open;
           const recordDateToggle = document.getElementById('recordDateToggle');
           if (recordDateToggle) recordDateToggle.textContent = recordDatePicker.open ? '收合日期選單' : '📅 選擇日期';
+        });
+      }
+
+      // 整個「LINE提醒設定」標題列都可點擊，包含右側箭頭；避免小箭頭被裝飾層或行動版點擊區吃掉。
+      const reminderSettings = document.getElementById('reminderSettings');
+      const reminderSummary = reminderSettings && reminderSettings.querySelector('summary');
+      if (reminderSettings && reminderSummary) {
+        reminderSummary.addEventListener('click', event => {
+          event.preventDefault();
+          reminderSettings.open = !reminderSettings.open;
         });
       }
       document.querySelectorAll('[data-record-date]').forEach(button => {
