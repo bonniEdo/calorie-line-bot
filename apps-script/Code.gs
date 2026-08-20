@@ -1,6 +1,6 @@
-// 應用程式版本：2026.08.20-62
+// 應用程式版本：2026.08.20-64
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.20-62';
+const APP_BUILD = '2026.08.20-64';
 
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
@@ -887,14 +887,16 @@ function sendReminderForSlot_(slot) {
 
   members.forEach(member => {
     const inProgress = inProgressIds.has(member.userId);
+    const greeting = reminderGreeting_(slot, member.name);
+    const text = inProgress
+      ? `${greeting}\n目前還在打卡中，記得按「送出打卡完成」喔！`
+      : `${greeting}\n點一下就能開始記錄今天的飲控。`;
     const messages = [{
       type: 'template',
-      altText: `${member.name}，今天還沒完成飲控打卡`,
+      altText: text,
       template: {
         type: 'buttons',
-        text: inProgress
-          ? `${member.name}，今天的紀錄還在打卡中 🌙\n請確認全部餐點後，按「送出打卡完成」。`
-          : `${member.name}，今天還沒開始打卡喔 🌙\n點一下，拍照就能估算今天吃的食物。`,
+        text,
         actions: [{
           type: 'uri',
           label: inProgress ? '繼續並完成打卡' : '開始今日打卡',
@@ -910,6 +912,16 @@ function sendReminderForSlot_(slot) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/** 四個時段的個人化提醒文案；23:00／23:30 共用「微半夜」開關與文案。 */
+function reminderGreeting_(slot, name) {
+  const safeName = cleanText_(name || '小夥伴', 40);
+  if (slot === '09:00') return `${safeName}，咕咕咕📣起床飲控啦！`;
+  if (slot === '12:00') return `午安 ${safeName} 小傢伙，午餐了解一下`;
+  if (slot === '18:00') return `Bonsoir ${safeName}，晚上你值得吃點好的`;
+  if (String(slot || '').indexOf('23:') === 0) return `${safeName} 檢查一下有沒有忘記什麼🤭🤭🤭`;
+  return `${safeName}，記得完成今天的飲控打卡喔！`;
 }
 
 function runScheduledJobs() {
