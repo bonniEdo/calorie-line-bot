@@ -87,28 +87,13 @@
       font-style: normal;
       font-weight: 900;
     }
-    .tdee-note {
-      margin-top: 8px !important;
-      padding: 7px 9px;
-      border-radius: 10px;
-      background: rgba(255,255,255,.54);
-      color: #6b571f !important;
-      font-size: 10px;
+    .energy-help {
+      display: block;
+      margin-top: 5px;
+      color: #6b571f;
+      font-size: 9px;
       font-weight: 700;
-      line-height: 1.45;
-      position: relative;
-      z-index: 1;
-    }
-    .saved-notice {
-      margin-top: 12px;
-      padding: 9px 12px;
-      border-radius: 12px;
-      background: rgba(255,255,255,.72);
-      color: #5f4c18;
-      font-size: 12px;
-      font-weight: 800;
-      position: relative;
-      z-index: 1;
+      line-height: 1.35;
     }
     .record-date-picker {
       margin-top: 12px;
@@ -119,14 +104,31 @@
       position: relative;
       z-index: 2;
     }
+    .record-date-picker > summary { list-style: none; cursor: pointer; }
+    .record-date-picker > summary::-webkit-details-marker { display: none; }
     .record-date-summary {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      flex-wrap: wrap;
       gap: 10px;
     }
     .record-date-summary strong { color: #4f3e15; font-size: 13px; }
+    .record-status-tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .record-status-tag.editing { background: #fff0bd; color: #765c17; }
+    .record-status-tag.complete { background: #dff1e4; color: #2f6b47; }
     .record-date-toggle {
+      display: inline-flex;
+      align-items: center;
       min-height: 36px;
       padding: 7px 11px;
       border: 1px solid #d7b13b;
@@ -137,12 +139,19 @@
       font-weight: 900;
       cursor: pointer;
     }
+    .record-date-hint {
+      margin: 6px 0 0;
+      color: #775a0d;
+      font-size: 11px;
+      line-height: 1.4;
+    }
     .record-date-options {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 6px;
       margin-top: 9px;
     }
+    .record-date-options[hidden] { display: none !important; }
     .record-date-option {
       min-height: 42px;
       padding: 6px 4px;
@@ -514,6 +523,21 @@
       border-radius: 16px;
       background: #fffdf7;
     }
+    .frequent-food-box > summary { list-style: none; cursor: pointer; }
+    .frequent-food-box > summary::-webkit-details-marker { display: none; }
+    .frequent-food-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 26px;
+      color: var(--ink);
+    }
+    .frequent-food-summary strong { font-size: 14px; }
+    .frequent-food-summary span { color: var(--muted); font-size: 11px; font-weight: 700; }
+    .frequent-food-summary::after { content: '⌄'; color: var(--muted); font-size: 18px; line-height: 1; transition: transform .15s ease; }
+    .frequent-food-box[open] .frequent-food-summary::after { transform: rotate(180deg); }
+    .frequent-food-box[open] .frequent-food-grid { margin-top: 10px; }
     .frequent-food-heading {
       display: flex;
       align-items: baseline;
@@ -557,6 +581,40 @@
       font-size: 11px;
       line-height: 1.4;
     }
+    .primary-entry-actions { margin-top: 12px; }
+    .primary-entry-actions .manual-entry-link { grid-column: 1 / -1; margin-top: 0; }
+    .photo-entry-panel { margin-top: 10px; }
+    .water-heading-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .water-heading-row .section-title { margin-bottom: 0; }
+    .optional-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #eef5f0;
+      color: #48745a;
+      font-size: 10px;
+      font-weight: 900;
+    }
+    .water-toggle { margin-top: 10px; }
+    .water-panel { margin-top: 10px; }
+    .water-progress {
+      margin-top: 10px;
+      padding: 9px 11px;
+      border-radius: 12px;
+      background: #eef8f1;
+      color: #35684b;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .water-progress-top { display: flex; justify-content: space-between; gap: 10px; }
+    .water-progress-track { height: 7px; margin: 7px 0 5px; overflow: hidden; border-radius: 999px; background: #d7eadc; }
+    .water-progress-track span { display: block; height: 100%; border-radius: inherit; background: var(--green); transition: width .2s ease; }
+    .water-progress small { color: #5b7865; font-weight: 700; }
     .food-card {
       min-height: 156px;
       padding: 12px;
@@ -691,8 +749,52 @@
     .secondary { flex: 1; border: 0; background: var(--green); color: #fff; }
     .danger-small { border: 1px solid #edcbc7; background: #fff; color: var(--red); padding: 0 12px; }
     .ai-kcal { width: 82px; margin: 0; padding: 7px; text-align: right; }
-    details.food-library { margin-top: 14px; }
-    details.food-library summary { cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 800; }
+    details.food-library {
+      max-height: min(58vh, 560px);
+      margin-top: 14px;
+      padding: 10px 10px 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      border: 1px solid #eadfca;
+      border-radius: 16px;
+      background: #fffdf8;
+    }
+    details.food-library summary {
+      position: sticky;
+      top: -10px;
+      z-index: 2;
+      margin: -10px -10px 0;
+      padding: 11px 10px;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      background: rgba(255,253,248,.96);
+    }
+    .food-library-actions {
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      display: flex;
+      justify-content: center;
+      margin: 12px -10px 0;
+      padding: 10px;
+      border-top: 1px solid #eadfca;
+      background: rgba(255,253,248,.96);
+      backdrop-filter: blur(8px);
+    }
+    .food-library-done {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid #9fc7ae;
+      border-radius: 12px;
+      background: #f0f8f2;
+      color: #35684b;
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .food-library-done:active { transform: scale(.99); }
     .submit-bar {
       position: fixed;
       left: 0;
@@ -790,7 +892,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.20-40';
+    window.__dietAppBuild = '2026.08.20-43';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -852,6 +954,9 @@
     const FREQUENT_FOODS = BOOTSTRAP && Array.isArray(BOOTSTRAP.frequentFoods)
       ? BOOTSTRAP.frequentFoods
       : [];
+    const WATER_SETTINGS = BOOTSTRAP && BOOTSTRAP.waterSettings
+      ? BOOTSTRAP.waterSettings
+      : { enabled: false, goalMl: 2000 };
     const FOOD_BY_ID = {};
     const foodCardNodes = {};
     FOODS.forEach(food => { FOOD_BY_ID[food.id] = food; });
@@ -906,7 +1011,11 @@
       pendingDateSwitch: '',
       recordDatePickerOpen: false,
       foodLibraryReady: false,
-      photoPanelVisible: false,
+      // 拍照／上傳是第一次進入最常用的入口；常吃食物則預設收合。
+      photoPanelVisible: true,
+      waterEnabled: Boolean(WATER_SETTINGS.enabled),
+      waterMl: 0,
+      waterGoalMl: Math.max(500, Number(WATER_SETTINGS.goalMl || 2000)),
     };
 
     const app = document.getElementById('app');
@@ -959,6 +1068,9 @@
         state.aiMeals[mealKey] = [];
       });
       state.exerciseRecords = [];
+      state.waterEnabled = Boolean(WATER_SETTINGS.enabled);
+      state.waterGoalMl = Math.max(500, Number(WATER_SETTINGS.goalMl || 2000));
+      state.waterMl = 0;
       state.pendingAiItems = [];
       state.pendingAiMeal = '';
       state.analyzing = false;
@@ -967,6 +1079,7 @@
         state.exerciseRecords = [newExerciseRecord()];
         return;
       }
+      state.waterMl = Math.max(0, Number(activeSavedLog.waterMl || 0));
       Object.keys(mealLabels).forEach(mealKey => {
         const savedMeals = activeSavedLog.meals && Array.isArray(activeSavedLog.meals[mealKey])
           ? activeSavedLog.meals[mealKey]
@@ -1181,11 +1294,10 @@
 
     function renderApp() {
       const isBackfill = state.recordDate !== BOOTSTRAP.today;
-      const savedNotice = activeSavedLog
-        ? '<div class="saved-notice">' + (activeSavedLog.isComplete
-          ? '✅ ' + (isBackfill ? '這天已完成補登，可繼續修改' : '今日已完成打卡，可以繼續修改紀錄')
-          : '📝 已載入' + (isBackfill ? '這天' : '今天') + '的暫存進度，目前仍為打卡中') + '</div>'
-        : '';
+      const recordStatus = todayIsComplete
+        ? (isBackfill ? '✅ 已完成補登' : '✅ 今日已完成')
+        : (activeSavedLog ? (isBackfill ? '🕘 補登中' : '📝 打卡中') : '尚未開始');
+      const recordStatusClass = todayIsComplete ? 'complete' : 'editing';
       const dateOptions = RECORD_DATES.map(item => (
         '<button class="record-date-option' + (item.date === state.recordDate ? ' active' : '') + '" type="button" data-record-date="' + escapeAttr(item.date) + '">' +
           escapeHtml(item.label) + '<small>' + escapeHtml(item.date.slice(5).replace('-', '/')) + '</small>' +
@@ -1211,21 +1323,22 @@
               '<span class="energy-label">' + (isBackfill ? '當日可以猛猛消耗' : '今日可以猛猛消耗') + '</span>',
               '<div class="energy-value"><strong id="heroTdee">—</strong><small>kcal</small></div>',
               '<em class="energy-badge">TDEE 估算</em>',
+              '<span class="energy-help">未填運動：BMR × 1.2<br>有運動：再加活動熱量</span>',
             '</div>',
           '</div>',
-          '<p class="tdee-note">TDEE:未填運動時以 BMR × 1.2 估算；填入運動消耗後再加上。</p>',
-          savedNotice,
-          '<div class="record-date-picker">',
-            '<div class="record-date-summary">',
-              '<strong>' + (isBackfill ? '🕘 補登中：' : '📅 目前紀錄：') + escapeHtml(currentDateMeta.label) + '</strong>',
-              '<button id="recordDateToggle" class="record-date-toggle" type="button">' + (state.recordDatePickerOpen ? '收合日期' : '補記過去紀錄') + '</button>',
-            '</div>',
-            '<div id="recordDateOptions" class="record-date-options"' + (state.recordDatePickerOpen ? '' : ' hidden') + '>' + dateOptions + '</div>',
+          '<details id="recordDatePicker" class="record-date-picker"' + (state.recordDatePickerOpen ? ' open' : '') + '>',
+            '<summary class="record-date-summary">',
+              '<strong>' + (isBackfill ? '🕘 補登：' : '📅 目前：') + escapeHtml(currentDateMeta.label) + '</strong>',
+              '<span class="record-status-tag ' + recordStatusClass + '">' + escapeHtml(recordStatus) + '</span>',
+              '<span id="recordDateToggle" class="record-date-toggle">' + (state.recordDatePickerOpen ? '收合日期選單' : '📅 選擇日期') + '</span>',
+            '</summary>',
+            '<p class="record-date-hint">可補登最近 3 天；選好日期後，這頁會載入該天資料。</p>',
+            '<div id="recordDateOptions" class="record-date-options">' + dateOptions + '</div>',
             (isBackfill ? '<div class="backfill-banner">這是歷史補登：會更新你的歷史與連續打卡，不會重新發送或改寫當天已公布的群組排行。</div>' : ''),
-          '</div>',
+          '</details>',
         '</section>',
         '<section class="quick-access" aria-label="快速查看">',
-          '<div class="quick-access-heading">🔎 快速查看</div>',
+          '<div class="quick-access-heading">🔎 快速查看 <small>不用展開公開分享</small></div>',
           '<div class="quick-access-grid">',
             '<a class="quick-access-link" href="' + escapeAttr(BOOTSTRAP.publicWallUrl || '') + '" target="_top">',
               '<span class="quick-access-icon" aria-hidden="true">🌍</span>',
@@ -1243,7 +1356,7 @@
             '<label>顯示名稱<input id="name" maxlength="40" value="' + escapeAttr(MEMBER.name || '') + '" placeholder="例如 Bonnie"></label>',
             '<label>基礎代謝 BMR<input id="bmr" type="number" inputmode="decimal" min="500" max="5000" value="' + escapeAttr(MEMBER.bmr || '') + '" placeholder="例如 1334"></label>',
           '</div>',
-          '<p class="hint">BMR 是維持生命的基礎消耗，不等於一天總消耗；系統會用它估算上方 TDEE，且不會顯示在排行榜。</p>',
+          '<p class="hint">BMR 是維持生命的基礎消耗，只用來估算上方消耗，不會顯示在排行榜。</p>',
           '<details id="bmrHelper" class="bmr-helper" ' + (hasBmr ? '' : 'open') + '>',
             '<summary>' + (hasBmr ? '重新估算 BMR' : '不知道基礎代謝？幫我估算') + '</summary>',
             '<div class="form-grid">',
@@ -1277,31 +1390,32 @@
         '<section class="section meal-entry-section">',
           '<h2 class="section-title">🍽️ 記錄這一餐</h2>',
           '<div id="mealTabs" class="meal-tabs" role="tablist" aria-label="選擇餐別"></div>',
-          '<div class="frequent-food-box">',
-            '<div class="frequent-food-heading"><strong>⭐ 常吃的食物</strong><span>點一下快速加入</span></div>',
-            '<div id="frequentFoodGrid" class="food-grid frequent-food-grid"></div>',
-            '<div class="food-entry-actions" role="tablist" aria-label="選擇記錄方式">',
-              '<button id="photoModeButton" class="entry-mode-button active" type="button" aria-controls="photoEntryPanel">📸 直接拍照／上傳</button>',
-              '<button id="foodLibraryToggleButton" class="entry-mode-button" type="button">📚 展開完整食物庫</button>',
-            '</div>',
+          '<div class="food-entry-actions primary-entry-actions" role="tablist" aria-label="選擇記錄方式">',
+            '<button id="photoModeButton" class="entry-mode-button active" type="button" aria-controls="photoEntryPanel">📸 拍照／上傳食物</button>',
+            '<button id="foodLibraryToggleButton" class="entry-mode-button" type="button">📚 開啟食物庫</button>',
             '<button id="manualModeButton" class="manual-entry-link" type="button" role="tab" aria-controls="manualEntryPanel">✍️ 直接輸入熱量</button>',
-            '<p class="food-library-quick-note">常吃食物會依你的使用紀錄個人化</p>',
           '</div>',
-          '<details id="foodLibrary" class="food-library">',
-            '<summary>『這裏』可以展開食物庫手動補充</summary>',
-            '<input id="search" class="search" type="search" name="foodSearchTerm" inputmode="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="搜尋白飯、雞蛋、便當…">',
-            '<div id="categoryChips" class="category-chips"></div>',
-            '<div id="foodGrid" class="food-grid"></div>',
-          '</details>',
-          '<div id="photoEntryPanel">',
+          '<div id="photoEntryPanel" class="photo-entry-panel">',
             '<div class="camera-box">',
               '<input id="foodPhoto" class="photo-input" type="file" accept="image/*">',
-              '<p class="hint">照片分析結果會顯示在這裡，可直接調整份量；要重新分析請再按上方「直接拍照／上傳」。</p>',
+              '<p class="hint">照片分析結果會顯示在這裡，可直接調整份量；要重新分析請再按上方「拍照／上傳食物」。</p>',
               '<img id="photoPreview" class="photo-preview" alt="餐點照片預覽" hidden>',
               '<div id="aiStatus" class="ai-status"></div>',
               '<div id="aiResult" class="ai-result" hidden></div>',
             '</div>',
           '</div>',
+          '<details id="frequentFoodDetails" class="frequent-food-box">',
+            '<summary class="frequent-food-summary"><strong>⭐ 常吃的食物</strong><span>可快速加入（依個人使用紀錄更新）</span></summary>',
+            '<div id="frequentFoodGrid" class="food-grid frequent-food-grid"></div>',
+            '<p class="food-library-quick-note">第一次先提供常見入口，之後會依你實際使用的食物個人化。</p>',
+          '</details>',
+          '<details id="foodLibrary" class="food-library">',
+            '<summary>『這裏』可以展開食物庫手動補充</summary>',
+            '<input id="search" class="search" type="search" name="foodSearchTerm" inputmode="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="搜尋白飯、雞蛋、便當…">',
+            '<div id="categoryChips" class="category-chips"></div>',
+            '<div id="foodGrid" class="food-grid"></div>',
+            '<div class="food-library-actions"><button id="foodLibraryCloseButton" class="food-library-done" type="button">完成選擇，回到已選餐點</button></div>',
+          '</details>',
           '<div id="manualEntryPanel" hidden>',
             '<div class="manual-entry-box">',
               '<p id="customMealLabel" class="hint">將加入早餐，可新增多筆。</p>',
@@ -1325,7 +1439,18 @@
             '<button id="addExerciseButton" class="secondary" type="button">＋ 新增運動</button>',
             '<button id="clearExerciseButton" class="danger-small" type="button">全部清除</button>',
           '</div>',
-          '<p class="hint">運動項目是一格輸入欄：點一下可選常見運動，也可以直接輸入自訂名稱；填寫分鐘後會自動估算熱量。</p>',
+          '<p class="hint">常見運動會保留在下拉選單；一天多練幾次可按「新增運動」，選「其他／自訂運動」即可自己填寫。</p>',
+        '</section>',
+        '<section class="section water-section">',
+          '<div class="water-heading-row"><h2 class="section-title">💧 喝水紀錄</h2><span class="optional-badge">選填</span></div>',
+          '<label class="privacy-toggle water-toggle"><input id="waterTrackingEnabled" type="checkbox" ' + (state.waterEnabled ? 'checked' : '') + '><span><strong>我要記錄喝水</strong><br><small>只顯示在自己的頁面，不影響群組或公開排行。</small></span></label>',
+          '<div id="waterTrackingPanel" class="water-panel"' + (state.waterEnabled ? '' : ' hidden') + '>',
+            '<div class="form-grid">',
+              '<label>今日喝水量（ml）<input id="waterMl" type="number" inputmode="numeric" min="0" max="10000" step="50" value="' + escapeAttr(state.waterMl || '') + '" placeholder="例如 1500"></label>',
+              '<label>每日目標（ml）<input id="waterGoalMl" type="number" inputmode="numeric" min="500" max="10000" step="100" value="' + escapeAttr(state.waterGoalMl || 2000) + '" placeholder="例如 2000"></label>',
+            '</div>',
+            '<div id="waterProgress" class="water-progress"></div>',
+          '</div>',
         '</section>',
         '<p class="hint" style="padding:0 8px">食物熱量與每日赤字皆為估算。排行榜用於一起養成紀錄習慣，不代表赤字越大越好。</p>',
       ].join('');
@@ -1341,16 +1466,16 @@
       renderExerciseRecords();
       renderSelected();
       updateTotals();
+      renderWaterProgress();
     }
 
     function bindStaticEvents() {
-      const recordDateToggle = document.getElementById('recordDateToggle');
-      if (recordDateToggle) {
-        recordDateToggle.addEventListener('click', () => {
-          state.recordDatePickerOpen = !state.recordDatePickerOpen;
-          const options = document.getElementById('recordDateOptions');
-          if (options) options.hidden = !state.recordDatePickerOpen;
-          recordDateToggle.textContent = state.recordDatePickerOpen ? '收合日期' : '補記過去紀錄';
+      const recordDatePicker = document.getElementById('recordDatePicker');
+      if (recordDatePicker) {
+        recordDatePicker.addEventListener('toggle', () => {
+          state.recordDatePickerOpen = recordDatePicker.open;
+          const recordDateToggle = document.getElementById('recordDateToggle');
+          if (recordDateToggle) recordDateToggle.textContent = recordDatePicker.open ? '收合日期選單' : '📅 選擇日期';
         });
       }
       document.querySelectorAll('[data-record-date]').forEach(button => {
@@ -1377,6 +1502,16 @@
       });
 
       document.getElementById('foodLibraryToggleButton').addEventListener('click', openFoodLibrary);
+
+      const foodLibraryCloseButton = document.getElementById('foodLibraryCloseButton');
+      if (foodLibraryCloseButton) {
+        foodLibraryCloseButton.addEventListener('click', () => {
+          const library = document.getElementById('foodLibrary');
+          if (library) library.open = false;
+          const selected = document.getElementById('selectedList');
+          if (selected) selected.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
 
       document.getElementById('foodLibrary').addEventListener('toggle', event => {
         if (!event.target.open || state.foodLibraryReady) return;
@@ -1481,6 +1616,31 @@
         });
 
       document
+        .getElementById('waterTrackingEnabled')
+        .addEventListener('change', event => {
+          state.waterEnabled = Boolean(event.target.checked);
+          if (!state.waterEnabled) state.waterMl = 0;
+          renderWaterProgress();
+          markRecordChanged(500);
+        });
+
+      document
+        .getElementById('waterMl')
+        .addEventListener('input', event => {
+          state.waterMl = Math.max(0, Math.min(10000, Number(event.target.value || 0)));
+          renderWaterProgress();
+          markRecordChanged();
+        });
+
+      document
+        .getElementById('waterGoalMl')
+        .addEventListener('input', event => {
+          state.waterGoalMl = Math.max(500, Math.min(10000, Number(event.target.value || 2000)));
+          renderWaterProgress();
+          markRecordChanged(500);
+        });
+
+      document
         .getElementById('foodPhoto')
         .addEventListener('change', handleFoodPhoto);
 
@@ -1491,6 +1651,28 @@
       submitButton.addEventListener('click', () => {
         submitLog(true);
       });
+    }
+
+    function renderWaterProgress() {
+      const panel = document.getElementById('waterTrackingPanel');
+      const toggle = document.getElementById('waterTrackingEnabled');
+      if (panel) panel.hidden = !state.waterEnabled;
+      if (toggle) toggle.checked = state.waterEnabled;
+      const root = document.getElementById('waterProgress');
+      if (!root) return;
+      if (!state.waterEnabled) {
+        root.innerHTML = '';
+        return;
+      }
+      const current = Math.max(0, Math.round(Number(state.waterMl || 0)));
+      const goal = Math.max(500, Math.round(Number(state.waterGoalMl || 2000)));
+      const percent = Math.min(100, Math.round(current / goal * 100));
+      const remaining = Math.max(0, goal - current);
+      root.innerHTML = [
+        '<div class="water-progress-top"><strong>今日 ' + current + ' / ' + goal + ' ml</strong><span>' + percent + '%</span></div>',
+        '<div class="water-progress-track"><span style="width:' + percent + '%"></span></div>',
+        '<small>' + (remaining ? '還差 ' + remaining + ' ml' : '✅ 今日已達標') + '</small>',
+      ].join('');
     }
 
     function bindKeyboardAvoidance() {
@@ -2328,6 +2510,7 @@
     function updateSubmitButtons() {
       // 背景自動儲存時仍允許按「送出完成」；若請求正在進行，會排在下一筆送出。
       const isBackfill = state.recordDate !== BOOTSTRAP.today;
+      updateRecordStatusTag();
       if (state.userSubmitPending) {
         submitButton.disabled = true;
         submitButton.textContent = isBackfill ? '補登送出中…' : '打卡送出中…';
@@ -2341,6 +2524,18 @@
       saveStatus.textContent = todayIsComplete
         ? (isBackfill ? '✅ 補登已完成' : '✅ 已完成')
         : (state.saveInFlight ? '自動儲存中…' : (isBackfill ? '🕘 補登中・自動儲存' : '📝 打卡中・自動儲存'));
+    }
+
+    function updateRecordStatusTag() {
+      const tag = document.querySelector('.record-status-tag');
+      if (!tag) return;
+      const isBackfill = state.recordDate !== BOOTSTRAP.today;
+      const complete = Boolean(todayIsComplete);
+      tag.textContent = complete
+        ? (isBackfill ? '✅ 已完成補登' : '✅ 今日已完成')
+        : (activeSavedLog ? (isBackfill ? '🕘 補登中' : '📝 打卡中') : '尚未開始');
+      tag.classList.toggle('complete', complete);
+      tag.classList.toggle('editing', !complete);
     }
 
     function setSavingState(saving) {
@@ -2501,7 +2696,9 @@
         meals: serializeMeals(),
         aiMeals: serializeAiMeals(),
         extraKcal: 0,
-        waterMl: '',
+        waterEnabled: state.waterEnabled,
+        waterGoalMl: state.waterGoalMl,
+        waterMl: state.waterEnabled ? state.waterMl : 0,
         exerciseName: exercise.name,
         exerciseMinutes: exercise.minutes,
         exerciseKcal: exercise.kcal,
@@ -2536,7 +2733,9 @@
             meals: payload.meals,
             aiMeals: payload.aiMeals,
             extraKcal: 0,
-            waterMl: 0,
+            waterEnabled: Boolean(payload.waterEnabled),
+            waterGoalMl: Number(payload.waterGoalMl || 2000),
+            waterMl: Number(payload.waterMl || 0),
             exerciseName: payload.exerciseName,
             exerciseMinutes: payload.exerciseMinutes,
             exerciseKcal: payload.exerciseKcal,
@@ -2555,6 +2754,8 @@
           MEMBER.defaultPublishToday = payload.publishToday;
           MEMBER.defaultPublishFoodDetails = payload.publishFoodDetails;
           MEMBER.joinPublicRanking = payload.joinPublicRanking;
+          WATER_SETTINGS.enabled = Boolean(payload.waterEnabled);
+          WATER_SETTINGS.goalMl = Number(payload.waterGoalMl || 2000);
           const startedQueuedSave = finishSave(requestRevision);
           if (startedQueuedSave) return;
           if (!automatic) setSavingState(false);

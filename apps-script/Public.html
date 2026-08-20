@@ -37,6 +37,10 @@
     .summary-card { padding: 9px 6px; border-radius: 13px; background: rgba(255,255,255,.72); text-align: center; }
     .summary-card strong { display: block; font-size: 18px; }
     .summary-card span { font-size: 11px; color: #765c17; }
+    .page-nav { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:7px; margin-top:12px; }
+    .page-nav a { min-height:42px; display:flex; align-items:center; justify-content:center; padding:8px 7px; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--ink); font-size:12px; font-weight:900; text-decoration:none; }
+    .page-nav a[hidden] { display:none !important; }
+    .page-nav a:first-child { border-color:#9fc7ae; background:#f0f8f2; color:#35684b; }
 
     .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 14px; padding: 5px; border-radius: 16px; background: #eee6d8; }
     .tab { min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-weight: 900; cursor: pointer; }
@@ -204,6 +208,11 @@
       </div>
     </section>
 
+    <nav class="page-nav" aria-label="頁面導覽">
+      <a id="publicCheckinLink" href="#" target="_top" hidden>📝 我要打卡</a>
+      <a id="publicHistoryLink" href="#" target="_top" hidden>📈 猛猛卡路里歷史</a>
+    </nav>
+
     <nav class="tabs" role="tablist" aria-label="公開功能頁籤">
       <button id="recordsTab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="recordsPanel">今日公開紀錄</button>
       <button id="streaksTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="streaksPanel">連續打卡排行</button>
@@ -229,7 +238,7 @@
   -->
   <div id="publicData" hidden><?= publicJson ?></div>
   <script>
-    window.__publicWallBuild = '2026.08.19-21';
+    window.__publicWallBuild = '2026.08.20-22';
 
     const toast = document.getElementById('toast');
     const recordsPanel = document.getElementById('recordsPanel');
@@ -253,6 +262,18 @@
     document.getElementById('completedCount').textContent = number(DATA.summary && DATA.summary.completedCount);
     document.getElementById('rankingCount').textContent = number(DATA.summary && DATA.summary.rankingCount);
     document.getElementById('updated').textContent = `更新時間：${DATA.generatedAt || ''}`;
+
+    const publicNav = DATA.nav || {};
+    const publicCheckinLink = document.getElementById('publicCheckinLink');
+    const publicHistoryLink = document.getElementById('publicHistoryLink');
+    if (publicNav.formUrl) {
+      publicCheckinLink.href = publicNav.formUrl;
+      publicCheckinLink.hidden = false;
+    }
+    if (publicNav.historyUrl) {
+      publicHistoryLink.href = publicNav.historyUrl;
+      publicHistoryLink.hidden = false;
+    }
 
     function switchTab(tab) {
       const showRecords = tab === 'records';

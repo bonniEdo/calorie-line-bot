@@ -18,6 +18,10 @@
     .summary-card { padding:11px 9px; border-radius:15px; background:rgba(255,255,255,.78); text-align:center; }
     .summary-card strong { display:block; font-size:20px; }
     .summary-card span { color:#765c17; font-size:11px; font-weight:800; }
+    .page-nav { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:7px; margin-top:12px; }
+    .page-nav a, .page-nav button { min-height:42px; display:flex; align-items:center; justify-content:center; padding:8px 7px; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--ink); font:inherit; font-size:12px; font-weight:900; text-decoration:none; cursor:pointer; }
+    .page-nav .page-nav-primary { border-color:#9fc7ae; background:#f0f8f2; color:#35684b; }
+    .page-nav button { border-color:#d7b13b; background:#fffaf0; color:#765c17; }
     .section { margin-top:16px; padding:16px; border:1px solid var(--line); border-radius:20px; background:#fff; box-shadow:0 6px 18px rgba(85,65,28,.05); }
     .section h2 { margin:0 0 6px; font-size:18px; }
     .section-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
@@ -41,6 +45,8 @@
     .record:first-child { border-top:0; margin-top:0; padding-top:0; }
     .record summary { display:grid; grid-template-columns:82px minmax(0,1fr) auto; gap:8px; align-items:center; cursor:pointer; list-style:none; }
     .record summary::-webkit-details-marker { display:none; }
+    .history-more { margin-top:14px; border-top:1px dashed var(--line); padding-top:12px; }
+    .history-more > summary { color:#765c17; font-size:13px; font-weight:900; cursor:pointer; }
     .date { color:var(--muted); font-size:13px; font-weight:800; }
     .energy { min-width:0; }
     .energy strong { font-size:17px; }
@@ -100,26 +106,44 @@
       if (!records.length) {
         html += '<div class="empty">目前還沒有歷史紀錄。</div>';
       } else {
-        records.forEach(record => {
-          const progress = record.status !== '完成';
-          html += '<details class="record"><summary>'
-            + '<span class="date">' + dateLabel(record.date) + '</span>'
-            + '<span class="energy"><strong>' + number(record.intake) + ' / ' + number(record.tdee) + ' kcal</strong><small>差額 ' + signed(record.deficit) + ' kcal</small></span>'
-            + '<span class="status ' + (progress ? 'progress' : '') + '">' + (progress ? '打卡中' : '已完成') + '</span>'
-            + '</summary><div class="detail"><div class="detail-grid">'
-            + '<div class="detail-item"><strong>' + number(record.exerciseKcal) + ' kcal</strong>運動消耗</div>'
-            + '<div class="detail-item"><strong>' + number(record.exerciseMinutes) + ' 分鐘</strong>運動時間</div>'
-            + '<div class="detail-item"><strong>' + number(record.waterMl) + ' ml</strong>飲水量</div>'
-            + '<div class="detail-item"><strong>' + (record.exerciseName || '未填寫') + '</strong>運動項目</div>'
-            + '</div><div class="meal-list">';
-          (record.meals || []).forEach(meal => {
-            html += '<div class="meal"><span>' + meal.label + (meal.names && meal.names.length ? '・' + meal.names.join('、') : '') + '</span><span>' + number(meal.kcal) + ' kcal</span></div>';
-          });
-          html += '</div></div></details>';
-        });
+        const recentRecords = records.slice(0, 3);
+        const olderRecords = records.slice(3);
+        html += recentRecords.map(renderRecord).join('');
+        if (olderRecords.length) {
+          html += '<details class="history-more"><summary>展開其餘 ' + number(olderRecords.length) + ' 筆歷史紀錄</summary>'
+            + olderRecords.map(renderRecord).join('')
+            + '</details>';
+        }
       }
       html += '</section>';
+      const nav = data.nav || {};
+      html += '<nav class="page-nav" aria-label="頁面導覽">'
+        + (nav.formUrl ? '<a class="page-nav-primary" href="' + escapeAttr(nav.formUrl) + '" target="_top">📝 我要打卡</a>' : '')
+        + (nav.publicWallUrl ? '<a href="' + escapeAttr(nav.publicWallUrl) + '" target="_top">🌍 公開紀錄牆</a>' : '')
+        + '</nav>';
       root.innerHTML = html;
+
+      function escapeAttr(value) {
+        return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      function renderRecord(record) {
+        const progress = record.status !== '完成';
+        let result = '<details class="record"><summary>'
+          + '<span class="date">' + dateLabel(record.date) + '</span>'
+          + '<span class="energy"><strong>' + number(record.intake) + ' / ' + number(record.tdee) + ' kcal</strong><small>差額 ' + signed(record.deficit) + ' kcal</small></span>'
+          + '<span class="status ' + (progress ? 'progress' : '') + '">' + (progress ? '打卡中' : '已完成') + '</span>'
+          + '</summary><div class="detail"><div class="detail-grid">'
+          + '<div class="detail-item"><strong>' + number(record.exerciseKcal) + ' kcal</strong>運動消耗</div>'
+          + '<div class="detail-item"><strong>' + number(record.exerciseMinutes) + ' 分鐘</strong>運動時間</div>'
+          + '<div class="detail-item"><strong>' + number(record.waterMl) + ' ml</strong>飲水量</div>'
+          + '<div class="detail-item"><strong>' + (record.exerciseName || '未填寫') + '</strong>運動項目</div>'
+          + '</div><div class="meal-list">';
+        (record.meals || []).forEach(meal => {
+          result += '<div class="meal"><span>' + meal.label + (meal.names && meal.names.length ? '・' + meal.names.join('、') : '') + '</span><span>' + number(meal.kcal) + ' kcal</span></div>';
+        });
+        return result + '</div></div></details>';
+      }
 
       function buildTrendChart(items) {
         const ordered = items.slice().reverse();
