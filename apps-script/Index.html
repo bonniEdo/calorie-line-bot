@@ -222,8 +222,9 @@
     textarea { min-height: 82px; resize: vertical; }
     .hint { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
     .bmr-helper {
+      grid-column: 1 / -1;
       min-width: 0;
-      margin: 0;
+      margin-top: 2px;
       padding: 0;
       border: 1px solid #e5ca70;
       border-radius: 15px;
@@ -232,25 +233,17 @@
       position: relative;
     }
     .bmr-field-heading {
-      display: block;
-      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
     }
     .bmr-field-heading > label {
       margin: 0;
     }
-    .bmr-input-wrap {
-      position: relative;
-    }
-    .bmr-input-wrap > input {
-      padding-right: 82px;
-    }
-    .bmr-input-wrap > .bmr-helper {
-      position: absolute;
-      top: 50%;
-      right: 8px;
-      z-index: 2;
+    .bmr-field-heading .bmr-helper {
+      flex: 0 0 auto;
       width: auto;
-      transform: translateY(-50%);
     }
     .bmr-helper:not([open]) {
       border-color: transparent;
@@ -280,7 +273,7 @@
     .bmr-helper:not([open]) summary {
       width: fit-content;
       min-height: 32px;
-      margin: 0;
+      margin-left: auto;
       padding: 6px 11px;
       border: 1px solid #e5ca70;
       background: #fff9e6;
@@ -291,7 +284,6 @@
       position: fixed;
       top: 50%;
       left: 50%;
-      right: auto;
       z-index: 1000;
       width: min(560px, calc(100vw - 28px));
       max-height: calc(100vh - 32px);
@@ -597,6 +589,45 @@
       box-shadow: 0 3px 8px rgba(150, 113, 20, .14);
     }
     .meal-tabs .pill.done:not(.active) { border-color: transparent; background: #e6f2e9; }
+    .meal-auto-hint {
+      margin: 6px 2px 0;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-align: right;
+    }
+    .pending-food-panel {
+      margin-top: 10px;
+      padding: 12px;
+      border: 1px solid #e6c45b;
+      border-radius: 14px;
+      background: #fffaf0;
+    }
+    .pending-food-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--ink);
+      font-size: 13px;
+    }
+    .pending-food-heading span { color: var(--muted); font-size: 12px; font-weight: 800; }
+    .pending-food-list { display: grid; gap: 6px; margin-top: 8px; }
+    .pending-food-row {
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 0;
+      border-top: 1px dashed var(--line);
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .pending-food-row small { color: var(--muted); font-weight: 700; white-space: nowrap; }
+    .pending-food-row .danger-small { min-height: 30px; padding: 4px 9px; }
+    .pending-food-actions { display: flex; gap: 8px; margin-top: 10px; }
+    .pending-food-actions button { flex: 1; }
+    .ai-meal-prompt { margin: 10px 2px 0; color: #7a5a18; font-size: 12px; font-weight: 800; }
     .entry-mode-tabs {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -868,6 +899,17 @@
     .selected-ai-details summary { padding: 7px 0 2px; color: var(--muted); font-size: 11px; font-weight: 800; cursor: pointer; }
     .selected-ai-details .portion-editor { justify-content: flex-start; margin-top: 5px; }
     .selected-ai-details .ai-meta { margin: 7px 0 2px; }
+    .meal-move-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .meal-move-select { width: auto; min-width: 126px; margin: 0; padding: 7px 8px; font-size: 11px; }
     .selected-name { font-size: 13px; font-weight: 800; }
     .selected-name small { display: block; color: var(--muted); font-weight: 500; margin-top: 2px; }
     .portion-editor { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
@@ -927,6 +969,24 @@
     .ai-total-card small { display: block; margin-top: 4px; color: var(--muted); line-height: 1.4; }
     .ai-details { margin-top: 10px; padding: 0 11px 11px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
     .ai-details summary { padding: 12px 0 2px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 800; }
+    .ai-meal-confirm {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px solid #eadfca;
+      border-radius: 13px;
+      background: #fffaf0;
+    }
+    .ai-meal-confirm label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+    }
+    .ai-meal-confirm select { width: auto; min-width: 130px; margin: 0; padding: 8px 10px; }
     .ai-review-row {
       margin-top: 9px;
       padding: 11px;
@@ -1091,7 +1151,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.20-55';
+      window.__dietAppBuild = '2026.08.20-56';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1184,8 +1244,19 @@
       bicycle: { label: '腳踏車', met: 7.5 },
       incline: { label: '爬坡', met: 6.5 },
     };
+
+    // 只在頁面第一次開啟時預選餐別；之後仍以使用者手動切換為準，
+    // 避免頁面停留到中午時又把正在編輯的餐點自動搬走。
+    function suggestedMealForNow_() {
+      const hour = new Date().getHours();
+      if (hour >= 5 && hour < 11) return 'breakfast';
+      if (hour >= 11 && hour < 16) return 'lunch';
+      if (hour >= 16 && hour < 21) return 'dinner';
+      return 'lateNight';
+    }
+
     const state = {
-      activeMeal: 'breakfast',
+      activeMeal: suggestedMealForNow_(),
       entryMode: 'photo',
       activeCategory: '全部',
       search: '',
@@ -1196,6 +1267,9 @@
       exerciseWeightKg: loadLocalWeightKg_(),
       pendingAiItems: [],
       pendingAiMeal: '',
+      // 食物庫／常吃食物先暫存，等使用者選好餐別後才正式加入。
+      pendingFoodItems: [],
+      pendingFoodMeal: '',
       analyzing: false,
       mealRevision: 0,
       savedMealRevision: 0,
@@ -1273,6 +1347,8 @@
       state.waterMl = 0;
       state.pendingAiItems = [];
       state.pendingAiMeal = '';
+      state.pendingFoodItems = [];
+      state.pendingFoodMeal = '';
       state.analyzing = false;
       todayIsComplete = Boolean(activeSavedLog && activeSavedLog.isComplete);
       if (!activeSavedLog) {
@@ -1555,11 +1631,10 @@
           '<div class="form-grid personal-form-grid">',
             '<label>顯示名稱<input id="name" maxlength="40" value="' + escapeAttr(MEMBER.name || '') + '" placeholder="例如 Bonnie"></label>',
             '<div class="bmr-field-group">',
-              '<div class="bmr-field-heading"><label for="bmr">基礎代謝 BMR</label></div>',
-              '<div class="bmr-input-wrap">',
-                '<input id="bmr" type="number" inputmode="decimal" min="500" max="5000" value="' + escapeAttr(MEMBER.bmr || '') + '" placeholder="例如 1334">',
+              '<div class="bmr-field-heading">',
+                '<label for="bmr">基礎代謝 BMR</label>',
                 '<details id="bmrHelper" class="bmr-helper" ' + (hasBmr ? '' : 'open') + '>',
-                    '<summary><span class="bmr-helper-title">重算</span><span class="bmr-helper-action">展開估算</span></summary>',
+                    '<summary><span class="bmr-helper-title">↻ 重算</span><span class="bmr-helper-action">展開估算</span></summary>',
                     '<button id="closeBmrHelper" class="bmr-helper-close" type="button" aria-label="取消並收合 BMR 估算">×</button>',
                     '<div class="bmr-helper-body">',
                     '<div class="form-grid">',
@@ -1574,6 +1649,7 @@
                     '</div>',
                 '</details>',
               '</div>',
+              '<input id="bmr" type="number" inputmode="decimal" min="500" max="5000" value="' + escapeAttr(MEMBER.bmr || '') + '" placeholder="例如 1334">',
               '<span class="bmr-inline-hint">用來估算 TDEE，不會顯示在群組排行。</span>',
             '</div>',
           '</div>',
@@ -1597,7 +1673,6 @@
         '</section>',
         '<section class="section meal-entry-section">',
           '<h2 class="section-title">🍽️ 記錄這一餐</h2>',
-          '<div id="mealTabs" class="meal-tabs" role="tablist" aria-label="選擇餐別"></div>',
           '<div class="food-entry-actions primary-entry-actions" aria-label="選擇記錄方式">',
             '<button id="cameraCaptureButton" class="entry-mode-button active" type="button" aria-controls="photoEntryPanel">📷 直接拍照</button>',
             '<button id="uploadPhotoButton" class="entry-mode-button" type="button" aria-controls="photoEntryPanel">🖼️ 上傳照片</button>',
@@ -1613,6 +1688,9 @@
               '<div id="aiResult" class="ai-result" hidden></div>',
             '</div>',
           '</div>',
+          '<div id="mealTabs" class="meal-tabs" role="tablist" aria-label="選擇要加入的餐別"></div>',
+          '<p class="meal-auto-hint">先拍照或挑選食物，辨識完成後再點餐別，最後按確認加入。</p>',
+          '<div id="pendingFoodPanel" class="pending-food-panel" hidden></div>',
           '<details id="frequentFoodDetails" class="frequent-food-box">',
             '<summary class="frequent-food-summary"><strong>⭐ 常吃的食物</strong><span>可快速加入（依個人使用紀錄更新）</span></summary>',
             '<div id="frequentFoodGrid" class="food-grid frequent-food-grid"></div>',
@@ -1684,6 +1762,7 @@
       bindKeyboardAvoidance();
       updatePublicSettingsSummary();
       renderMealTabs();
+      renderPendingFoodQueue();
       renderFrequentFoods();
       renderEntryMode();
       renderExerciseRecords();
@@ -2088,24 +2167,33 @@
 
     function renderMealTabs() {
       const root = document.getElementById('mealTabs');
+      if (!root) return;
       root.innerHTML = '';
+      const hasPending = state.pendingAiItems.length > 0 || state.pendingFoodItems.length > 0;
+      const selectedMeal = hasPending
+        ? (state.pendingAiItems.length ? state.pendingAiMeal : state.pendingFoodMeal)
+        : state.activeMeal;
       Object.entries(mealLabels).forEach(([key, label]) => {
         const done = mealHasItems(key);
         const button = el(
           'button',
-          `pill${state.activeMeal === key ? ' active' : ''}${done ? ' done' : ''}`,
+          `pill${selectedMeal === key ? ' active' : ''}${done ? ' done' : ''}`,
           `${done ? '✅ ' : ''}${label}`
         );
         button.type = 'button';
         button.setAttribute('role', 'tab');
-        button.setAttribute('aria-selected', String(state.activeMeal === key));
+        button.setAttribute('aria-selected', String(selectedMeal === key));
         button.addEventListener('click', () => {
-          state.activeMeal = key;
+          if (state.pendingAiItems.length) state.pendingAiMeal = key;
+          else if (state.pendingFoodItems.length) state.pendingFoodMeal = key;
+          else state.activeMeal = key;
           renderMealTabs();
           renderFrequentFoods();
           if (state.foodLibraryReady) renderFoods();
           renderSelected();
           updateCameraMealLabel();
+          renderPendingFoodQueue();
+          updatePendingAiSummary();
         });
         root.append(button);
       });
@@ -2113,6 +2201,12 @@
       const selectedTitle = document.getElementById('selectedTitle');
       if (selectedTitle) {
         selectedTitle.textContent = `${mealLabels[state.activeMeal]}已選${mealHasItems(state.activeMeal) ? ' ✅' : ''}`;
+      }
+      const mealHint = document.querySelector('.meal-auto-hint');
+      if (mealHint) {
+        mealHint.textContent = hasPending
+          ? `待加入${mealLabels[selectedMeal] || '餐別'}：請確認餐別後再加入紀錄`
+          : `目前檢視：${mealLabels[state.activeMeal]}・先選食物或拍照，再指定餐別`;
       }
     }
 
@@ -2132,6 +2226,124 @@
       if (addCustomButton) addCustomButton.textContent = `＋ 加入${mealLabels[state.activeMeal]}`;
     }
 
+    function queuePendingFood(food, quantity) {
+      if (!food || !food.id) return;
+      if (!state.pendingFoodMeal) state.pendingFoodMeal = state.activeMeal;
+      const existing = state.pendingFoodItems.find(item => item.foodId === String(food.id));
+      if (existing) existing.quantity += Math.max(1, Number(quantity || 1));
+      else state.pendingFoodItems.push({ foodId: String(food.id), food, quantity: Math.max(1, Number(quantity || 1)) });
+      renderMealTabs();
+      renderPendingFoodQueue();
+      renderFrequentFoods();
+      if (state.foodLibraryReady) renderFoods();
+      showToast(`已暫存「${food.name}」，請選餐別後加入。`);
+    }
+
+    function queuePendingCustomFood(food) {
+      if (!food || !food.name || !Number(food.kcal)) return;
+      if (!state.pendingFoodMeal) state.pendingFoodMeal = state.activeMeal;
+      state.pendingFoodItems.push({
+        foodId: '',
+        quantity: 1,
+        customFood: Object.assign({}, food),
+      });
+      renderMealTabs();
+      renderPendingFoodQueue();
+      showToast(`已暫存「${food.name}」，請選餐別後加入。`);
+    }
+
+    function pendingFoodQuantity(foodId) {
+      return state.pendingFoodItems
+        .filter(item => String(item.foodId || '') === String(foodId))
+        .reduce((sum, item) => sum + Math.max(0, Number(item.quantity || 0)), 0);
+    }
+
+    function renderPendingFoodQueue() {
+      const panel = document.getElementById('pendingFoodPanel');
+      if (!panel) return;
+      panel.innerHTML = '';
+      panel.hidden = !state.pendingFoodItems.length;
+      if (!state.pendingFoodItems.length) return;
+      const heading = el('div', 'pending-food-heading');
+      heading.append(el('strong', '', `待加入 ${state.pendingFoodItems.length} 項食物`));
+      heading.append(el('span', '', `目前餐別：${mealLabels[state.pendingFoodMeal] || '請選擇'}`));
+      panel.append(heading);
+      const list = el('div', 'pending-food-list');
+      state.pendingFoodItems.forEach((item, index) => {
+        const food = item.customFood || item.food || FOOD_BY_ID[item.foodId];
+        if (!food) return;
+        const row = el('div', 'pending-food-row');
+        row.append(el('span', '', `${food.emoji || '🍽️'} ${food.name}`));
+        row.append(el('small', '', item.customFood ? `${food.kcal} kcal` : `${food.kcal} kcal × ${item.quantity}`));
+        const remove = el('button', 'danger-small', '移除');
+        remove.type = 'button';
+        remove.addEventListener('click', () => {
+          state.pendingFoodItems.splice(index, 1);
+          if (!state.pendingFoodItems.length) state.pendingFoodMeal = '';
+          renderMealTabs();
+          renderPendingFoodQueue();
+        });
+        row.append(remove);
+        list.append(row);
+      });
+      panel.append(list);
+      const actions = el('div', 'pending-food-actions');
+      const confirm = el('button', 'secondary', `確認加入${mealLabels[state.pendingFoodMeal] || '指定餐別'}`);
+      confirm.type = 'button';
+      confirm.addEventListener('click', confirmPendingFoodItems);
+      const cancel = el('button', 'danger-small', '清除暫存');
+      cancel.type = 'button';
+      cancel.addEventListener('click', () => {
+        state.pendingFoodItems = [];
+        state.pendingFoodMeal = '';
+        renderMealTabs();
+        renderPendingFoodQueue();
+      });
+      actions.append(confirm, cancel);
+      panel.append(actions);
+    }
+
+    function confirmPendingFoodItems() {
+      const mealKey = state.pendingFoodMeal;
+      if (!mealLabels[mealKey]) {
+        showToast('請先點選要記錄的餐別。');
+        return;
+      }
+      state.pendingFoodItems.forEach(item => {
+        if (item.customFood) {
+          const food = item.customFood;
+          state.aiMeals[mealKey].push({
+            id: `manual_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            source: 'manual',
+            name: food.name,
+            portion: food.portion || '自行輸入',
+            amount: 0, baseAmount: 0, unit: 'g',
+            baseCalories: Math.round(Number(food.kcal)),
+            baseLow: Math.round(Number(food.kcal)), baseHigh: Math.round(Number(food.kcal)),
+            grams: 0, calories: Math.round(Number(food.kcal)),
+            low: Math.round(Number(food.kcal)), high: Math.round(Number(food.kcal)),
+            confidence: '', notes: '從暫存清單加入',
+          });
+          return;
+        }
+        const foodId = String(item.foodId || '');
+        if (!foodId) return;
+        state.meals[mealKey][foodId] = (state.meals[mealKey][foodId] || 0) + Math.max(1, Number(item.quantity || 1));
+        rememberFoodUse(foodId);
+      });
+      state.activeMeal = mealKey;
+      state.pendingFoodItems = [];
+      state.pendingFoodMeal = '';
+      renderMealTabs();
+      renderPendingFoodQueue();
+      renderFrequentFoods();
+      if (state.foodLibraryReady) renderFoods();
+      renderSelected();
+      updateTotals();
+      markRecordChanged();
+      showToast(`已加入${mealLabels[mealKey]}。`);
+    }
+
     function addCustomFood() {
       const nameInput = document.getElementById('customFoodName');
       const kcalInput = document.getElementById('customFoodKcal');
@@ -2141,34 +2353,11 @@
         kcalInput.focus();
         return;
       }
-      const mealKey = state.activeMeal;
-      const fallbackIndex = (state.aiMeals[mealKey] || []).filter(item => item.source === 'manual').length + 1;
-      const name = nameInput.value.trim() || `${mealLabels[mealKey]}自訂食物 ${fallbackIndex}`;
-      state.aiMeals[mealKey].push({
-        id: `manual_${Date.now()}_${fallbackIndex}`,
-        source: 'manual',
-        name,
-        portion: '自行輸入',
-        amount: 0,
-        baseAmount: 0,
-        unit: 'g',
-        baseCalories: calories,
-        baseLow: calories,
-        baseHigh: calories,
-        grams: 0,
-        calories,
-        low: calories,
-        high: calories,
-        confidence: '',
-        notes: '',
-      });
+      const fallbackIndex = state.pendingFoodItems.filter(item => item.customFood).length + 1;
+      const name = nameInput.value.trim() || `自訂食物 ${fallbackIndex}`;
+      queuePendingCustomFood({ name, portion: '自行輸入', kcal: calories, emoji: '✍️' });
       nameInput.value = '';
       kcalInput.value = '';
-      renderMealTabs();
-      renderSelected();
-      updateTotals();
-      markRecordChanged();
-      showToast(`已加入${mealLabels[mealKey]}：${name} ${calories} kcal`);
     }
 
     // AI 估算會保留「原始估算份量／熱量」作為基準，使用者改 g 或 ml 時按比例重算。
@@ -2278,15 +2467,12 @@
               notes: item.notes || '',
             }));
             if (recognizedItems.length) {
-              // 分析成功後直接加入目前餐別，省略「確認加入」中間步驟，
-              // 讓使用者立刻在下方調整份量、熱量或刪除項目。
-              state.aiMeals[targetMeal].push(...recognizedItems);
-              state.activeMeal = targetMeal;
-              renderMealTabs();
-              renderSelected();
-              updateTotals();
-              markRecordChanged();
-              setAnalyzing(false, `✅ 已加入${mealLabels[targetMeal]}，可直接調整份量。`);
+              // 先暫存辨識結果，讓使用者確認餐別後再寫入正式紀錄。
+              // 這可避免使用者在午餐／晚餐拍照時誤記到早餐。
+              state.pendingAiItems = recognizedItems;
+              state.pendingAiMeal = targetMeal;
+              renderAiReview(result);
+              setAnalyzing(false, `✅ 分析完成，請確認要記錄在${mealLabels[targetMeal]}。`);
             } else {
               setAnalyzing(false, `沒有辨識到食物，請換一張清楚的照片。`);
             }
@@ -2404,6 +2590,7 @@
         details.append(row);
       });
       root.append(details);
+      root.append(el('p', 'ai-meal-prompt', '請點下方餐別選擇要放入早餐、午餐、晚餐、宵夜或點心，再確認加入。'));
 
       const actions = el('div', 'ai-actions');
       const confirm = el('button', 'secondary');
@@ -2415,6 +2602,7 @@
       retry.addEventListener('click', () => document.getElementById('foodPhotoCamera').click());
       actions.append(confirm, retry);
       root.append(actions);
+      renderMealTabs();
       updatePendingAiSummary();
     }
 
@@ -2441,6 +2629,10 @@
 
     function confirmAiItems() {
       const mealKey = state.pendingAiMeal;
+      if (!mealLabels[mealKey] || !state.aiMeals[mealKey]) {
+        showToast('請先選擇要記錄的餐別。');
+        return;
+      }
       const validItems = state.pendingAiItems
         .filter(item => item.name.trim() && Number(item.calories) > 0)
         .map(item => Object.assign({}, item, { calories: Math.round(Number(item.calories)) }));
@@ -2519,7 +2711,8 @@
       }
       foods.forEach(food => {
         const quantity = Number(selected[food.id] || 0);
-        const card = el('button', `food-card${quantity ? ' selected' : ''}`);
+        const shownQuantity = quantity + pendingFoodQuantity(food.id);
+        const card = el('button', `food-card${shownQuantity ? ' selected' : ''}`);
         card.type = 'button';
         const image = el('div', 'food-image');
         if (food.imageUrl) {
@@ -2534,7 +2727,7 @@
         card.append(el('span', 'food-name', food.name));
         card.append(el('span', 'food-meta', food.portion));
         card.append(el('span', 'food-kcal', `${food.kcal} kcal`));
-        card.append(el('span', 'badge', `×${quantity}`));
+        card.append(el('span', 'badge', `×${shownQuantity}`));
         card.addEventListener('click', () => {
           if (food.isManualFrequent) addManualFrequentFoodToActiveMeal(food);
           else addFoodToActiveMeal(food);
@@ -2545,43 +2738,17 @@
 
     function addManualFrequentFoodToActiveMeal(food) {
       if (!food || !food.name || !Number(food.kcal)) return;
-      const mealKey = state.activeMeal;
-      const fallbackIndex = (state.aiMeals[mealKey] || []).filter(item => item.source === 'manual').length + 1;
-      state.aiMeals[mealKey].push({
-        id: `manual_frequent_${Date.now()}_${fallbackIndex}`,
-        source: 'manual',
+      queuePendingCustomFood({
         name: food.name,
         portion: food.portion || '自行輸入',
-        amount: 0,
-        baseAmount: 0,
-        unit: 'g',
-        baseCalories: Math.round(Number(food.kcal)),
-        baseLow: Math.round(Number(food.kcal)),
-        baseHigh: Math.round(Number(food.kcal)),
-        grams: 0,
-        calories: Math.round(Number(food.kcal)),
-        low: Math.round(Number(food.kcal)),
-        high: Math.round(Number(food.kcal)),
-        confidence: '',
-        notes: '從常吃食物快速加入',
+        kcal: Math.round(Number(food.kcal)),
+        emoji: food.emoji || '✍️',
       });
-      renderMealTabs();
-      renderSelected();
-      updateTotals();
-      markRecordChanged();
     }
 
     function addFoodToActiveMeal(food) {
       if (!food || !food.id) return;
-      const selected = state.meals[state.activeMeal];
-      selected[food.id] = (selected[food.id] || 0) + 1;
-      rememberFoodUse(food.id);
-      renderFrequentFoods();
-      refreshFoodCard(food.id);
-      renderMealTabs();
-      renderSelected();
-      updateTotals();
-      markRecordChanged();
+      queuePendingFood(food, 1);
     }
 
     function toggleFoodLibrary() {
@@ -2636,7 +2803,8 @@
 
       foods.forEach(food => {
         const quantity = selected[food.id] || 0;
-        const card = el('button', `food-card${quantity ? ' selected' : ''}`);
+        const shownQuantity = Number(quantity) + pendingFoodQuantity(food.id);
+        const card = el('button', `food-card${shownQuantity ? ' selected' : ''}`);
         card.type = 'button';
         const image = el('div', 'food-image');
         if (food.imageUrl) {
@@ -2652,7 +2820,7 @@
         card.append(el('span', 'food-name', food.name));
         card.append(el('span', 'food-meta', food.portion));
         card.append(el('span', 'food-kcal', `${food.kcal} kcal`));
-        card.append(el('span', 'badge', `×${quantity}`));
+        card.append(el('span', 'badge', `×${shownQuantity}`));
         card.addEventListener('click', () => addFoodToActiveMeal(food));
         foodCardNodes[food.id] = card;
         root.append(card);
@@ -2729,7 +2897,38 @@
               updateTotals();
               markRecordChanged();
             });
-            detailBody.append(detailMeta);
+            const fromMeal = state.activeMeal;
+            const moveRow = el('label', 'meal-move-row', '移到其他餐');
+            const moveSelect = document.createElement('select');
+            moveSelect.className = 'meal-move-select';
+            moveSelect.setAttribute('aria-label', `${item.name}移到其他餐`);
+            const keepOption = document.createElement('option');
+            keepOption.value = '';
+            keepOption.textContent = '維持目前餐別';
+            moveSelect.append(keepOption);
+            Object.entries(mealLabels).forEach(([key, label]) => {
+              if (key === fromMeal) return;
+              const option = document.createElement('option');
+              option.value = key;
+              option.textContent = `移到${label}`;
+              moveSelect.append(option);
+            });
+            moveSelect.addEventListener('change', event => {
+              const targetMeal = event.target.value;
+              if (!targetMeal || targetMeal === fromMeal) return;
+              const sourceItems = state.aiMeals[fromMeal] || [];
+              const moved = sourceItems.splice(index, 1)[0];
+              if (!moved) return;
+              state.aiMeals[targetMeal].push(moved);
+              state.activeMeal = targetMeal;
+              renderMealTabs();
+              renderSelected();
+              updateTotals();
+              markRecordChanged(350);
+              showToast(`已將「${moved.name || '這項食物'}」移到${mealLabels[targetMeal]}。`);
+            });
+            moveRow.append(moveSelect);
+            detailBody.append(detailMeta, moveRow);
             details.append(detailBody);
             row.append(details);
           }
