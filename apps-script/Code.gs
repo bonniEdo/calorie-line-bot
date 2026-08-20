@@ -1,3 +1,7 @@
+// 應用程式版本：2026.08.20-43
+// 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
+const APP_BUILD = '2026.08.20-43';
+
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
   // 連結憑證的用途範圍。form 可讀寫今天的紀錄；wall 只能看公開頁與按讚。
@@ -108,9 +112,17 @@ function doGet(e) {
     const historySig = testAccess ? testAccess.sig : String((e && e.parameter && e.parameter.sig) || '');
     const tokenState = inspectAccessToken_(historyUid, historySig, APP.tokenScopes.form);
     const historyTemplate = HtmlService.createTemplateFromFile('History');
-    historyTemplate.historyJson = JSON.stringify(tokenState === 'ok'
+    const historyData = tokenState === 'ok'
       ? getHistoryData_(historyUid, 30)
-      : { valid: false, invalidReason: tokenState });
+      : { valid: false, invalidReason: tokenState };
+    if (tokenState === 'ok') {
+      // 歷史頁是本人表單權限，導覽可安全提供回到打卡與公開紀錄的入口。
+      historyData.nav = {
+        formUrl: getSignedFormUrl_(historyUid),
+        publicWallUrl: getPublicWallUrl_(historyUid),
+      };
+    }
+    historyTemplate.historyJson = JSON.stringify(historyData);
     return historyTemplate.evaluate()
       .setTitle('卡路里歷史紀錄')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
@@ -123,6 +135,7 @@ function doGet(e) {
   const tokenState = inspectAccessToken_(uid, sig, APP.tokenScopes.form);
   const valid = tokenState === 'ok';
   const member = valid ? getMemberById_(uid) : null;
+  const waterSettings = valid ? getWaterSettings_(uid) : { enabled: false, goalMl: 2000 };
   const foods = valid ? getFoods_() : [];
   const frequentFoods = valid ? getFrequentFoods_(uid, foods, 4) : [];
   const recordDates = valid ? allowedRecordDates_().map((date, index) => ({
@@ -144,6 +157,7 @@ function doGet(e) {
     today: today_(),
     recordDates,
     member: member || {},
+    waterSettings,
     foods,
     frequentFoods,
     todayLog: valid ? (dailyLogs[today_()] || null) : null,
@@ -535,6 +549,15 @@ function saveDailyLog(payload) {
       ? Boolean(member.defaultPublishFoodDetails)
       : Boolean(payload.publishFoodDetails)
   );
+  const storedWaterSettings = getWaterSettings_(userId);
+  const waterEnabled = payload.waterEnabled === undefined
+    ? Boolean(storedWaterSettings.enabled)
+    : Boolean(payload.waterEnabled);
+  const waterGoalMl = Math.round(numberInRange_(
+    payload.waterGoalMl === undefined ? storedWaterSettings.goalMl : payload.waterGoalMl,
+    500,
+    10000,
+  )) || 2000;
   const memberChanged = displayName !== member.name
     || (finalBmr && finalBmr !== Number(member.bmr || 0))
     || (finalWeightKg && finalWeightKg !== Number(member.weightKg || 0))
@@ -627,7 +650,9 @@ function saveDailyLog(payload) {
     });
   }
   const totalIntake = mealKeys.reduce((sum, key) => sum + mealTotals[key], 0);
-  const waterMl = Math.round(numberInRange_(payload.waterMl, 0, 10000));
+  const waterMl = waterEnabled
+    ? Math.round(numberInRange_(payload.waterMl, 0, 10000))
+    : 0;
   const exerciseRecords = (Array.isArray(payload.exerciseRecords) ? payload.exerciseRecords : [])
     .slice(0, 20)
     .map(record => ({
@@ -690,6 +715,7 @@ function saveDailyLog(payload) {
   lock.waitLock(5000);
   try {
     if (pendingMemberUpdate) upsertMember_(pendingMemberUpdate);
+    saveWaterSettings_(userId, waterEnabled, waterGoalMl);
     upsertDailyRow_(recordDate, userId, row);
     // 今日紀錄會影響「常吃的食物」統計，儲存後立即清除快捷區快取，
     // 避免使用者關閉頁面重開時還看到儲存前的四個預設項目。
@@ -705,6 +731,9 @@ function saveDailyLog(payload) {
     estimatedBurn,
     estimatedDeficit,
     hasBmr: Boolean(finalBmr),
+    waterEnabled,
+    waterGoalMl,
+    waterMl,
     isComplete,
     isPublic,
     publishFoodDetails,
@@ -1213,6 +1242,12 @@ function getPublicWallData_(viewerId, viewerSignature) {
     generatedAt: Utilities.formatDate(new Date(), APP.timezone, 'yyyy-MM-dd HH:mm'),
     records,
     streaks,
+    // 公開頁從本人 LINE 連結開啟時，提供同一位使用者的兩個入口。
+    // 沒有有效觀看者憑證時不輸出私人連結，避免公開頁被直接猜網址時洩漏資料。
+    nav: viewerValid && viewerMember ? {
+      formUrl: getSignedFormUrl_(viewerId),
+      historyUrl: getHistoryUrl_(viewerId),
+    } : {},
     viewer: {
       canLike: viewerValid && Boolean(viewerMember),
       uid: viewerValid ? viewerId : '',
@@ -2299,6 +2334,37 @@ function getMemberById_(userId) {
   const member = getMembers_().find(item => item.userId === userId) || null;
   if (member) cache.put(cacheKey, JSON.stringify(member), 120);
   return member;
+}
+
+/** 個人喝水偏好不放進群組排行；只用指令碼屬性保存是否啟用與每日目標。 */
+function getWaterSettings_(userId) {
+  userId = String(userId || '');
+  const fallback = { enabled: false, goalMl: 2000 };
+  if (!userId) return fallback;
+  const raw = PropertiesService.getScriptProperties().getProperty(`WATER_SETTINGS_${userId}`);
+  if (!raw) return fallback;
+  try {
+    const parsed = JSON.parse(raw) || {};
+    return {
+      enabled: Boolean(parsed.enabled),
+      goalMl: Math.round(numberInRange_(parsed.goalMl, 500, 10000)) || 2000,
+    };
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function saveWaterSettings_(userId, enabled, goalMl) {
+  userId = String(userId || '');
+  if (!userId) return;
+  const settings = {
+    enabled: Boolean(enabled),
+    goalMl: Math.round(numberInRange_(goalMl, 500, 10000)) || 2000,
+  };
+  PropertiesService.getScriptProperties().setProperty(
+    `WATER_SETTINGS_${userId}`,
+    JSON.stringify(settings),
+  );
 }
 
 function upsertMember_(data) {
