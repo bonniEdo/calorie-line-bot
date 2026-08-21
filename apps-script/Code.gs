@@ -1,6 +1,6 @@
-// 應用程式版本：2026.08.20-64
+// 應用程式版本：2026.08.21-65
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.20-64';
+const APP_BUILD = '2026.08.21-65';
 
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
@@ -78,6 +78,7 @@ function setupProject() {
   setConfig_('LAST_REMINDER_DATE', getConfig_('LAST_REMINDER_DATE') || '', '舊版提醒紀錄（保留相容）');
   setConfig_('LAST_REMINDER_SLOT', getConfig_('LAST_REMINDER_SLOT') || '', '避免同一時段重複提醒');
   setConfig_('LAST_RANKING_DATE', getConfig_('LAST_RANKING_DATE') || '', '避免同一天重複發送排行榜');
+  setConfig_('LAST_PERSONAL_RANKING_SENT_JSON', getConfig_('LAST_PERSONAL_RANKING_SENT_JSON') || '', '09:00 個人結算發送進度');
   setConfig_('LAST_FINALIZED_DATE', getConfig_('LAST_FINALIZED_DATE') || '', '避免同一天重複產生午夜結算');
   setConfig_('PENDING_RANKING_DATE', getConfig_('PENDING_RANKING_DATE') || '', '午夜已結算、等待早上發送的日期');
   setConfig_('PENDING_RANKING_TEXT', getConfig_('PENDING_RANKING_TEXT') || '', '午夜保存的排行榜內容');
@@ -836,6 +837,10 @@ function sendMorningJobsAt0900() {
   const result = { ok: true };
   try {
     result.ranking = sendPreviousDayRankingAt0900();
+    // 群組推送失敗時仍要繼續執行個人通知；不要讓單一群組卡住整個早晨流程。
+    if (result.ranking && result.ranking.ok === false) {
+      result.rankingError = result.ranking.error || '群組結算部分推送失敗';
+    }
   } catch (error) {
     result.rankingError = error && error.message ? error.message : String(error);
   }
@@ -977,7 +982,10 @@ function sendPreviousDayRankingAt0900() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return { ok: true, skipped: 'another_run_active' };
   try {
-    if (getConfig_('LAST_RANKING_DATE') === expectedDate) return { ok: true, skipped: 'already_sent' };
+    const rankingAlreadySent = getConfig_('LAST_RANKING_DATE') === expectedDate;
+    const personalProgress = parseJsonObject_(getConfig_('LAST_PERSONAL_RANKING_SENT_JSON'));
+    const personalAlreadySent = personalProgress.date === expectedDate && personalProgress.complete === true;
+    if (rankingAlreadySent && personalAlreadySent) return { ok: true, skipped: 'already_sent' };
     const groups = getEnabledGroups_();
 
     const pending = parseJsonObject_(getConfig_('PENDING_GROUP_RANKINGS_JSON'));
@@ -1015,11 +1023,28 @@ function sendPreviousDayRankingAt0900() {
       }
     });
 
-    if (failed.length) {
-      throw new Error(`部分群組排行榜推播失敗：${failed.join(', ')}`);
-    }
     // 沒有任何已啟用群組的好友，改由官方帳號私訊自己的前一天摘要。
+    // 即使某個群組推送失敗，也必須先完成個人通知，避免沒有群組的好友完全收不到訊息。
     const personal = sendStandalonePersonalRankingAt0900_(expectedDate);
+
+    if (failed.length || personal.failed) {
+      const errors = [];
+      if (failed.length) errors.push(`群組排行榜：${failed.join(', ')}`);
+      if (personal.failed) errors.push(`個人結算失敗 ${personal.failed} 人`);
+      console.warn(`09:00 通知部分失敗，但流程已繼續：${errors.join('；')}`);
+      return {
+        ok: false,
+        error: errors.join('；'),
+        date: expectedDate,
+        sent,
+        groups: groups.length,
+        failedGroups: failed,
+        personalSent: personal.sent,
+        personalFailed: personal.failed,
+        usedMidnightSnapshot: pending.date === expectedDate,
+      };
+    }
+
     setConfig_('LAST_RANKING_DATE', expectedDate, '避免同一天重複發送排行榜');
     setConfig_('PENDING_RANKING_DATE', '', '午夜已結算、等待早上發送的日期');
     setConfig_('PENDING_RANKING_TEXT', '', '午夜保存的排行榜內容');
@@ -1055,17 +1080,45 @@ function sendStandalonePersonalRankingAt0900_(date) {
     && getPersonalReminderSettings_(member).morning
     && !activeGroupUserIds.has(member.userId)
   ));
-  if (!members.length) return { sent: 0, failed: 0 };
+  const progress = parseJsonObject_(getConfig_('LAST_PERSONAL_RANKING_SENT_JSON'));
+  const sentUserIds = new Set(
+    progress.date === date && Array.isArray(progress.userIds)
+      ? progress.userIds.map(String)
+      : []
+  );
+  if (!members.length) {
+    setConfig_(
+      'LAST_PERSONAL_RANKING_SENT_JSON',
+      JSON.stringify({ date, userIds: Array.from(sentUserIds), complete: true }),
+      '09:00 個人結算發送進度'
+    );
+    return { sent: 0, failed: 0, skipped: 0, complete: true };
+  }
 
   const logs = new Map(getLogsForDate_(date).map(log => [log.userId, log]));
   let sent = 0;
   let failed = 0;
+  let skipped = 0;
   members.forEach(member => {
+    if (sentUserIds.has(String(member.userId))) {
+      skipped += 1;
+      return;
+    }
     const log = logs.get(member.userId) || null;
-    if (pushMessage_(member.userId, personalRankingMessages_(date, member, log))) sent += 1;
-    else failed += 1;
+    if (pushMessage_(member.userId, personalRankingMessages_(date, member, log))) {
+      sent += 1;
+      sentUserIds.add(String(member.userId));
+    } else {
+      failed += 1;
+    }
   });
-  return { sent, failed };
+  const complete = failed === 0 && members.every(member => sentUserIds.has(String(member.userId)));
+  setConfig_(
+    'LAST_PERSONAL_RANKING_SENT_JSON',
+    JSON.stringify({ date, userIds: Array.from(sentUserIds), complete }),
+    '09:00 個人結算發送進度'
+  );
+  return { sent, failed, skipped, complete };
 }
 
 function personalRankingMessages_(date, member, log) {
@@ -1127,9 +1180,7 @@ function installReminderTrigger() {
     .timeBased().atHour(18).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
   ScriptApp.newTrigger('finalizePreviousDayAtMidnight')
     .timeBased().atHour(0).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
-  ScriptApp.newTrigger('sendPreviousDayRankingAt0900')
-    .timeBased().atHour(9).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
-  return { ok: true, message: '已建立排程：09:00、12:00、18:00、23:00／23:30 個人提醒，00:00 結算，隔天 09:00 群組公布。' };
+  return { ok: true, message: '已建立排程：09:00 單一總控（先群組結算、再個人通知）、12:00、18:00、23:00／23:30 個人提醒，00:00 結算。' };
 }
 
 function buildTodayRanking_(groupId) {
