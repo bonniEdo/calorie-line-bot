@@ -1,6 +1,6 @@
-// 應用程式版本：2026.08.21-68
+// 應用程式版本：2026.08.22-71
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.21-70';
+const APP_BUILD = '2026.08.22-71';
 
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
@@ -210,7 +210,7 @@ function enableTestWebAccess() {
   const props = PropertiesService.getScriptProperties();
   props.setProperty('TEST_MODE', 'true');
   props.setProperty('TEST_USER_ID', String(member.userId));
-  const baseUrl = getWebAppBaseUrl_();
+  const baseUrl = ScriptApp.getService().getUrl();
   return {
     ok: true,
     user: member.name || member.userId,
@@ -442,7 +442,7 @@ function handleLineEvent_(event) {
       reminderEvening: true,
       reminderLate: true,
     });
-    replyMessage_(event.replyToken, [{ type: 'text', text: '已開啟全部個人提醒 🔔\n09:00、12:00、18:00、23:00／23:30 會依設定提醒。' }]);
+    replyMessage_(event.replyToken, [{ type: 'text', text: '已開啟全部個人提醒 🔔\n09:00、12:00、18:00、23:00 會依設定提醒。' }]);
     return;
   }
 
@@ -838,7 +838,7 @@ function getDailyFormForDate(payload) {
   };
 }
 
-/** 每日分時提醒：09:00、12:00、18:00，以及 23:00／23:30。 */
+/** 每日分時提醒：09:00、12:00、18:00，以及 23:00（微半夜）。 */
 function sendReminderIfDue() {
   const now = new Date();
   const hour = Number(Utilities.formatDate(now, APP.timezone, 'HH'));
@@ -846,7 +846,8 @@ function sendReminderIfDue() {
   if (hour === 9) return sendReminderForSlot_('09:00');
   if (hour === 12) return sendReminderForSlot_('12:00');
   if (hour === 18) return sendReminderForSlot_('18:00');
-  if (hour === 23) return sendReminderForSlot_(minute < 30 ? '23:00' : '23:30');
+  // 23:30 已取消；若每小時總控在 23:00～23:29 執行，只送一次 23:00 提醒。
+  if (hour === 23 && minute < 30) return sendReminderForSlot_('23:00');
   return { ok: true, skipped: 'not_due' };
 }
 
@@ -877,10 +878,6 @@ function sendMorningJobsAt0900() {
 
 function sendReminderAt2300() {
   return sendReminderForSlot_('23:00');
-}
-
-function sendReminderAt2330() {
-  return sendReminderForSlot_('23:30');
 }
 
 function sendReminderForSlot_(slot) {
@@ -926,7 +923,7 @@ function sendReminderForSlot_(slot) {
         text,
         actions: [{
           type: 'uri',
-          label: inProgress ? '繼續打卡!' : '開始打卡!',
+          label: inProgress ? '繼續並完成打卡' : '開始今日打卡',
           uri: getSignedFormUrl_(member.userId),
         }],
       },
@@ -941,7 +938,7 @@ function sendReminderForSlot_(slot) {
   }
 }
 
-/** 四個時段的個人化提醒文案；23:00／23:30 共用「微半夜」開關與文案。 */
+/** 四個時段的個人化提醒文案；23:00 使用「微半夜」開關與文案。 */
 function reminderGreeting_(slot, name) {
   const safeName = cleanText_(name || '小夥伴', 40);
   if (slot === '09:00') return `${safeName}，古咕咕📣起床飲控啦！`;
@@ -1178,10 +1175,23 @@ function sendPreviousDayRankingAt0800() {
   return sendPreviousDayRankingAt0900();
 }
 
+/** 只移除舊版 23:30 觸發器，不影響其他排程。部署新版後可手動執行一次。 */
+function removeReminderAt2330Trigger() {
+  let removed = 0;
+  ScriptApp.getProjectTriggers().forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'sendReminderAt2330') {
+      ScriptApp.deleteTrigger(trigger);
+      removed += 1;
+    }
+  });
+  return { ok: true, removed, message: removed ? '已移除 23:30 提醒排程。' : '找不到 23:30 舊排程，無需處理。' };
+}
+
 function installReminderTrigger() {
   const handlers = [
     'sendReminderIfDue', 'sendRankingIfDue', 'runScheduledJobs',
     'sendReminderAt0900', 'sendMorningJobsAt0900', 'sendReminderAt1200', 'sendReminderAt1800',
+    // 舊版 23:30 觸發器列在清理名單，重新安裝時會一併移除，但不再建立新的。
     'sendReminderAt2300', 'sendReminderAt2330', 'sendFinalRankingAtMidnight',
     'finalizePreviousDayAtMidnight', 'sendPreviousDayRankingAt0800',
     'sendPreviousDayRankingAt0900',
@@ -1192,8 +1202,6 @@ function installReminderTrigger() {
 
   ScriptApp.newTrigger('sendReminderAt2300')
     .timeBased().atHour(23).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
-  ScriptApp.newTrigger('sendReminderAt2330')
-    .timeBased().atHour(23).nearMinute(30).everyDays(1).inTimezone(APP.timezone).create();
   ScriptApp.newTrigger('sendMorningJobsAt0900')
     .timeBased().atHour(9).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
   ScriptApp.newTrigger('sendReminderAt1200')
@@ -1202,7 +1210,7 @@ function installReminderTrigger() {
     .timeBased().atHour(18).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
   ScriptApp.newTrigger('finalizePreviousDayAtMidnight')
     .timeBased().atHour(0).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
-  return { ok: true, message: '已建立排程：09:00 單一總控（先群組結算、再個人通知）、12:00、18:00、23:00／23:30 個人提醒，00:00 結算。' };
+  return { ok: true, message: '已建立排程：09:00 單一總控（先群組結算、再個人通知）、12:00、18:00、23:00 個人提醒，00:00 結算。' };
 }
 
 function buildTodayRanking_(groupId) {
@@ -2966,43 +2974,17 @@ function manualFrequentId_(name) {
   return `manual_frequent_${Utilities.base64EncodeWebSafe(bytes).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24)}`;
 }
 
-/**
- * 取得給使用者的正式 Web App 基底網址。
- *
- * ScriptApp.getService().getUrl() 在編輯器或某些排程情境可能回傳 /dev，
- * 而 /dev 只適合開發者測試，LINE 使用者無法穩定使用。因此正式網址
- * 必須明確放在 Script Properties 的 WEB_APP_URL，且只能是 /exec。
- */
-function getWebAppBaseUrl_() {
-  const configured = String(
-    PropertiesService.getScriptProperties().getProperty('WEB_APP_URL') || ''
-  ).trim().replace(/\/+$/, '');
-
-  if (configured) {
-    if (!/\/exec$/i.test(configured)) {
-      throw new Error('WEB_APP_URL 必須是 /exec 網址，不能是 /dev。');
-    }
-    return configured;
-  }
-
-  const serviceUrl = String(ScriptApp.getService().getUrl() || '')
-    .trim().replace(/\/+$/, '');
-  if (!serviceUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
-  if (/\/dev$/i.test(serviceUrl)) {
-    throw new Error('目前取得的是 /dev，請在指令碼屬性設定 WEB_APP_URL。');
-  }
-  return serviceUrl;
-}
-
 function getSignedFormUrl_(userId) {
-  const baseUrl = getWebAppBaseUrl_();
+  const baseUrl = ScriptApp.getService().getUrl();
+  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
   // token 每次發放都不同，本身就會讓網址唯一，不需要額外的 v= 參數。
   const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
   return `${baseUrl}?uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(token)}`;
 }
 
 function getHistoryUrl_(userId) {
-  const baseUrl = getWebAppBaseUrl_();
+  const baseUrl = ScriptApp.getService().getUrl();
+  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
   userId = String(userId || '');
   if (!userId) return `${baseUrl}?view=history`;
   const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
@@ -3014,7 +2996,8 @@ function getHistoryUrl_(userId) {
  * 拿到的人可以看公開頁、可以按讚，但不能讀寫任何人的打卡紀錄。
  */
 function getPublicWallUrl_(userId) {
-  const baseUrl = getWebAppBaseUrl_();
+  const baseUrl = ScriptApp.getService().getUrl();
+  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
   userId = String(userId || '');
   if (!userId) return `${baseUrl}?view=public`;
   const token = issueAccessToken_(userId, APP.tokenScopes.wall, APP.tokenTtlSeconds.wall);
@@ -3737,9 +3720,4 @@ function safeEqual_(a, b) {
   let diff = 0;
   for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
-}
-function debugFormBaseUrl() {
-  const url = getWebAppBaseUrl_();
-  console.log('排程產生網址基底：' + url);
-  return url;
 }
