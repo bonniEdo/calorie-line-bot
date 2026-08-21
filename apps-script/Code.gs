@@ -97,6 +97,11 @@ function setupProject() {
 /** Apps Script Web App：顯示手機版圖卡選餐頁。 */
 function doGet(e) {
   const startedAt = Date.now();
+  // GitHub Pages 唯讀前端的 API 入口。使用 JSONP 是因為 Apps Script
+  // ContentService 不一定會附上可供任意網域 fetch 的 CORS header。
+  if (String((e && e.parameter && e.parameter.api) || '') === '1') {
+    return handleReadOnlyApi_(e);
+  }
   const view = String((e && e.parameter && e.parameter.view) || '');
   if (view === 'public') {
     const publicUid = String((e && e.parameter && e.parameter.uid) || '');
@@ -189,6 +194,74 @@ function doGet(e) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
   console.log(`打卡頁產生完成：${Date.now() - startedAt} ms`);
   return output;
+}
+
+/**
+ * GitHub Pages 第二階段：唯讀 API。
+ * resource=public  不需要登入即可讀取已主動公開的資料。
+ * resource=history/form 需要 uid + sig（或測試環境的 test=1）。
+ * callback 參數存在時回傳 JSONP，讓靜態頁面可跨網域讀取 Apps Script。
+ */
+function handleReadOnlyApi_(e) {
+  const p = (e && e.parameter) || {};
+  const resource = String(p.resource || 'public').toLowerCase();
+  const callback = String(p.callback || '');
+  try {
+    let payload;
+    if (resource === 'public') {
+      // 公開牆本來就允許匿名觀看；有 wall token 時額外回傳本人導覽與按讚狀態。
+      const viewer = apiViewerCredentials_(e, APP.tokenScopes.wall);
+      payload = { ok: true, data: getPublicWallData_(viewer.uid, viewer.sig, p.date || today_()) };
+    } else if (resource === 'history') {
+      const viewer = apiViewerCredentials_(e, APP.tokenScopes.form);
+      if (!viewer.uid || inspectAccessToken_(viewer.uid, viewer.sig, APP.tokenScopes.form) !== 'ok') {
+        throw new Error(accessTokenErrorMessage_(viewer.state || 'invalid'));
+      }
+      payload = { ok: true, data: getHistoryData_(viewer.uid, p.days || 30) };
+    } else if (resource === 'form') {
+      const viewer = apiViewerCredentials_(e, APP.tokenScopes.form);
+      if (!viewer.uid || inspectAccessToken_(viewer.uid, viewer.sig, APP.tokenScopes.form) !== 'ok') {
+        throw new Error(accessTokenErrorMessage_(viewer.state || 'invalid'));
+      }
+      payload = {
+        ok: true,
+        data: getDailyFormForDate({
+          uid: viewer.uid,
+          sig: viewer.sig,
+          recordDate: p.date || today_(),
+        }),
+      };
+    } else {
+      throw new Error('不支援的 API resource。可用值：public、history、form。');
+    }
+    return apiOutput_(payload, callback);
+  } catch (error) {
+    console.error(`唯讀 API 失敗：${error && error.stack ? error.stack : error}`);
+    return apiOutput_({
+      ok: false,
+      error: cleanText_(error && error.message ? error.message : error, 240),
+    }, callback);
+  }
+}
+
+/** 從 query 取得測試或正式的 uid/sig；測試環境可只帶 test=1。 */
+function apiViewerCredentials_(e, scope) {
+  const p = (e && e.parameter) || {};
+  const testAccess = getTestWebAccess_(e);
+  if (testAccess) return { uid: testAccess.uid, sig: testAccess.sig, state: 'ok' };
+  const uid = String(p.uid || '');
+  const sig = String(p.sig || p.token || '');
+  return { uid, sig, state: inspectAccessToken_(uid, sig, scope) };
+}
+
+/** API 輸出：JSONP callback 僅接受合法 JavaScript 識別字，避免注入。 */
+function apiOutput_(value, callback) {
+  const json = JSON.stringify(value);
+  if (callback && /^[A-Za-z_$][A-Za-z0-9_$]*(?:\.[A-Za-z_$][A-Za-z0-9_$]*)*$/.test(callback)) {
+    return ContentService.createTextOutput(`${callback}(${json});`)
+      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  }
+  return ContentService.createTextOutput(json).setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
@@ -830,11 +903,35 @@ function getDailyFormForDate(payload) {
   if (tokenState !== 'ok') throw new Error(accessTokenErrorMessage_(tokenState));
   const recordDate = validateRecordDate_(payload.recordDate);
   const foods = getFoods_();
+  const log = getDailyFormData_(userId, foods, recordDate);
+  const member = getMemberById_(userId) || {};
   return {
     ok: true,
     date: recordDate,
     isBackfill: recordDate !== today_(),
-    log: getDailyFormData_(userId, foods, recordDate),
+    member: { userId, name: member.name || userId, bmr: Number(member.bmr || 0) },
+    log,
+    summary: readOnlyFormSummary_(log, foods, member),
+  };
+}
+
+/** 給 GitHub Pages 唯讀畫面使用的輕量摘要，不改變原本表單資料格式。 */
+function readOnlyFormSummary_(log, foods, member) {
+  if (!log) return { intake: 0, tdee: Math.round(Number(member.bmr || 0) * 1.2), bmr: Number(member.bmr || 0), exerciseKcal: 0 };
+  const byId = new Map((foods || []).map(food => [String(food.id), Number(food.calories || food.kcal || 0)]));
+  const mealKeys = ['breakfast', 'lunch', 'dinner', 'lateNight', 'snack'];
+  let intake = 0;
+  mealKeys.forEach(key => {
+    (log.meals && log.meals[key] || []).forEach(item => { intake += (byId.get(String(item.id)) || 0) * (Number(item.quantity) || 1); });
+    (log.aiMeals && log.aiMeals[key] || []).forEach(item => { intake += Number(item.calories || 0); });
+  });
+  const bmr = Number(member.bmr || 0);
+  const exerciseKcal = Number(log.exerciseKcal || 0);
+  return {
+    intake: Math.round(intake),
+    bmr: Math.round(bmr),
+    exerciseKcal: Math.round(exerciseKcal),
+    tdee: Math.round(bmr * 1.2 + exerciseKcal),
   };
 }
 

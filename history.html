@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>卡路里歷史｜GitHub Pages</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+</head>
+<body>
+<main class="app">
+  <header class="hero">
+    <div class="eyebrow">HEALTH LOG · HISTORY</div>
+    <h1>📈 卡路里歷史紀錄</h1>
+    <p>前端放在 GitHub Pages，歷史資料仍由 Apps Script 從 Google Sheet 唯讀提供。</p>
+    <div id="summary" class="summary">
+      <div class="summary-card"><strong>—</strong><span>紀錄天數</span></div>
+      <div class="summary-card"><strong>—</strong><span>平均攝取</span></div>
+      <div class="summary-card"><strong>—</strong><span>完成天數</span></div>
+    </div>
+  </header>
+
+  <nav class="nav">
+    <a href="index.html">📝 我要打卡</a>
+    <a href="public.html">🌍 公開紀錄牆</a>
+    <a href="history.html" aria-current="page">📈 卡路里歷史</a>
+  </nav>
+
+  <section class="panel">
+    <div class="panel-head"><h2>讀取歷史資料</h2><span class="badge">唯讀</span></div>
+    <p class="hint">請貼 Apps Script 的正式 <code>/exec</code> 網址與本人打卡連結。測試專案可勾選 test=1。</p>
+    <div class="setup-grid">
+      <label>Apps Script API URL<input id="apiUrl" placeholder="https://script.google.com/macros/s/.../exec"></label>
+      <button class="btn primary" id="saveApi">儲存</button>
+    </div>
+    <div class="setup-grid">
+      <label>本人簽章網址（從 LINE 的打卡連結複製）<input id="signedUrl" placeholder="https://.../exec?uid=...&sig=..."></label>
+      <button class="btn" id="saveCreds">記住憑證</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--ink);"><input id="testMode" type="checkbox" style="width:18px;min-height:18px;margin:0"> 測試環境使用 <code>?test=1</code></label>
+    <div class="toolbar">
+      <label>查詢範圍<select id="days"><option value="7">最近 7 天</option><option value="30" selected>最近 30 天</option><option value="60">最近 60 天</option><option value="90">最近 90 天</option></select></label>
+      <button class="btn green" id="loadHistory">讀取歷史</button>
+    </div>
+    <div id="status" class="status"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>攝取趨勢</h2><span id="rangeLabel" class="badge"></span></div>
+    <div id="chart" class="chart empty">讀取資料後顯示圖表。</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><h2>每日紀錄</h2><span class="badge">已完成日才列入平均</span></div>
+    <div id="records" class="loading">先讀取歷史資料。</div>
+  </section>
+</main>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const api = window.HealthLogApi;
+  let credentials = api.credentialsFromStorage();
+  const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmt = value => Number(value || 0).toLocaleString('zh-TW');
+  const dateText = value => { const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return match ? `${match[2]}/${match[3]}` : String(value || ''); };
+
+  function init() {
+    $('apiUrl').value = api.configuredApiUrl();
+    $('signedUrl').value = credentials.uid && credentials.sig ? `${api.configuredApiUrl()}?uid=${encodeURIComponent(credentials.uid)}&sig=${encodeURIComponent(credentials.sig)}` : '';
+  }
+  function saveApi() {
+    const value = api.saveApiUrl($('apiUrl').value); $('apiUrl').value = value;
+    $('status').textContent = value ? 'API 網址已儲存。' : '請輸入 /exec 網址。';
+    $('status').className = value ? 'status ok' : 'status error';
+  }
+  function saveCreds() {
+    credentials = api.saveCredentials($('signedUrl').value);
+    const ok = credentials.uid && credentials.sig;
+    $('status').textContent = ok ? '簽章憑證已記住。' : '找不到 uid/sig，請貼上完整打卡連結。';
+    $('status').className = ok ? 'status ok' : 'status error';
+  }
+  function points(records, key) {
+    const list = records.slice().reverse();
+    if (!list.length) return '';
+    const values = list.map(item => Number(item[key] || 0));
+    const width = 760, height = 235, left = 42, right = 15, top = 18, bottom = 34;
+    const max = Math.max(1, ...values); const min = Math.min(0, ...values); const span = Math.max(1, max - min);
+    const x = index => list.length === 1 ? (width - left - right) / 2 + left : left + index * (width - left - right) / (list.length - 1);
+    const y = value => top + (max - value) * (height - top - bottom) / span;
+    const path = values.map((value, index) => `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(value).toFixed(1)}`).join(' ');
+    const dots = values.map((value, index) => `<circle class="dot-intake" cx="${x(index).toFixed(1)}" cy="${y(value).toFixed(1)}" r="4"><title>${dateText(list[index].date)}：${fmt(value)} kcal</title></circle>`).join('');
+    const labels = list.map((item, index) => `<text class="chart-axis" x="${x(index).toFixed(1)}" y="${height - 9}" text-anchor="middle">${dateText(item.date)}</text>`).join('');
+    const grid = [0,.5,1].map(ratio => { const value = min + span * ratio; const yy = y(value); return `<line class="chart-grid" x1="${left}" x2="${width-right}" y1="${yy}" y2="${yy}"></line><text class="chart-axis" x="${left-7}" y="${yy+3}" text-anchor="end">${fmt(Math.round(value))}</text>`; }).join('');
+    return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="每日攝取趨勢">${grid}<path class="line-intake" d="${path}"></path>${dots}${labels}</svg><div class="legend"><span><i class="intake"></i>已攝取</span><span><i class="tdee"></i>可攝取總量 TDEE（明細見下方）</span></div>`;
+  }
+  function renderChart(records) {
+    if (!records.length) { $('chart').className = 'chart empty'; $('chart').textContent = '目前沒有歷史紀錄。'; return; }
+    $('chart').className = 'chart'; $('chart').innerHTML = points(records, 'intake');
+  }
+  function waterLabel(item) {
+    if (!item.waterTracked) return '💧 未啟用';
+    const goal = Number(item.waterGoalMl || 0); const current = Number(item.waterMl || 0);
+    return `💧 ${fmt(current)} / ${fmt(goal)} ml`;
+  }
+  function mealDetails(item) {
+    const meals = Array.isArray(item.meals) ? item.meals : [];
+    if (!meals.length) return '尚未記錄餐點';
+    return meals.map(meal => `${esc(meal.label)} ${fmt(meal.kcal)} kcal${meal.names && meal.names.length ? `（${esc(meal.names.join('、'))}）` : ''}`).join(' · ');
+  }
+  function renderRecords(data) {
+    const records = Array.isArray(data.records) ? data.records : [];
+    const summary = data.summary || {};
+    $('summary').innerHTML = `<div class="summary-card"><strong>${fmt(summary.loggedDays)}</strong><span>紀錄天數</span></div><div class="summary-card"><strong>${fmt(summary.averageIntake)} kcal</strong><span>平均攝取</span></div><div class="summary-card"><strong>${fmt(summary.completedDays)}</strong><span>完成天數</span></div>`;
+    $('rangeLabel').textContent = `最近 ${data.days || records.length} 天`;
+    renderChart(records);
+    if (!records.length) { $('records').innerHTML = '<div class="empty">目前沒有歷史紀錄。</div>'; return; }
+    const recent = records.slice(0, 3); const older = records.slice(3);
+    const row = item => `<article class="record"><div class="record-main"><span class="record-date">${dateText(item.date)}</span><div class="record-energy"><strong>${fmt(item.intake)} / ${fmt(item.tdee)} kcal</strong><small>${waterLabel(item)} · 運動 ${fmt(item.exerciseKcal)} kcal</small></div><span class="badge ${item.status === '完成' ? '' : 'progress'}">${esc(item.status)}</span></div><details><summary>查看餐點與運動細項</summary><p>${mealDetails(item)}<br>運動：${esc(item.exerciseName || '尚未記錄')} ${fmt(item.exerciseMinutes)} 分鐘，活動 ${fmt(item.exerciseKcal)} kcal<br>赤字估算：${fmt(item.deficit)} kcal</p></details></article>`;
+    let html = recent.map(row).join('');
+    if (older.length) html += `<details class="panel" style="margin:12px 0 0;padding:12px;background:#fffaf0"><summary style="cursor:pointer;font-weight:900;color:#765c17">查看其餘 ${older.length} 天</summary><div style="margin-top:12px">${older.map(row).join('')}</div></details>`;
+    $('records').innerHTML = html;
+  }
+  async function load() {
+    $('records').innerHTML = '<div class="loading">正在讀取 Apps Script…</div>';
+    $('chart').className = 'chart loading'; $('chart').textContent = '正在整理趨勢…';
+    try {
+      const params = { days: $('days').value };
+      if ($('testMode').checked) params.test = '1'; else Object.assign(params, { uid: credentials.uid, sig: credentials.sig });
+      const result = await api.get('history', params); renderRecords(result.data || {}); $('status').textContent = '歷史資料已更新。'; $('status').className = 'status ok';
+    } catch (error) { $('records').innerHTML = `<div class="empty error">${esc(error.message)}<br><small>確認 API 是 /exec、測試模式已執行 enableTestWebAccess，或簽章連結尚未過期。</small></div>`; $('chart').className = 'chart empty'; $('chart').textContent = '讀取失敗。'; }
+  }
+  $('saveApi').addEventListener('click', saveApi); $('saveCreds').addEventListener('click', saveCreds); $('loadHistory').addEventListener('click', load); init();
+}());
+</script>
+</body>
+</html>

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>公開飲控紀錄｜GitHub Pages</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="config.js"></script>
+  <script src="api.js"></script>
+</head>
+<body>
+<main class="app">
+  <header class="hero">
+    <div class="eyebrow">HEALTH LOG · PUBLIC WALL</div>
+    <h1>🌍 公開飲控紀錄</h1>
+    <p>只顯示主動勾選公開的人；日期、群組與私人資料仍由 Apps Script 控制。</p>
+    <div class="summary" id="summary"><div class="summary-card"><strong>—</strong><span>公開紀錄</span></div><div class="summary-card"><strong>—</strong><span>完成</span></div><div class="summary-card"><strong>—</strong><span>連續排行</span></div></div>
+  </header>
+
+  <nav class="nav"><a href="index.html">📝 我要打卡</a><a href="public.html" aria-current="page">🌍 公開紀錄牆</a><a href="history.html">📈 卡路里歷史</a></nav>
+
+  <section class="panel">
+    <div class="panel-head"><h2>選擇日期</h2><span class="badge">唯讀</span></div>
+    <div class="setup-grid"><label>Apps Script API URL<input id="apiUrl" placeholder="https://script.google.com/macros/s/.../exec"></label><button class="btn primary" id="saveApi">儲存</button></div>
+    <div class="setup-grid"><label>公開牆連結（可選，從 LINE 打卡訊息複製）<input id="signedUrl" placeholder="有連結可顯示本人導覽與按讚狀態"></label><button class="btn" id="saveCreds">記住</button></div>
+    <div class="toolbar"><label>日期<select id="dateSelect"></select></label><button class="btn green" id="loadPublic">讀取公開牆</button></div>
+    <div id="status" class="status-line"></div>
+  </section>
+
+  <section class="panel"><div class="panel-head"><h2 id="wallTitle">公開紀錄</h2><span id="updated" class="badge"></span></div><div id="wallView" class="loading">先設定 API 網址，再讀取資料。</div></section>
+</main>
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const api = window.HealthLogApi;
+  let creds = api.credentialsFromStorage();
+  const today = new Date();
+  const key = date => date.toISOString().slice(0, 10);
+  const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const fmt = value => Number(value || 0).toLocaleString('zh-TW');
+  const dateText = value => { const m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[2]}/${m[3]}` : String(value || ''); };
+  function init() {
+    $('apiUrl').value = api.configuredApiUrl();
+    $('signedUrl').value = creds.uid && creds.sig ? '已儲存本人公開牆憑證' : '';
+    for (let i = 0; i < 30; i += 1) { const d = new Date(today); d.setDate(today.getDate() - i); const option = document.createElement('option'); option.value = key(d); option.textContent = i === 0 ? `今天（${key(d)}）` : i === 1 ? `昨天（${key(d)}）` : `前${i}天（${key(d)}）`; $('dateSelect').appendChild(option); }
+  }
+  function saveApi() { const value = api.saveApiUrl($('apiUrl').value); $('apiUrl').value = value; $('status').textContent = value ? 'API 網址已儲存。' : '請輸入 /exec 網址。'; }
+  function saveCreds() { creds = api.saveCredentials($('signedUrl').value); $('status').textContent = creds.uid && creds.sig ? '已記住簽章連結。' : '請貼上完整的 uid/sig 連結。'; }
+  function mealDetails(item) {
+    const details = Array.isArray(item.mealDetails) ? item.mealDetails : [];
+    if (!details.length) return '';
+    return `<details class="public-detail"><summary>查看食物細項</summary><div>${details.map(meal => `<div class="public-meal"><span>${esc(meal.label)}${meal.names && meal.names.length ? `・${esc(meal.names.join('、'))}` : ''}</span><strong>${fmt(meal.kcal)} kcal</strong></div>`).join('')}</div></details>`;
+  }
+  function render(data) {
+    $('wallTitle').textContent = `${dateText(data.date)} 公開紀錄`;
+    $('updated').textContent = data.generatedAt ? `更新 ${data.generatedAt}` : '';
+    const records = Array.isArray(data.records) ? data.records : [];
+    const streaks = Array.isArray(data.streaks) ? data.streaks : [];
+    const summary = data.summary || {};
+    $('summary').innerHTML = `<div class="summary-card"><strong>${fmt(summary.publicCount)}</strong><span>公開紀錄</span></div><div class="summary-card"><strong>${fmt(summary.completedCount)}</strong><span>已完成</span></div><div class="summary-card"><strong>${fmt(summary.rankingCount)}</strong><span>連續排行</span></div>`;
+    if (!records.length && !streaks.length) { $('wallView').innerHTML = `<div class="empty">${dateText(data.date)} 還沒有公開紀錄。</div>`; return; }
+    let html = '';
+    if (records.length) {
+      html += `<div class="wall-list">${records.map(item => `<article class="wall-card"><div class="wall-card-head"><div><strong>${esc(item.alias || '匿名')}</strong><small>${item.isComplete ? '已完成' : '打卡中'} · ${esc((item.meals || []).join('、') || '尚未填餐')}</small></div><span class="badge">${fmt(item.intake)} / ${fmt(item.tdeeEstimate || item.allowance)} kcal</span></div><div class="wall-meta"><span>運動 ${fmt(item.exerciseKcal)} kcal</span><span>BMR ${fmt(item.bmr)} × 1.2 ＋ 運動</span><span>👍 ${fmt(item.likeCount)}</span></div>${mealDetails(item)}</article>`).join('')}</div>`;
+    } else html += '<div class="empty">這天有人參與公開排行，但還沒有公開餐點紀錄。</div>';
+    html += `<section class="subsection"><h3>📈 公開連續打卡排行</h3>${streaks.map((item, index) => `<div class="rank-row"><span>${index + 1}. ${esc(item.alias || '匿名')}</span><strong>${fmt(item.streak)} 天</strong><span>👍 ${fmt(item.likeCount)}</span></div>`).join('')}</section>`;
+    const nav = data.nav || {};
+    if (nav.formUrl || nav.historyUrl) html += `<div class="page-nav inline-nav">${nav.formUrl ? `<a class="page-nav-primary" target="_blank" href="${esc(nav.formUrl)}">📝 我要打卡</a>` : ''}${nav.historyUrl ? `<a target="_blank" href="${esc(nav.historyUrl)}">📈 我的歷史</a>` : ''}</div>`;
+    $('wallView').innerHTML = html;
+  }
+  async function load() {
+    $('wallView').innerHTML = '<div class="loading">正在讀取公開紀錄…</div>';
+    try { const params = { date: $('dateSelect').value }; if (creds.uid && creds.sig) Object.assign(params, { uid: creds.uid, sig: creds.sig }); const result = await api.get('public', params); render(result.data || {}); $('status').textContent = '已更新。'; }
+    catch (error) { $('wallView').innerHTML = `<div class="empty error">${esc(error.message)}<br><small>確認 Apps Script 已部署含 API 的新版本。</small></div>`; }
+  }
+  $('saveApi').addEventListener('click', saveApi); $('saveCreds').addEventListener('click', saveCreds); $('loadPublic').addEventListener('click', load); init();
+}());
+</script>
+</body>
+</html>

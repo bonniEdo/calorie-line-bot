@@ -1,5 +1,5 @@
-// GitHub Pages 測試站設定：填入「測試」Apps Script Web App 的 /exec 網址即可。
-// 也可以直接在網頁輸入並儲存，這裡留空即可。
-window.TEST_CONFIG = Object.freeze({
-  appsScriptUrl: ''
-});
+// GitHub Pages 測試設定。也可以直接在頁面上輸入並儲存，會記在目前瀏覽器。
+window.HEALTH_LOG_CONFIG = Object.assign({
+  // 填 Apps Script Web App 的 /exec，不要填 /dev。
+  apiUrl: 'https://script.google.com/macros/s/AKfycbyzL8sXU-DI0YIQg_nSpZD1QWvCHdUsFnRHsGLQurTzdqPZIafHinr9BW_0Ff3aBwI5/exec',
+}, window.HEALTH_LOG_CONFIG || {});
