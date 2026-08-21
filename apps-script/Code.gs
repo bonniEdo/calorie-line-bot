@@ -1,6 +1,6 @@
-// 應用程式版本：2026.08.21-65
+// 應用程式版本：2026.08.21-68
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.21-65';
+const APP_BUILD = '2026.08.21-70';
 
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
@@ -101,9 +101,22 @@ function doGet(e) {
   if (view === 'public') {
     const publicUid = String((e && e.parameter && e.parameter.uid) || '');
     const publicSig = String((e && e.parameter && e.parameter.sig) || '');
+    const publicDate = validatePublicWallDate_((e && e.parameter && e.parameter.date) || today_());
     const publicTemplate = HtmlService.createTemplateFromFile('Public');
     // 身分只在 getPublicWallData_ 驗證一次，避免公開頁每次重複計算簽章。
-    publicTemplate.publicJson = JSON.stringify(getPublicWallData_(publicUid, publicSig));
+    try {
+      publicTemplate.publicJson = JSON.stringify(getPublicWallData_(publicUid, publicSig, publicDate));
+    } catch (error) {
+      // 公開牆切換日期時不要讓 Apps Script 直接吐白頁；把可讀的錯誤交給前端卡片顯示。
+      console.error(`公開牆載入失敗（${publicDate}）：${error && error.stack ? error.stack : error}`);
+      publicTemplate.publicJson = JSON.stringify({
+        error: `公開牆載入失敗：${cleanText_(error && error.message ? error.message : error, 180)}`,
+        date: publicDate,
+        today: today_(),
+        minDate: dateKeyDaysAgo_(today_(), 29),
+        maxDate: today_(),
+      });
+    }
     return publicTemplate.evaluate()
       .setTitle('公開飲控紀錄')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
@@ -176,6 +189,15 @@ function doGet(e) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
   console.log(`打卡頁產生完成：${Date.now() - startedAt} ms`);
   return output;
+}
+
+/**
+ * 公開牆日期切換的前端入口。
+ * Apps Script 用底線結尾的函式不會暴露給 google.script.run，
+ * 所以用這個薄包裝器在同一頁內讀取指定日期，避免整頁重載白畫面。
+ */
+function getPublicWallDataForClient(viewerId, viewerSignature, selectedDate) {
+  return getPublicWallData_(viewerId, viewerSignature, selectedDate);
 }
 
 /**
@@ -922,10 +944,10 @@ function sendReminderForSlot_(slot) {
 /** 四個時段的個人化提醒文案；23:00／23:30 共用「微半夜」開關與文案。 */
 function reminderGreeting_(slot, name) {
   const safeName = cleanText_(name || '小夥伴', 40);
-  if (slot === '10:00') return `${safeName}，古咕咕📣起床飲控啦！`;
+  if (slot === '09:00') return `${safeName}，古咕咕📣起床飲控啦！`;
   if (slot === '12:00') return `午安 ${safeName} 小傢伙，午餐了解一下`;
   if (slot === '18:00') return `Bonsoir ${safeName}，晚上你值得吃點好的`;
-  if (String(slot || '').indexOf('23:') === 0) return `唧唧 ${safeName} 檢查一下有沒有忘記什麼🤭🤭🤭`;
+  if (String(slot || '').indexOf('23:') === 0) return `${safeName} 檢查一下有沒有忘記什麼🤭🤭🤭`;
   return `${safeName}，記得完成今天的飲控打卡喔！`;
 }
 
@@ -1429,14 +1451,16 @@ function getLogsForDate_(date) {
  * - 今日紀錄牆只讀取「每日紀錄」中本人主動公開的列。
  * - 連續打卡排行只讀取「成員設定」中願意參與者的完成日期。
  */
-function getPublicWallData_(viewerId, viewerSignature) {
+function getPublicWallData_(viewerId, viewerSignature, selectedDate) {
   viewerId = String(viewerId || '');
   viewerSignature = String(viewerSignature || '');
   // 公開頁只接受 wall 範圍的 token；打卡用的 form token 不能在這裡使用，反之亦然。
   const viewerValid = validateFormSignature_(viewerId, viewerSignature, APP.tokenScopes.wall);
   const today = today_();
-  const base = getPublicWallBaseData_(today);
+  const date = validatePublicWallDate_(selectedDate || today);
+  const base = getPublicWallBaseData_(date);
   const viewerMember = viewerValid ? getMemberById_(viewerId) : null;
+  const viewerLikeKey = viewerValid ? publicLikeTargetKey_(viewerId) : '';
   const records = (base.records || []).map(item => ({
     alias: item.alias,
     intake: item.intake,
@@ -1452,19 +1476,20 @@ function getPublicWallData_(viewerId, viewerSignature) {
     likeKey: item.likeKey,
     likeCount: 0,
     likedByViewer: false,
-    isSelf: viewerValid && item.userId === viewerId,
+    // 不把 LINE UserId 傳到瀏覽器；用不可逆的 likeKey 判斷自己的卡片。
+    isSelf: viewerValid && item.likeKey === viewerLikeKey,
   }));
   const streaks = (base.streaks || []).map(item => ({
     alias: item.alias,
     streak: item.streak,
-    completedToday: item.completedToday,
+    completedOnDate: item.completedOnDate,
     likeKey: item.likeKey,
     likeCount: 0,
     likedByViewer: false,
-    isSelf: viewerValid && item.userId === viewerId,
+    isSelf: viewerValid && item.likeKey === viewerLikeKey,
   }));
 
-  const likeData = getPublicLikesForDate_(today, viewerValid ? viewerId : '');
+  const likeData = getPublicLikesForDate_(date, viewerValid ? viewerId : '');
   records.forEach(item => {
     item.likeCount = Number(likeData.counts[item.likeKey] || 0);
     item.likedByViewer = likeData.likedKeys.has(item.likeKey);
@@ -1475,7 +1500,10 @@ function getPublicWallData_(viewerId, viewerSignature) {
   });
 
   return {
-    date: today,
+    date,
+    today,
+    minDate: dateKeyDaysAgo_(today, 29),
+    maxDate: today,
     generatedAt: Utilities.formatDate(new Date(), APP.timezone, 'yyyy-MM-dd HH:mm'),
     records,
     streaks,
@@ -1490,7 +1518,9 @@ function getPublicWallData_(viewerId, viewerSignature) {
       uid: viewerValid ? viewerId : '',
       sig: viewerValid ? viewerSignature : '',
       usedLikes: viewerValid ? likeData.viewerUsedLikes : 0,
-      remainingLikes: viewerValid ? Math.max(0, 2 - likeData.viewerUsedLikes) : 0,
+      // 公開牆不限制每天可按幾個不同對象；同一位對象同一天仍只保留一個讚。
+      remainingLikes: null,
+      unlimitedLikes: true,
     },
     summary: {
       publicCount: records.length,
@@ -1504,9 +1534,9 @@ function getPublicWallData_(viewerId, viewerSignature) {
  * 公開頁的共同資料不含觀看者身分與按讚狀態，可讓所有人共用短期快取。
  * 只有第一位開啟者需要掃描紀錄表，其後開啟通常直接讀取快取。
  */
-function getPublicWallBaseData_(today, members) {
-  today = String(today || today_());
-  const cacheKey = `public-wall-base:v5:${today}`;
+function getPublicWallBaseData_(selectedDate, members) {
+  const date = validatePublicWallDate_(selectedDate || today_());
+  const cacheKey = `public-wall-base:v6:${date}`;
   const cached = readJsonCache_(cacheKey);
   if (cached && Array.isArray(cached.records) && Array.isArray(cached.streaks)) {
     return cached;
@@ -1528,14 +1558,14 @@ function getPublicWallBaseData_(today, members) {
     values.forEach(row => {
       const userId = String(row[2] || '');
       if (!userId) return;
-      const date = getLogRowDateKey_(row, null);
+      const rowDate = getLogRowDateKey_(row, null);
       const complete = isLogComplete_(row[20]);
-      if (complete && participantIds.has(userId) && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        completedDatesByUser.get(userId).add(date);
+      if (complete && participantIds.has(userId) && /^\d{4}-\d{2}-\d{2}$/.test(rowDate)) {
+        completedDatesByUser.get(userId).add(rowDate);
       }
       const member = memberById.get(userId);
       const isPublic = row[21] === true || String(row[21]).toUpperCase() === 'TRUE';
-      if (date === today && isPublic && member && member.isFriend) {
+      if (rowDate === date && isPublic && member && member.isFriend) {
         latestPublicByUser.set(userId, row);
       }
     });
@@ -1578,8 +1608,8 @@ function getPublicWallBaseData_(today, members) {
     return {
       userId: member.userId,
       alias: publicAliasForMember_(member),
-      streak: calculateCurrentStreak_(dates, today),
-      completedToday: dates.has(today),
+      streak: calculateCurrentStreak_(dates, date),
+      completedOnDate: dates.has(date),
       likeKey: publicLikeTargetKey_(member.userId),
     };
   }).sort((a, b) => b.streak - a.streak || a.alias.localeCompare(b.alias, 'zh-Hant'));
@@ -1660,8 +1690,9 @@ function resolvePublicLikeTarget_(targetKey) {
 }
 
 /**
- * 公開連續打卡排行的每日鼓勵讚。
- * 每位 LINE 使用者每天最多送出兩讚，必須送給不同人，也不能按自己。
+ * 公開牆的日期鼓勵讚。
+ * 每位使用者可對當天公開頁上多位夥伴按讚；同一位夥伴同一天只保留一個讚，
+ * 再點一次即可收回，也不能按自己。
  */
 function likePublicParticipant(payload) {
   const startedAt = Date.now();
@@ -1681,15 +1712,18 @@ function likePublicParticipant(payload) {
   const target = resolvePublicLikeTarget_(targetKey);
   if (!target) throw new Error('找不到這位公開成員。');
   if (target.userId === viewerId) throw new Error('自己的努力自己知道，這一讚留給別人吧 😆');
+  const selectedDate = validatePublicWallDate_(payload.date || today_());
+  const visibleBase = getPublicWallBaseData_(selectedDate);
+  const targetVisible = (visibleBase.records || []).concat(visibleBase.streaks || [])
+    .some(item => safeEqual_(item.likeKey, targetKey));
 
   const lock = LockService.getScriptLock();
   lock.waitLock(3000);
   const lockAcquiredAt = Date.now();
   try {
     const sheet = getPublicLikesSheet_();
-    const today = today_();
     const now = new Date();
-    const entries = readPublicLikeEntriesForDate_(today);
+    const entries = readPublicLikeEntriesForDate_(selectedDate);
     const existingEntry = entries.find(entry => (
       entry.likerId === viewerId && entry.targetId === target.userId
     ));
@@ -1701,37 +1735,34 @@ function likePublicParticipant(payload) {
         sheet.getRange(existingEntry.rowNumber, 1, 1, APP.headers.publicLikes.length).clearContent();
       }
       const nextEntries = entries.filter(entry => entry !== existingEntry);
-      writePublicLikeEntriesForDate_(today, nextEntries);
+      writePublicLikeEntriesForDate_(selectedDate, nextEntries);
       const nextUsedLikes = Math.max(0, usedLikes - 1);
       return {
         ok: true,
         liked: false,
         likeCount: nextEntries.filter(entry => entry.targetId === target.userId).length,
         usedLikes: nextUsedLikes,
-        remainingLikes: Math.max(0, 2 - nextUsedLikes),
+        remainingLikes: null,
         targetKey,
         message: '已收回鼓勵讚，名額也退回囉 ↩️',
       };
     }
 
-    if (!target.isFriend || (!target.joinPublicRanking && !target.publicRecordVisible)) {
+    if (!targetVisible) {
       throw new Error('這位成員目前沒有顯示在任何公開頁籤。');
-    }
-    if (usedLikes >= 2) {
-      throw new Error('今天的 2 個鼓勵讚已經送完囉，明天再繼續 👍');
     }
     const newRowNumber = sheet.getLastRow() + 1;
     sheet.getRange(newRowNumber, 1, 1, APP.headers.publicLikes.length)
-      .setValues([[today, viewerId, target.userId, now, now]]);
+      .setValues([[selectedDate, viewerId, target.userId, now, now]]);
     entries.push({ likerId: viewerId, targetId: target.userId, rowNumber: newRowNumber });
-    writePublicLikeEntriesForDate_(today, entries);
+    writePublicLikeEntriesForDate_(selectedDate, entries);
     const likeCount = entries.filter(entry => entry.targetId === target.userId).length;
     return {
       ok: true,
       liked: true,
       likeCount,
       usedLikes: usedLikes + 1,
-      remainingLikes: Math.max(0, 1 - usedLikes),
+      remainingLikes: null,
       targetKey,
       message: '鼓勵讚已送出 👍',
     };
@@ -2771,6 +2802,7 @@ function upsertMember_(data) {
   cache.remove(`public-wall-base:v3:${today_()}`);
   cache.remove(`public-wall-base:v4:${today_()}`);
   cache.remove(`public-wall-base:v5:${today_()}`);
+  cache.remove(`public-wall-base:v6:${today_()}`);
   try {
     cache.remove(`public-like-target:v2:${publicLikeTargetKey_(data.userId)}`);
   } catch (error) {
@@ -3544,6 +3576,15 @@ function validateRecordDate_(value) {
   return recordDate;
 }
 
+/** 公開牆可查今天與往前 29 天，共 30 個日期；無效日期一律回到今天。 */
+function validatePublicWallDate_(value) {
+  const today = today_();
+  const candidate = normalizeDateKey_(value || today);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return today;
+  const oldest = dateKeyDaysAgo_(today, 29);
+  return candidate >= oldest && candidate <= today ? candidate : today;
+}
+
 function dateDaysAgo_(days, baseDate) {
   const date = baseDate instanceof Date ? baseDate : new Date();
   return Utilities.formatDate(
@@ -3620,12 +3661,14 @@ function invalidateLogCache_(date, userId) {
   cache.remove(`public-wall-base:v3:${date}`);
   cache.remove(`public-wall-base:v4:${date}`);
   cache.remove(`public-wall-base:v5:${date}`);
+  cache.remove(`public-wall-base:v6:${date}`);
   // 補登過去日期可能改變「公開連續打卡」，因此也要清掉今日公開頁快取。
   if (date && date !== today_()) {
     cache.remove(`public-wall-base:v2:${today_()}`);
     cache.remove(`public-wall-base:v3:${today_()}`);
     cache.remove(`public-wall-base:v4:${today_()}`);
     cache.remove(`public-wall-base:v5:${today_()}`);
+    cache.remove(`public-wall-base:v6:${today_()}`);
   }
   if (userId) {
     cache.remove(`history:v1:${userId}:30:${today_()}`);

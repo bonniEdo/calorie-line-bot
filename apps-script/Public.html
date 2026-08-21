@@ -42,9 +42,48 @@
     .page-nav a[hidden] { display:none !important; }
     .page-nav a:first-child { border-color:#9fc7ae; background:#f0f8f2; color:#35684b; }
 
-    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 14px; padding: 5px; border-radius: 16px; background: #eee6d8; }
-    .tab { min-height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-weight: 900; cursor: pointer; }
-    .tab.active { background: var(--white); color: var(--ink); box-shadow: 0 3px 10px rgba(74, 56, 24, .09); }
+    /* 日期只留一個選擇器，避免四個按鈕和外框把畫面切得太碎。 */
+    .date-toolbar {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 7px 12px;
+      margin-top: 14px;
+      padding: 8px 2px 10px;
+      border-bottom: 1px solid var(--line);
+    }
+    .date-toolbar-title { color: var(--muted); font-size: 12px; font-weight: 900; white-space: nowrap; }
+    .date-toolbar-actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .date-select {
+      min-height: 36px;
+      width: 100%;
+      min-width: 0;
+      padding: 0 32px 0 11px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--white);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+    .date-today {
+      flex: 0 0 auto;
+      padding: 6px 0;
+      border: 0;
+      background: transparent;
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .date-range-hint { grid-column: 1 / -1; color: #928879; font-size: 11px; line-height: 1.4; }
+
+    /* 頁籤改成底線，不再套第二層大圓角卡片。 */
+    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-top: 12px; border-bottom: 1px solid var(--line); }
+    .tab { min-height: 40px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-weight: 900; cursor: pointer; }
+    .tab.active { background: transparent; color: var(--ink); border-bottom-color: var(--amber); }
     .panel { margin-top: 12px; }
 
     /* 收合狀態只有一行：名字、熱量、讚、展開箭頭，再加一條細進度條。 */
@@ -206,6 +245,10 @@
       .rank-row { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 6px; }
       .like-button { padding-left: 7px; padding-right: 7px; }
     }
+    @media (max-width: 460px) {
+      .date-toolbar { grid-template-columns: 1fr; gap: 6px; }
+      .date-toolbar-actions { width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -215,9 +258,9 @@
       <h1>🌏 公開飲控紀錄</h1>
       <p id="heroDate"></p>
       <div class="summary">
-        <div class="summary-card"><strong id="publicCount">0</strong><span>今日公開</span></div>
-        <div class="summary-card"><strong id="completedCount">0</strong><span>已完成</span></div>
-        <div class="summary-card"><strong id="rankingCount">0</strong><span>參加連續排行</span></div>
+        <div class="summary-card"><strong id="publicCount">0</strong><span id="publicCountLabel">今日公開</span></div>
+        <div class="summary-card"><strong id="completedCount">0</strong><span id="completedCountLabel">已完成</span></div>
+        <div class="summary-card"><strong id="rankingCount">0</strong><span id="rankingCountLabel">參加連續排行</span></div>
       </div>
     </section>
 
@@ -226,9 +269,18 @@
       <a id="publicHistoryLink" href="#" target="_top" hidden>📈 猛猛卡路里歷史</a>
     </nav>
 
+    <section class="date-toolbar" aria-label="公開牆日期選擇">
+      <div class="date-toolbar-title">📅 公開紀錄日期</div>
+      <div class="date-toolbar-actions">
+        <select id="publicDateSelect" class="date-select" aria-label="選擇公開紀錄日期"></select>
+        <button id="publicDateToday" class="date-today" type="button">今天</button>
+      </div>
+      <div id="dateRangeHint" class="date-range-hint"></div>
+    </section>
+
     <nav class="tabs" role="tablist" aria-label="公開功能頁籤">
-      <button id="recordsTab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="recordsPanel">今日公開紀錄</button>
-      <button id="streaksTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="streaksPanel">連續打卡排行</button>
+      <button id="recordsTab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="recordsPanel">公開紀錄</button>
+      <button id="streaksTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="streaksPanel">連續排行</button>
     </nav>
 
     <section id="recordsPanel" class="panel" role="tabpanel" aria-labelledby="recordsTab"></section>
@@ -251,7 +303,7 @@
   -->
   <div id="publicData" hidden><?= publicJson ?></div>
   <script>
-    window.__publicWallBuild = '2026.08.20-55';
+    window.__publicWallBuild = '2026.08.21-70';
 
     const toast = document.getElementById('toast');
     const recordsPanel = document.getElementById('recordsPanel');
@@ -269,12 +321,30 @@
     }
 
     let likeRequestInFlight = false;
+    let dateRequestInFlight = false;
+    let selectedDate = String(DATA.date || DATA.today || '');
+    let selectedDateLabel = formatDateLabel(selectedDate);
 
-    document.getElementById('heroDate').textContent = `${DATA.date || ''}・只顯示本人主動公開的內容`;
+    if (DATA.error) {
+      document.querySelector('.app').innerHTML =
+        '<div class="empty"><strong>公開牆資料讀取失敗</strong><br>'
+        + escapeHtml(DATA.error)
+        + '<br><small>請稍後再試；若持續發生，請把這段錯誤截圖給管理者。</small></div>';
+      throw new Error(DATA.error);
+    }
+
+    document.getElementById('heroDate').textContent = `${selectedDateLabel}・只顯示本人主動公開的內容`;
     document.getElementById('publicCount').textContent = number(DATA.summary && DATA.summary.publicCount);
     document.getElementById('completedCount').textContent = number(DATA.summary && DATA.summary.completedCount);
     document.getElementById('rankingCount').textContent = number(DATA.summary && DATA.summary.rankingCount);
+    document.getElementById('publicCountLabel').textContent = `${selectedDateLabel}公開`;
+    document.getElementById('completedCountLabel').textContent = `${selectedDateLabel}已完成`;
+    document.getElementById('rankingCountLabel').textContent = `${selectedDateLabel}排行`;
+    document.getElementById('recordsTab').textContent = '公開紀錄';
+    document.getElementById('streaksTab').textContent = '連續排行';
     document.getElementById('updated').textContent = `更新時間：${DATA.generatedAt || ''}`;
+
+    initDatePicker();
 
     const publicNav = DATA.nav || {};
     const publicCheckinLink = document.getElementById('publicCheckinLink');
@@ -286,6 +356,122 @@
     if (publicNav.historyUrl) {
       publicHistoryLink.href = publicNav.historyUrl;
       publicHistoryLink.hidden = false;
+    }
+
+    function initDatePicker() {
+      const select = document.getElementById('publicDateSelect');
+      const todayButton = document.getElementById('publicDateToday');
+      const minDate = String(DATA.minDate || '');
+      const maxDate = String(DATA.maxDate || DATA.today || selectedDate);
+      select.replaceChildren();
+
+      // 以一個下拉選單取代多個日期按鈕；仍保留最近 30 天的查詢範圍。
+      for (let offset = 0; offset < 30; offset += 1) {
+        const targetDate = shiftDate(maxDate, offset);
+        if (!targetDate || (minDate && targetDate < minDate)) break;
+        const option = document.createElement('option');
+        option.value = targetDate;
+        const relativeLabel = offset === 0 ? '今天' : offset === 1 ? '昨天' : offset === 2 ? '前天' : formatDateLabel(targetDate);
+        option.textContent = `${relativeLabel}（${formatDateLabel(targetDate)}）`;
+        select.appendChild(option);
+      }
+      // 若資料日期剛好落在可查範圍外，仍保留目前日期，避免畫面沒有選取值。
+      if (selectedDate && !Array.from(select.options).some(option => option.value === selectedDate)) {
+        const option = document.createElement('option');
+        option.value = selectedDate;
+        option.textContent = formatDateLabel(selectedDate);
+        select.appendChild(option);
+      }
+      select.value = selectedDate;
+      select.onchange = () => navigateToDate(select.value);
+      todayButton.onclick = () => navigateToDate(maxDate);
+      document.getElementById('dateRangeHint').textContent = `可查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)} · 只顯示主動公開的紀錄。`;
+    }
+
+    function navigateToDate(date) {
+      if (dateRequestInFlight) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return;
+      const minDate = String(DATA.minDate || '');
+      const maxDate = String(DATA.maxDate || DATA.today || selectedDate);
+      if ((minDate && date < minDate) || (maxDate && date > maxDate)) {
+        showToast(`只能查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)}。`, 2200);
+        return;
+      }
+      if (date === selectedDate) return;
+
+      // 日期切換改成同頁請求：不重新載入整個 Apps Script iframe，
+      // 因此不會因冷啟動、網路或舊版部署短暫白畫面。
+      dateRequestInFlight = true;
+      document.querySelectorAll('#publicDateSelect, #publicDateToday').forEach(control => {
+        control.disabled = true;
+      });
+      showToast(`正在載入 ${formatDateLabel(date)} 公開紀錄…`, 30000);
+      google.script.run
+        .withSuccessHandler(nextData => {
+          dateRequestInFlight = false;
+          document.querySelectorAll('#publicDateSelect, #publicDateToday').forEach(control => {
+            control.disabled = false;
+          });
+          if (!nextData || nextData.error) {
+            showToast(nextData && nextData.error ? nextData.error : '公開紀錄載入失敗，請稍後再試。', 3000);
+            return;
+          }
+          DATA = nextData;
+          selectedDate = String(DATA.date || date);
+          selectedDateLabel = formatDateLabel(selectedDate);
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('date', selectedDate);
+            window.history.replaceState({}, '', url.toString());
+          } catch (historyError) {
+            // Apps Script 某些內嵌瀏覽器不允許改 iframe history；不影響資料畫面更新。
+          }
+          refreshDateView();
+          renderRecords();
+          renderStreaks();
+          updateLikeHint();
+          showToast(`已切換到 ${selectedDateLabel}`, 1000);
+        })
+        .withFailureHandler(error => {
+          dateRequestInFlight = false;
+          document.querySelectorAll('#publicDateSelect, #publicDateToday').forEach(control => {
+            control.disabled = false;
+          });
+          showToast(error && error.message ? error.message : '公開紀錄載入失敗，請稍後再試。', 3000);
+        })
+        .getPublicWallDataForClient(
+          DATA.viewer && DATA.viewer.uid || '',
+          DATA.viewer && DATA.viewer.sig || '',
+          date,
+        );
+    }
+
+    function refreshDateView() {
+      const dateLabel = formatDateLabel(selectedDate);
+      document.getElementById('heroDate').textContent = `${dateLabel}・只顯示本人主動公開的內容`;
+      document.getElementById('publicCount').textContent = number(DATA.summary && DATA.summary.publicCount);
+      document.getElementById('completedCount').textContent = number(DATA.summary && DATA.summary.completedCount);
+      document.getElementById('rankingCount').textContent = number(DATA.summary && DATA.summary.rankingCount);
+      document.getElementById('publicCountLabel').textContent = `${dateLabel}公開`;
+      document.getElementById('completedCountLabel').textContent = `${dateLabel}已完成`;
+      document.getElementById('rankingCountLabel').textContent = `${dateLabel}排行`;
+      document.getElementById('recordsTab').textContent = '公開紀錄';
+      document.getElementById('streaksTab').textContent = '連續排行';
+      document.getElementById('updated').textContent = `更新時間：${DATA.generatedAt || ''}`;
+      initDatePicker();
+    }
+
+    function shiftDate(baseDate, daysAgo) {
+      const matched = String(baseDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!matched) return '';
+      const date = new Date(Date.UTC(Number(matched[1]), Number(matched[2]) - 1, Number(matched[3])));
+      date.setUTCDate(date.getUTCDate() - Math.max(0, Number(daysAgo) || 0));
+      return date.toISOString().slice(0, 10);
+    }
+
+    function formatDateLabel(date) {
+      const matched = String(date || '').match(/^\d{4}-(\d{2})-(\d{2})$/);
+      return matched ? `${matched[1]}/${matched[2]}` : String(date || '');
     }
 
     function switchTab(tab) {
@@ -310,7 +496,7 @@
     function renderRecords() {
       const records = Array.isArray(DATA.records) ? DATA.records : [];
       if (!records.length) {
-        recordsPanel.innerHTML = '<div class="empty">今天還沒有人公開紀錄。<br>每個人的公開設定預設都是關閉的。</div>';
+        recordsPanel.innerHTML = '<div class="empty">這天還沒有公開紀錄。<br>每個人的公開設定預設都是關閉的。</div>';
         return;
       }
 
@@ -405,7 +591,7 @@
         return '<div class="rank-row">'
           + '<div class="place">' + place + '</div>'
           + '<div class="rank-name">' + escapeHtml(item.alias) + '</div>'
-          + '<div class="streak">' + number(item.streak) + ' 天<small>' + (item.completedToday ? '今天已完成' : '今天尚未完成') + '</small></div>'
+          + '<div class="streak">' + number(item.streak) + ' 天<small>' + (item.completedOnDate ? selectedDateLabel + '已完成' : selectedDateLabel + '尚未完成') + '</small></div>'
           + likeButtonHtml(item)
           + '</div>';
       }).join('') + '</div>';
@@ -426,7 +612,6 @@
         && DATA.viewer.canLike
         && !likeRequestInFlight
         && !item.isSelf
-        && (item.likedByViewer || Number(DATA.viewer.remainingLikes || 0) > 0)
       );
     }
 
@@ -481,8 +666,6 @@
         likeCount: Number(entry.likeCount || 0),
         likedByViewer: Boolean(entry.likedByViewer),
       }));
-      const previousUsedLikes = Number(DATA.viewer.usedLikes || 0);
-      const previousRemainingLikes = Number(DATA.viewer.remainingLikes || 0);
       const wasLiked = Boolean(item.likedByViewer);
       const delta = wasLiked ? -1 : 1;
 
@@ -492,8 +675,8 @@
         entry.likeCount = Math.max(0, Number(entry.likeCount || 0) + delta);
         entry.likedByViewer = !wasLiked;
       });
-      DATA.viewer.usedLikes = Math.max(0, previousUsedLikes + delta);
-      DATA.viewer.remainingLikes = Math.max(0, Math.min(2, previousRemainingLikes - delta));
+      DATA.viewer.usedLikes = Math.max(0, Number(DATA.viewer.usedLikes || 0) + delta);
+      DATA.viewer.remainingLikes = null;
       applyLikeState();
       showToast(wasLiked ? '↩️ 已收回' : '👍 已送出', 900);
 
@@ -505,7 +688,7 @@
             entry.likedByViewer = Boolean(result.liked);
           });
           DATA.viewer.usedLikes = Number(result.usedLikes || 0);
-          DATA.viewer.remainingLikes = Number(result.remainingLikes || 0);
+          DATA.viewer.remainingLikes = null;
           applyLikeState();
         })
         .withFailureHandler(error => {
@@ -514,8 +697,8 @@
             previous.entry.likeCount = previous.likeCount;
             previous.entry.likedByViewer = previous.likedByViewer;
           });
-          DATA.viewer.usedLikes = previousUsedLikes;
-          DATA.viewer.remainingLikes = previousRemainingLikes;
+          DATA.viewer.usedLikes = Math.max(0, Number(DATA.viewer.usedLikes || 0) - delta);
+          DATA.viewer.remainingLikes = null;
           applyLikeState();
           showToast(error && error.message ? error.message : '按讚失敗，請稍後再試。', 2800);
         })
@@ -523,6 +706,7 @@
           uid: DATA.viewer && DATA.viewer.uid || '',
           sig: DATA.viewer && DATA.viewer.sig || '',
           targetKey,
+          date: selectedDate,
         });
     }
 
@@ -535,10 +719,7 @@
 
     function updateLikeHint() {
       if (DATA.viewer && DATA.viewer.canLike) {
-        const remaining = Math.max(0, Number(DATA.viewer.remainingLikes || 0));
-        likeHint.textContent = remaining > 0
-          ? `今天還可送 ${remaining} 個讚；綠色再點一次可收回。`
-          : '今天的讚已送完；點綠色讚可收回名額。';
+        likeHint.textContent = `${selectedDateLabel}可對多位夥伴按讚；同一位每天保留一個讚，綠色按鈕可收回。`;
         return;
       }
       likeHint.textContent = '想按讚嗎？請回 LINE 對機器人輸入「公開紀錄」，再由它提供的連結開啟。';
