@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>飲控打卡緊迫盯人｜測試站</title>
+  <style>
+    :root { --cream:#fffaf0; --yellow:#f5d77a; --yellow-dark:#d7a92d; --ink:#332f29; --muted:#776f64; --green:#4e8b69; --line:#eadfca; --blue:#e5f2fa; }
+    * { box-sizing: border-box; }
+    body { margin:0; min-height:100vh; background:radial-gradient(circle at 10% 0,#fff1b9 0 18%,transparent 42%),var(--cream); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif; }
+    .shell { width:min(980px,100%); margin:0 auto; padding:24px 16px 40px; }
+    .hero { padding:24px; border:1px solid #efcf69; border-radius:28px; background:linear-gradient(135deg,#ffe9a8,#f6d76e); box-shadow:0 12px 32px rgba(85,65,28,.12); }
+    .eyebrow { margin:0 0 6px; letter-spacing:.12em; font-size:12px; font-weight:900; color:#765c17; }
+    h1 { margin:0; font-size:clamp(25px,5vw,38px); line-height:1.15; }
+    .hero p { margin:10px 0 0; color:#6b571f; line-height:1.6; }
+    .card { margin-top:16px; padding:18px; border:1px solid var(--line); border-radius:22px; background:rgba(255,255,255,.86); box-shadow:0 8px 25px rgba(85,65,28,.07); }
+    label { display:block; margin-bottom:8px; color:var(--muted); font-size:14px; font-weight:800; }
+    .url-row { display:flex; gap:10px; align-items:stretch; }
+    input[type=url] { flex:1; min-width:0; border:1px solid #d9caa7; border-radius:13px; padding:13px 14px; color:var(--ink); background:#fffdf7; }
+    button { border:0; border-radius:13px; padding:12px 16px; cursor:pointer; font-weight:900; color:var(--ink); background:#fffdf7; box-shadow:inset 0 0 0 1px #e4d7be; }
+    button.primary { background:var(--yellow); box-shadow:inset 0 0 0 1px var(--yellow-dark); }
+    button.green { color:#fff; background:var(--green); box-shadow:none; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .hint { margin:10px 0 0; color:var(--muted); font-size:13px; line-height:1.55; }
+    .actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:14px; }
+    .actions button { min-height:52px; }
+    .status { display:flex; gap:8px; align-items:center; margin-top:12px; color:var(--muted); font-size:13px; }
+    .dot { width:9px; height:9px; border-radius:50%; background:#bcb5a9; }
+    .dot.ready { background:var(--green); }
+    .preview-wrap { margin-top:16px; overflow:hidden; border:1px solid var(--line); border-radius:22px; background:#fff; }
+    .preview-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); background:#fffdf7; }
+    .preview-head strong { font-size:14px; }
+    .preview-head span { color:var(--muted); font-size:12px; }
+    .frame-viewport { height:min(78vh,850px); min-height:520px; overflow:hidden; background:var(--cream); }
+    .app-frame { display:block; width:100%; height:calc(100% + 72px); border:0; transform:translateY(-72px); background:var(--cream); }
+    .no-crop .app-frame { height:100%; transform:none; }
+    .empty { padding:60px 20px; text-align:center; color:var(--muted); }
+    .tools { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px; }
+    .tools label { display:flex; align-items:center; gap:6px; margin:0; font-weight:700; }
+    .tools button { padding:8px 11px; font-size:12px; }
+    code { padding:2px 5px; border-radius:5px; background:#f3ead3; font-size:.9em; }
+    @media (max-width:650px) { .shell { padding:14px 10px 28px; } .hero,.card { padding:15px; border-radius:20px; } .url-row { flex-direction:column; } .actions { grid-template-columns:1fr; } .frame-viewport { height:72vh; min-height:480px; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">HEALTH LOG · TEST</p>
+      <h1>飲控打卡緊迫盯人</h1>
+      <p>這是測試站。正式 Apps Script、LINE webhook、排程與資料不會被這個頁面修改。</p>
+    </section>
+
+    <section class="card">
+      <label for="execUrl">測試 Apps Script Web App 網址（請貼 <code>/exec</code>）</label>
+      <div class="url-row">
+        <input id="execUrl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/.../exec">
+        <button id="saveUrl" class="primary" type="button">儲存網址</button>
+      </div>
+      <p class="hint">測試專案需先執行 <code>enableTestWebAccess</code>，再使用網址後面的 <code>?test=1</code>。不要貼正式環境網址。</p>
+      <div class="actions">
+        <button id="openForm" class="green" type="button">📝 我要打卡</button>
+        <button id="openPublic" type="button">🌍 公開紀錄牆</button>
+        <button id="openHistory" type="button">📈 卡路里歷史</button>
+      </div>
+      <div class="status"><span id="statusDot" class="dot"></span><span id="statusText">尚未設定測試網址</span></div>
+      <div class="tools">
+        <label><input id="cropBanner" type="checkbox" checked> 隱藏 Apps Script 提示列（測試裁切）</label>
+        <button id="clearUrl" type="button">清除測試網址</button>
+      </div>
+    </section>
+
+    <section id="preview" class="preview-wrap" hidden>
+      <div class="preview-head"><strong id="previewTitle">測試頁面</strong><span>資料仍在測試 Apps Script</span></div>
+      <div id="frameViewport" class="frame-viewport"><div class="empty">請從上方選擇要測試的頁面。</div></div>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script>
+    (() => {
+      const key = 'diet-github-pages-test-url-v1';
+      const input = document.getElementById('execUrl');
+      const statusText = document.getElementById('statusText');
+      const statusDot = document.getElementById('statusDot');
+      const preview = document.getElementById('preview');
+      const viewport = document.getElementById('frameViewport');
+      const title = document.getElementById('previewTitle');
+      const crop = document.getElementById('cropBanner');
+      const configured = String(window.TEST_CONFIG && window.TEST_CONFIG.appsScriptUrl || '').trim();
+      const saved = String(localStorage.getItem(key) || '').trim();
+      input.value = saved || configured;
+
+      function normalizedBase() {
+        const value = String(input.value || '').trim();
+        if (!value) throw new Error('請先貼上測試 /exec 網址。');
+        let url;
+        try { url = new URL(value); } catch (error) { throw new Error('網址格式不正確。'); }
+        if (!/^https?:$/.test(url.protocol) || !/\/exec\/?$/.test(url.pathname)) throw new Error('請貼 Apps Script 的 /exec 網址，不要貼 /dev。');
+        url.search = ''; url.hash = '';
+        return url.toString().replace(/\/$/, '');
+      }
+      function setStatus(text, ready) { statusText.textContent = text; statusDot.classList.toggle('ready', Boolean(ready)); }
+      function save() {
+        try { const base = normalizedBase(); localStorage.setItem(key, base); input.value = base; setStatus('測試網址已儲存，可以開始測試。', true); return base; }
+        catch (error) { setStatus(error.message, false); return ''; }
+      }
+      function openPage(kind, label, params) {
+        const base = save(); if (!base) return;
+        const url = new URL(base);
+        Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+        preview.hidden = false; title.textContent = label; viewport.innerHTML = '';
+        viewport.className = 'frame-viewport' + (crop.checked ? '' : ' no-crop');
+        const frame = document.createElement('iframe'); frame.className = 'app-frame'; frame.title = label; frame.src = url.toString(); frame.loading = 'eager'; frame.referrerPolicy = 'no-referrer';
+        viewport.appendChild(frame);
+        preview.scrollIntoView({ behavior:'smooth', block:'start' });
+      }
+      document.getElementById('saveUrl').addEventListener('click', save);
+      document.getElementById('clearUrl').addEventListener('click', () => { localStorage.removeItem(key); input.value = configured; setStatus('已清除本機儲存的測試網址。', false); });
+      crop.addEventListener('change', () => viewport.classList.toggle('no-crop', !crop.checked));
+      document.getElementById('openForm').addEventListener('click', () => openPage('form','📝 我要打卡',{test:'1'}));
+      document.getElementById('openPublic').addEventListener('click', () => openPage('public','🌍 公開紀錄牆',{view:'public',test:'1'}));
+      document.getElementById('openHistory').addEventListener('click', () => openPage('history','📈 卡路里歷史',{view:'history',test:'1'}));
+      if (input.value) setStatus('已載入測試網址；請先確認它是測試部署。', true);
+    })();
+  </script>
+</body>
+</html>
