@@ -210,7 +210,7 @@ function enableTestWebAccess() {
   const props = PropertiesService.getScriptProperties();
   props.setProperty('TEST_MODE', 'true');
   props.setProperty('TEST_USER_ID', String(member.userId));
-  const baseUrl = ScriptApp.getService().getUrl();
+  const baseUrl = getWebAppBaseUrl_();
   return {
     ok: true,
     user: member.name || member.userId,
@@ -926,7 +926,7 @@ function sendReminderForSlot_(slot) {
         text,
         actions: [{
           type: 'uri',
-          label: inProgress ? '繼續並完成打卡' : '開始今日打卡',
+          label: inProgress ? '繼續打卡!' : '開始打卡!',
           uri: getSignedFormUrl_(member.userId),
         }],
       },
@@ -2966,17 +2966,43 @@ function manualFrequentId_(name) {
   return `manual_frequent_${Utilities.base64EncodeWebSafe(bytes).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24)}`;
 }
 
+/**
+ * 取得給使用者的正式 Web App 基底網址。
+ *
+ * ScriptApp.getService().getUrl() 在編輯器或某些排程情境可能回傳 /dev，
+ * 而 /dev 只適合開發者測試，LINE 使用者無法穩定使用。因此正式網址
+ * 必須明確放在 Script Properties 的 WEB_APP_URL，且只能是 /exec。
+ */
+function getWebAppBaseUrl_() {
+  const configured = String(
+    PropertiesService.getScriptProperties().getProperty('WEB_APP_URL') || ''
+  ).trim().replace(/\/+$/, '');
+
+  if (configured) {
+    if (!/\/exec$/i.test(configured)) {
+      throw new Error('WEB_APP_URL 必須是 /exec 網址，不能是 /dev。');
+    }
+    return configured;
+  }
+
+  const serviceUrl = String(ScriptApp.getService().getUrl() || '')
+    .trim().replace(/\/+$/, '');
+  if (!serviceUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
+  if (/\/dev$/i.test(serviceUrl)) {
+    throw new Error('目前取得的是 /dev，請在指令碼屬性設定 WEB_APP_URL。');
+  }
+  return serviceUrl;
+}
+
 function getSignedFormUrl_(userId) {
-  const baseUrl = ScriptApp.getService().getUrl();
-  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
+  const baseUrl = getWebAppBaseUrl_();
   // token 每次發放都不同，本身就會讓網址唯一，不需要額外的 v= 參數。
   const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
   return `${baseUrl}?uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(token)}`;
 }
 
 function getHistoryUrl_(userId) {
-  const baseUrl = ScriptApp.getService().getUrl();
-  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
+  const baseUrl = getWebAppBaseUrl_();
   userId = String(userId || '');
   if (!userId) return `${baseUrl}?view=history`;
   const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
@@ -2988,8 +3014,7 @@ function getHistoryUrl_(userId) {
  * 拿到的人可以看公開頁、可以按讚，但不能讀寫任何人的打卡紀錄。
  */
 function getPublicWallUrl_(userId) {
-  const baseUrl = ScriptApp.getService().getUrl();
-  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
+  const baseUrl = getWebAppBaseUrl_();
   userId = String(userId || '');
   if (!userId) return `${baseUrl}?view=public`;
   const token = issueAccessToken_(userId, APP.tokenScopes.wall, APP.tokenTtlSeconds.wall);
@@ -3712,4 +3737,9 @@ function safeEqual_(a, b) {
   let diff = 0;
   for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
+}
+function debugFormBaseUrl() {
+  const url = getWebAppBaseUrl_();
+  console.log('排程產生網址基底：' + url);
+  return url;
 }
