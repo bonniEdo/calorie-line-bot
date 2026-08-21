@@ -922,7 +922,7 @@ function sendReminderForSlot_(slot) {
 /** 四個時段的個人化提醒文案；23:00／23:30 共用「微半夜」開關與文案。 */
 function reminderGreeting_(slot, name) {
   const safeName = cleanText_(name || '小夥伴', 40);
-  if (slot === '09:00') return `${safeName}，古咕咕📣起床飲控啦！`;
+  if (slot === '10:00') return `${safeName}，古咕咕📣起床飲控啦！`;
   if (slot === '12:00') return `午安 ${safeName} 小傢伙，午餐了解一下`;
   if (slot === '18:00') return `Bonsoir ${safeName}，晚上你值得吃點好的`;
   if (String(slot || '').indexOf('23:') === 0) return `唧唧 ${safeName} 檢查一下有沒有忘記什麼🤭🤭🤭`;
