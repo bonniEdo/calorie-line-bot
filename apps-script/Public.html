@@ -289,8 +289,8 @@
     <div id="likeHint" class="like-hint"></div>
 
     <details class="privacy">
-      <summary>🔒 這裡會顯示什麼、不會顯示什麼</summary>
-      <p>這是自願公開區，每個人的公開設定預設都是關閉的。食物細項只有本人另外勾選時才會出現；公開紀錄若有 BMR 與運動資料，會顯示「BMR＋運動消耗」估算，不顯示 LINE 身分、群組、體重或照片。群組排行仍只在各自群組內計算。</p>
+      <summary>🔒 本頁說明</summary>
+      <p>這是自願公開區，每個人的公開設定預設都是關閉的。只有本人勾選公開時才會出現！</p>
     </details>
     <div id="updated" class="updated"></div>
   </main>
@@ -385,7 +385,7 @@
       select.value = selectedDate;
       select.onchange = () => navigateToDate(select.value);
       todayButton.onclick = () => navigateToDate(maxDate);
-      document.getElementById('dateRangeHint').textContent = `可查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)} · 只顯示主動公開的紀錄。`;
+      document.getElementById('dateRangeHint').textContent = `可查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)} · 主動公開的紀錄。`;
     }
 
     function navigateToDate(date) {
@@ -719,7 +719,7 @@
 
     function updateLikeHint() {
       if (DATA.viewer && DATA.viewer.canLike) {
-        likeHint.textContent = `${selectedDateLabel}可對多位夥伴按讚；同一位每天保留一個讚，綠色按鈕可收回。`;
+        likeHint.textContent = `可以按超多人讚`;
         return;
       }
       likeHint.textContent = '想按讚嗎？請回 LINE 對機器人輸入「公開紀錄」，再由它提供的連結開啟。';

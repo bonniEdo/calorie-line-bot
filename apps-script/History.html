@@ -100,14 +100,14 @@
         + '<div class="summary-card"><strong>' + number(summary.averageTdee) + '</strong><span>完成日平均 TDEE kcal</span></div>'
         + '<div class="summary-card"><strong>' + number(summary.completedDays) + '/' + number(summary.loggedDays) + '</strong><span>完成紀錄</span></div>'
         + '</div></section>';
-      html += '<section class="section chart-section"><div class="section-head"><div><h2>📈 攝取趨勢</h2><p class="hint">橘線是已攝取，綠線是每日可攝取總量（TDEE）。</p></div></div>';
+      html += '<section class="section chart-section"><div class="section-head"><div><h2>📈 攝取趨勢</h2></div></div>';
       if (!records.length) {
         html += '<div class="chart-empty">有紀錄後，這裡會顯示你的熱量趨勢圖。</div>';
       } else {
         html += buildTrendChart(records);
       }
       html += '</section>';
-      html += '<section class="section"><div class="section-head"><div><h2>📅 每日歷史紀錄</h2><p class="hint">點開日期查看餐別、運動與飲水；預設收合，畫面更簡潔。</p></div></div>';
+      html += '<section class="section"><div class="section-head"><div><h2>📅 我的歷史紀錄</h2><p class="hint">點開日期查看餐別、運動與飲水。</p></div></div>';
       if (!records.length) {
         html += '<div class="empty">目前還沒有歷史紀錄。</div>';
       } else {
