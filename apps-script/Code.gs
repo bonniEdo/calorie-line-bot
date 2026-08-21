@@ -945,10 +945,10 @@ function sendReminderForSlot_(slot) {
 function reminderGreeting_(slot, name) {
   const safeName = cleanText_(name || '小夥伴', 40);
   if (slot === '09:00') return `${safeName}，古咕咕📣起床飲控啦！`;
-  if (slot === '12:00') return `午安 ${safeName} 小傢伙，午餐了解一下`;
+  if (slot === '12:00') return `午安 ${safeName} 小傢伙，午餐了解一下(fried chicken)(pizza)(dumpling)(bibimbap)(fried egg)`;
   if (slot === '18:00') return `Bonsoir ${safeName}，晚上你值得吃點好的`;
   if (String(slot || '').indexOf('23:') === 0) return `${safeName} 檢查一下有沒有忘記什麼🤭🤭🤭`;
-  return `${safeName}，記得完成今天的飲控打卡喔！`;
+  return `${safeName}，緊迫盯人打卡！`;
 }
 
 function runScheduledJobs() {
