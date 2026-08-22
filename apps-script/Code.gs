@@ -1,6 +1,6 @@
-// 應用程式版本：2026.08.22-74
+// 應用程式版本：2026.08.22-76（正式連結固定／已完成仍提醒）
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.22-74';
+const APP_BUILD = '2026.08.22-76';
 
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
@@ -44,6 +44,28 @@ const APP = Object.freeze({
   },
 });
 let runtimeSpreadsheet_ = null;
+
+/**
+ * 取得正式 Web App 網址。
+ *
+ * Apps Script 在編輯器手動執行函式時，ScriptApp.getService().getUrl()
+ * 可能回傳只能讓專案編輯者開啟的 /dev；LINE 手機使用者沒有編輯權限，
+ * 因此所有對外連結一律正規化成同一個部署的 /exec 網址。
+ */
+function getWebAppExecUrl_() {
+  const props = PropertiesService.getScriptProperties();
+  const configured = String(
+    // 優先沿用既有正式網址設定；WEB_APP_EXEC_URL 保留給舊版相容。
+    props.getProperty('WEB_APP_URL') || props.getProperty('WEB_APP_EXEC_URL') || ''
+  ).trim();
+  const serviceUrl = configured || String(ScriptApp.getService().getUrl() || '').trim();
+  const baseUrl = serviceUrl.replace(/[?#].*$/, '').replace(/\/+$/, '');
+  const execUrl = baseUrl.replace(/\/dev$/i, '/exec');
+  if (!/\/exec$/i.test(execUrl)) {
+    throw new Error('找不到正式 Web App /exec 網址，請確認已部署網頁應用程式。');
+  }
+  return execUrl;
+}
 
 /**
  * 第一次使用時在 Apps Script 編輯器手動執行。
@@ -233,7 +255,7 @@ function enableTestWebAccess() {
   const props = PropertiesService.getScriptProperties();
   props.setProperty('TEST_MODE', 'true');
   props.setProperty('TEST_USER_ID', String(member.userId));
-  const baseUrl = ScriptApp.getService().getUrl();
+  const baseUrl = getWebAppExecUrl_();
   return {
     ok: true,
     user: member.name || member.userId,
@@ -929,17 +951,20 @@ function sendReminderForSlot_(slot) {
       .filter(item => item.inGroup && enabledGroupIds.has(item.groupId))
       .map(item => item.userId)
   );
+  // 即使今天已按「打卡完成」，後續時段仍可提醒補充下一餐。
   const members = getReminderMembers_(slot)
-    .filter(member => !completedIds.has(member.userId))
     .filter(member => slot !== '09:00' || activeGroupUserIds.has(member.userId));
   let sent = 0;
 
   members.forEach(member => {
     const inProgress = inProgressIds.has(member.userId);
+    const completed = !inProgress && completedIds.has(member.userId);
     const greeting = reminderGreeting_(slot, member.name);
-    const text = inProgress
-      ? `${greeting}\n目前還在打卡中，記得按「送出打卡完成」喔！`
-      : `${greeting}\n點一下就能開始記錄今天的飲控。`;
+    const text = completed
+      ? `${greeting}\n下一餐預備備。`
+      : (inProgress
+        ? `${greeting}\n記得「送出」打卡喔！`
+        : `${greeting}\n點一下開始猛猛ㄉ飲控。`);
     const messages = [{
       type: 'template',
       altText: text,
@@ -948,7 +973,7 @@ function sendReminderForSlot_(slot) {
         text,
         actions: [{
           type: 'uri',
-          label: inProgress ? '繼續並完成打卡' : '開始今日打卡',
+          label: completed ? '補充下一餐' : (inProgress ? '繼續打卡' : '開始猛猛打卡'),
           uri: getScheduledLaunchUrl_(member.userId, 'form'),
         }],
       },
@@ -957,7 +982,7 @@ function sendReminderForSlot_(slot) {
   });
 
   setConfig_('LAST_REMINDER_SLOT', reminderKey, '避免同一時段重複提醒');
-  return { ok: true, date, slot, sent, skippedCompleted: completedIds.size };
+  return { ok: true, date, slot, sent, completedMembers: completedIds.size };
   } finally {
     lock.releaseLock();
   }
@@ -967,9 +992,9 @@ function sendReminderForSlot_(slot) {
 function reminderGreeting_(slot, name) {
   const safeName = cleanText_(name || '小夥伴', 40);
   if (slot === '09:00') return `${safeName}，古咕咕📣起床飲控啦！`;
-  if (slot === '12:00') return `午安 ${safeName} 小傢伙，午餐了解一下(fried chicken)(pizza)(dumpling)(bibimbap)(fried egg)`;
+  if (slot === '12:00') return `午安 ${safeName} 小傢伙，午餐解釋一下(fried chicken)(pizza)(dumpling)(bibimbap)(fried egg)`;
   if (slot === '18:00') return `Bonsoir ${safeName}，晚上你值得吃點好的`;
-  if (String(slot || '').indexOf('23:') === 0) return `${safeName} 檢查一下有沒有忘記什麼🤭🤭🤭`;
+  if (String(slot || '').indexOf('23:') === 0) return `${safeName} 回顧一下今天的猛猛進食🤭🤭🤭`;
   return `${safeName}，緊迫盯人打卡！`;
 }
 
@@ -3026,8 +3051,7 @@ function getScheduledLaunchUrl_(userId, view) {
   view = String(view || 'form') === 'history' ? 'history' : 'form';
   if (!userId) throw new Error('無法建立排程連結：缺少 UserId。');
 
-  const baseUrl = ScriptApp.getService().getUrl();
-  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
+  const baseUrl = getWebAppExecUrl_();
 
   const launch = (
     Utilities.getUuid().replace(/-/g, '')
@@ -3135,16 +3159,14 @@ function testScheduledLaunchLinks() {
 }
 
 function getSignedFormUrl_(userId) {
-  const baseUrl = ScriptApp.getService().getUrl();
-  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
+  const baseUrl = getWebAppExecUrl_();
   // token 每次發放都不同，本身就會讓網址唯一，不需要額外的 v= 參數。
   const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
   return `${baseUrl}?uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(token)}`;
 }
 
 function getHistoryUrl_(userId) {
-  const baseUrl = ScriptApp.getService().getUrl();
-  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
+  const baseUrl = getWebAppExecUrl_();
   userId = String(userId || '');
   if (!userId) return `${baseUrl}?view=history`;
   const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
@@ -3156,8 +3178,7 @@ function getHistoryUrl_(userId) {
  * 拿到的人可以看公開頁、可以按讚，但不能讀寫任何人的打卡紀錄。
  */
 function getPublicWallUrl_(userId) {
-  const baseUrl = ScriptApp.getService().getUrl();
-  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
+  const baseUrl = getWebAppExecUrl_();
   userId = String(userId || '');
   if (!userId) return `${baseUrl}?view=public`;
   const token = issueAccessToken_(userId, APP.tokenScopes.wall, APP.tokenTtlSeconds.wall);
