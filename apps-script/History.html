@@ -119,11 +119,11 @@
       let html = '<section class="hero">'
         + '<div class="eyebrow">CALORIE HISTORY</div>'
         + '<h1>📊 卡路里歷史紀錄</h1>'
-        + '<p>最近 ' + number(data.days || 30) + ' 天・只顯示自己的資料・平均值只計已完成日</p>'
+        + '<p>最近 ' + number(data.days || 30) + ' 天・只顯示自己的資料</p>'
         + '<div class="summary">'
-        + '<div class="summary-card"><strong>' + number(summary.averageIntake) + '</strong><span>完成日平均攝取 kcal</span></div>'
-        + '<div class="summary-card"><strong>' + number(summary.averageTdee) + '</strong><span>完成日平均 TDEE kcal</span></div>'
-        + '<div class="summary-card"><strong>' + number(summary.completedDays) + '/' + number(summary.loggedDays) + '</strong><span>完成紀錄</span></div>'
+        + '<div class="summary-card"><strong>' + number(summary.averageIntake) + '</strong><span>平均攝取 kcal</span></div>'
+        + '<div class="summary-card"><strong>' + number(summary.averageTdee) + '</strong><span>平均 TDEE kcal</span></div>'
+        + '<div class="summary-card"><strong>' + number(summary.completedDays) + '/' + number(summary.loggedDays) + '</strong><span>完成紀錄天數</span></div>'
         + '</div></section>'
         + '<nav class="page-nav" aria-label="頁面導覽">'
         + (nav.formUrl ? '<a class="page-nav-primary" href="' + escapeAttr(nav.formUrl) + '" target="_top">📝 我要打卡</a>' : '')
@@ -137,13 +137,13 @@
       }
       html += '</section>';
       if (records.length) {
-          html += '<section class="section"><div class="section-head"><div><h2>🗓️ 週／月熱量總覽</h2><p class="hint">由每日紀錄加總・猛猛進食／可猛猛消耗。</p></div></div>'
+          html += '<section class="section"><div class="section-head"><div><h2>🗓️ 週／月熱量總覽</h2></div></div>'
           + '<div class="period-grid">'
           + renderPeriodCard('每週總計', aggregateByWeek(records), true)
           + renderPeriodCard('每月總計', aggregateByMonth(records), false)
           + '</div></section>';
       }
-      html += '<section class="section"><div class="section-head"><div><h2>📅 我的歷史紀錄</h2><p class="hint">點開日期查看餐別、運動與飲水。</p></div></div>';
+      html += '<section class="section"><div class="section-head"><div><h2>📅 我的歷史紀錄</h2><p class="hint">點開日期查看詳細記錄。</p></div></div>';
       if (!records.length) {
         html += '<div class="empty">目前還沒有歷史紀錄。</div>';
       } else {

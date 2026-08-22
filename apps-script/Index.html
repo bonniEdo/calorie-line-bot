@@ -1794,7 +1794,7 @@
                 '<label class="reminder-toggle"><input id="reminderMorning" type="checkbox" ' + (REMINDER_SETTINGS.morning ? 'checked' : '') + '><span>☀️ 早上<small>09:00</small></span></label>',
                 '<label class="reminder-toggle"><input id="reminderNoon" type="checkbox" ' + (REMINDER_SETTINGS.noon ? 'checked' : '') + '><span>🌤️ 中午<small>12:00</small></span></label>',
                 '<label class="reminder-toggle"><input id="reminderEvening" type="checkbox" ' + (REMINDER_SETTINGS.evening ? 'checked' : '') + '><span>🌆 晚上<small>18:00</small></span></label>',
-                '<label class="reminder-toggle"><input id="reminderLate" type="checkbox" ' + (REMINDER_SETTINGS.late ? 'checked' : '') + '><span>🌙 微半夜<small>23:00／23:30</small></span></label>',
+                '<label class="reminder-toggle"><input id="reminderLate" type="checkbox" ' + (REMINDER_SETTINGS.late ? 'checked' : '') + '><span>🌙 微半夜<small>23:00</small></span></label>',
               '</div>',
               '<div id="reminderSaveStatus" class="reminder-save-status" aria-live="polite"></div>',
             '</div>',
@@ -3116,7 +3116,7 @@
       if (!state.entryMealChosen) {
         document.getElementById('selectedTitle').textContent = '請先選擇餐別';
         document.getElementById('mealTotal').textContent = '0';
-        root.append(el('div', 'selected-empty', '請先選擇餐別，再加入或查看食物。'));
+        root.append(el('div', 'selected-empty', '請先選擇餐別，再加入食物。'));
         return;
       }
       const selected = state.meals[state.activeMeal];
