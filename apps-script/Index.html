@@ -98,6 +98,16 @@
       background: linear-gradient(90deg, #77ad87, #4e8b69);
       transition: width .25s ease;
     }
+    .energy-card.is-over .energy-main,
+    .energy-card.is-over .energy-remaining {
+      color: #d97706;
+    }
+    .energy-card.is-over .energy-progress {
+      background: rgba(217,119,6,.16);
+    }
+    .energy-card.is-over .energy-progress > span {
+      background: linear-gradient(90deg, #f2ad43, #d97706);
+    }
     .energy-progress-caption {
       display: flex;
       align-items: center;
@@ -1278,7 +1288,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.22-80';
+    window.__dietAppBuild = '2026.08.22-81';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1773,7 +1783,7 @@
             '</div>',
           '</div>',
           '<div class="energy-cards">',
-            '<div class="energy-card">',
+            '<div id="energyCard" class="energy-card">',
               '<div class="energy-combined-top">',
                 '<div class="energy-main"><strong id="heroTotal">0</strong><span class="energy-divider">/</span><strong id="heroTdee">—</strong><small>kcal</small></div>',
                 '<div id="intakeRemainingText" class="energy-remaining">—</div>',
@@ -3249,14 +3259,17 @@
       const intakeText = document.getElementById('intakeProgressText');
       const remainingText = document.getElementById('intakeRemainingText');
       const exerciseText = document.getElementById('exerciseProgressText');
+      const energyCard = document.getElementById('energyCard');
       const intakePercent = estimatedTdee > 0 ? Math.round(total / estimatedTdee * 100) : 0;
+      const isOver = estimatedTdee > 0 && total > estimatedTdee;
+      if (energyCard) energyCard.classList.toggle('is-over', isOver);
       if (intakeBar) intakeBar.style.width = `${Math.min(100, Math.max(0, intakePercent))}%`;
       if (intakeText) intakeText.textContent = estimatedTdee > 0 ? `已吃 ${intakePercent}%` : '先設定 BMR';
       if (remainingText) {
         if (!estimatedTdee) remainingText.textContent = '—';
         else {
           const remaining = estimatedTdee - total;
-          remainingText.textContent = remaining >= 0 ? `還可 ${remaining} kcal` : `超出 ${Math.abs(remaining)} kcal`;
+          remainingText.textContent = remaining >= 0 ? `-- ${remaining} kcal` : `++ ${Math.abs(remaining)} kcal`;
 
         }
       }

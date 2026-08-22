@@ -1194,7 +1194,7 @@ function personalRankingMessages_(date, member, log) {
   const name = cleanText_(member.name || '你', 40);
   let text;
   if (!log) {
-    text = `☀️ ${date} 個人結算\n昨天沒有找到飲控紀錄。\n今天輸入「打卡」就可以開始記錄。`;
+    text = `☀️ ${date} 個人結算\n昨天沒有找到飲控紀錄。\n今天記得持續記錄歐。`;
   } else {
     const intake = Math.round(log.intake || 0);
     const allowance = Math.round(log.allowance || 0);
