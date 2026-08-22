@@ -675,11 +675,10 @@
     .meal-tabs {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 5px;
-      padding: 5px;
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      background: #f7f1e5;
+      gap: 7px;
+      padding: 0;
+      border: 0;
+      background: transparent;
     }
     .pill {
       flex: 0 0 auto;
@@ -697,19 +696,34 @@
     .meal-tabs .pill {
       width: 100%;
       min-width: 0;
+      min-height: 58px;
       padding: 10px 3px;
-      border-color: transparent;
-      border-radius: 12px;
-      background: transparent;
+      border: 2px solid #eadfca;
+      border-radius: 14px;
+      background: #fff;
+      color: var(--ink);
       font-size: 13px;
       white-space: nowrap;
+      box-shadow: 0 3px 9px rgba(85, 65, 28, .06);
+      transition: border-color .16s ease, background .16s ease, box-shadow .16s ease, transform .12s ease;
     }
+    .meal-tabs .pill:active { transform: scale(.98); }
     .meal-tabs .pill.active {
-      border-color: #e4bd45;
-      background: var(--yellow);
-      box-shadow: 0 3px 8px rgba(150, 113, 20, .14);
+      border-color: #e38b21;
+      background: #fff7e8;
+      color: #874a00;
+      box-shadow: 0 0 0 3px rgba(227, 139, 33, .15), 0 5px 12px rgba(133, 77, 8, .12);
     }
-    .meal-tabs .pill.done:not(.active) { border-color: transparent; background: #e6f2e9; }
+    .meal-tabs .pill.done:not(.active) {
+      border-color: #eadfca;
+      background: #fff;
+      color: var(--ink);
+    }
+    .meal-tabs .pill.active.done {
+      border-color: #e38b21;
+      background: #fff7e8;
+      color: #874a00;
+    }
     .meal-tabs-caption {
       margin: 12px 0 6px;
       color: var(--muted);
@@ -1042,16 +1056,33 @@
     .ai-status { margin-top: 10px; font-size: 13px; color: var(--muted); line-height: 1.5; }
     .ai-result { margin-top: 12px; text-align: left; }
     .entry-meal-step {
-      margin-top: 12px;
+      margin: 10px 0 14px;
       padding: 12px;
-      border: 1px solid #e5ca70;
+      border: 1px solid #efc56d;
       border-radius: 16px;
-      background: #fff9e6;
+      background: #fffaf0;
+      transition: border-color .18s ease, box-shadow .18s ease;
     }
     .entry-meal-step .meal-tabs-caption {
       margin: 0 0 9px;
       color: #765c17;
       font-weight: 900;
+    }
+    .meal-gated.meal-locked {
+      opacity: .52;
+      filter: saturate(.62);
+      cursor: not-allowed;
+    }
+    @keyframes meal-required-shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-3px); }
+    }
+    .entry-meal-step.meal-required-shake {
+      border-color: #e38b21;
+      box-shadow: 0 0 0 3px rgba(227, 139, 33, .14);
+      animation: meal-required-shake .28s ease;
     }
     .entry-confirm-row {
       display: grid;
@@ -1243,7 +1274,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.22-76';
+    window.__dietAppBuild = '2026.08.22-78';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1373,8 +1404,9 @@
       recordDatePickerOpen: false,
       midnightReloadPending: false,
       foodLibraryReady: false,
-      // 拍照／上傳是第一次進入最常用的入口；常吃食物則預設收合。
-      photoPanelVisible: true,
+      // 先選餐別，再由使用者開啟拍照／上傳或手動輸入。
+      photoPanelVisible: false,
+      photoEntrySource: '',
       waterEnabled: Boolean(WATER_SETTINGS.enabled),
       waterMl: 0,
       waterGoalMl: Math.max(500, Number(WATER_SETTINGS.goalMl || 2000)),
@@ -1477,6 +1509,9 @@
       state.pendingAiItems = [];
       state.pendingAiMeal = '';
       state.entryMealChosen = false;
+      state.entryMode = 'photo';
+      state.photoPanelVisible = false;
+      state.photoEntrySource = '';
       state.analyzing = false;
       todayIsComplete = Boolean(activeSavedLog && activeSavedLog.isComplete);
       if (!activeSavedLog) {
@@ -1814,14 +1849,18 @@
         '</details>',
         '<section class="section meal-entry-section">',
           '<h2 class="section-title">🍽️ 記錄這一餐</h2>',
+          '<div class="entry-meal-step">',
+            '<div id="mealTabsCaption" class="meal-tabs-caption">第一步：先選擇這次要記錄的餐別</div>',
+            '<div id="mealTabs" class="meal-tabs" role="tablist" aria-label="選擇餐別"></div>',
+          '</div>',
           '<div class="food-entry-actions primary-entry-actions" aria-label="選擇記錄方式">',
-            '<button id="cameraCaptureButton" class="entry-mode-button active" type="button" aria-controls="photoEntryPanel">📷 直接拍照</button>',
-            '<button id="uploadPhotoButton" class="entry-mode-button" type="button" aria-controls="photoEntryPanel">🖼️ 上傳照片</button>',
-            '<button id="manualModeButton" class="entry-mode-button manual-entry-link" type="button" role="tab" aria-controls="manualEntryPanel">✍️ 手輸熱量</button>',
+            '<button id="cameraCaptureButton" class="entry-mode-button meal-gated" type="button" aria-controls="photoEntryPanel">📷 直接拍照</button>',
+            '<button id="uploadPhotoButton" class="entry-mode-button meal-gated" type="button" aria-controls="photoEntryPanel">🖼️ 上傳照片</button>',
+            '<button id="manualModeButton" class="entry-mode-button manual-entry-link meal-gated" type="button" role="tab" aria-controls="manualEntryPanel">✍️ 手輸熱量</button>',
           '</div>',
           '<div id="manualEntryPanel" hidden>',
             '<div class="manual-entry-box">',
-              '<p id="customMealLabel" class="hint">先輸入食物與熱量，再到下方選擇餐別。</p>',
+              '<p id="customMealLabel" class="hint">先選餐別，再輸入食物與熱量。</p>',
               '<div class="custom-food-grid">',
                 '<label>食物名稱（可不填）<input id="customFoodName" maxlength="60" placeholder="例如：自煮便當"></label>',
                 '<label>熱量<input id="customFoodKcal" type="number" inputmode="numeric" min="1" max="5000" placeholder="kcal"></label>',
@@ -1838,31 +1877,27 @@
               '<div id="aiResult" class="ai-result" hidden></div>',
             '</div>',
           '</div>',
-          '<div class="entry-meal-step">',
-            '<div id="mealTabsCaption" class="meal-tabs-caption">已記錄餐別</div>',
-            '<div id="mealTabs" class="meal-tabs" role="tablist" aria-label="選擇餐別"></div>',
-            '<div id="manualConfirmRow" class="entry-confirm-row" hidden>',
-              '<button id="addCustomFoodButton" class="secondary" type="button">請先選擇餐別</button>',
-            '</div>',
-            '<div id="aiConfirmRow" class="entry-confirm-row" hidden>',
-              '<button id="confirmAiButton" class="secondary" type="button">請先選擇餐別</button>',
-              '<button id="retryAiButton" class="danger-small" type="button">重新拍照</button>',
-            '</div>',
+          '<div id="manualConfirmRow" class="entry-confirm-row" hidden>',
+            '<button id="addCustomFoodButton" class="secondary" type="button">確認加入</button>',
+          '</div>',
+          '<div id="aiConfirmRow" class="entry-confirm-row" hidden>',
+            '<button id="confirmAiButton" class="secondary" type="button">確認加入</button>',
+            '<button id="retryAiButton" class="danger-small" type="button">重新拍照</button>',
           '</div>',
           '<details id="frequentFoodDetails" class="frequent-food-box">',
-            '<summary class="frequent-food-summary"><strong>⭐ 常吃的食物</strong><span> 依個人使用紀錄更新</span></summary>',
+            '<summary class="frequent-food-summary meal-gated"><strong>⭐ 常吃的食物</strong><span> 依個人使用紀錄更新</span></summary>',
             '<div id="frequentFoodGrid" class="food-grid frequent-food-grid"></div>',
             '<p class="food-library-quick-note">第一次先提供常見入口，之後會依你實際使用的食物個人化。</p>',
           '</details>',
           '<details id="foodLibrary" class="food-library">',
-            '<summary class="frequent-food-summary" aria-controls="foodLibrary" aria-expanded="false"><strong>📚 食物庫</strong><span>搜尋或手動補充</span></summary>',
+            '<summary class="frequent-food-summary meal-gated" aria-controls="foodLibrary" aria-expanded="false"><strong>📚 食物庫</strong><span>搜尋或手動補充</span></summary>',
             '<input id="search" class="search" type="search" name="foodSearchTerm" inputmode="search" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" placeholder="搜尋白飯、雞蛋、便當…">',
             '<div id="categoryChips" class="category-chips"></div>',
             '<div id="foodGrid" class="food-grid"></div>',
             '<div class="food-library-actions"><button id="foodLibraryCloseButton" class="food-library-done" type="button">完成選擇，回到已選餐點</button></div>',
           '</details>',
           '<div class="selected-wrap">',
-            '<strong id="selectedTitle">早餐已選</strong>',
+            '<strong id="selectedTitle">請先選擇餐別</strong>',
             '<div id="selectedList"></div>',
             '<div class="meal-total">本餐共 <strong id="mealTotal">0</strong> kcal</div>',
           '</div>',
@@ -1941,9 +1976,10 @@
       });
 
       const openPhotoPicker = inputId => {
+        if (!requireEntryMeal_()) return;
         state.entryMode = 'photo';
         state.photoPanelVisible = true;
-        state.entryMealChosen = false;
+        state.photoEntrySource = inputId === 'foodPhotoUpload' ? 'upload' : 'camera';
         renderEntryMode();
         const input = document.getElementById(inputId);
         if (input) {
@@ -1956,13 +1992,24 @@
       document.getElementById('uploadPhotoButton').addEventListener('click', () => openPhotoPicker('foodPhotoUpload'));
 
       document.getElementById('manualModeButton').addEventListener('click', () => {
+        if (!requireEntryMeal_()) return;
         state.entryMode = 'manual';
-        state.entryMealChosen = false;
         renderEntryMode();
 
         window.setTimeout(() => {
           document.getElementById('customFoodKcal').focus();
         }, 0);
+      });
+
+      ['frequentFoodDetails', 'foodLibrary'].forEach(detailsId => {
+        const details = document.getElementById(detailsId);
+        const summary = details && details.querySelector('summary');
+        if (!details || !summary) return;
+        summary.addEventListener('click', event => {
+          if (state.entryMealChosen) return;
+          event.preventDefault();
+          requireEntryMeal_();
+        });
       });
 
       const foodLibraryCloseButton = document.getElementById('foodLibraryCloseButton');
@@ -2003,7 +2050,14 @@
 
       document
         .getElementById('retryAiButton')
-        .addEventListener('click', () => document.getElementById('foodPhotoCamera').click());
+        .addEventListener('click', () => {
+          if (!requireEntryMeal_()) return;
+          state.entryMode = 'photo';
+          state.photoPanelVisible = true;
+          state.photoEntrySource = 'camera';
+          renderEntryMode();
+          document.getElementById('foodPhotoCamera').click();
+        });
 
       document
         .getElementById('customFoodKcal')
@@ -2267,14 +2321,17 @@
 
     function renderEntryMode() {
       const photoActive = state.entryMode === 'photo';
+      const photoVisible = photoActive && state.photoPanelVisible;
       const cameraButton = document.getElementById('cameraCaptureButton');
       const uploadButton = document.getElementById('uploadPhotoButton');
       const manualButton = document.getElementById('manualModeButton');
-      if (cameraButton) cameraButton.classList.toggle('active', photoActive);
-      if (uploadButton) uploadButton.classList.toggle('active', photoActive);
+      const cameraActive = photoVisible && state.photoEntrySource === 'camera';
+      const uploadActive = photoVisible && state.photoEntrySource === 'upload';
+      if (cameraButton) cameraButton.classList.toggle('active', cameraActive);
+      if (uploadButton) uploadButton.classList.toggle('active', uploadActive);
       manualButton.classList.toggle('active', !photoActive);
-      if (cameraButton) cameraButton.setAttribute('aria-selected', String(photoActive));
-      if (uploadButton) uploadButton.setAttribute('aria-selected', String(photoActive));
+      if (cameraButton) cameraButton.setAttribute('aria-selected', String(cameraActive));
+      if (uploadButton) uploadButton.setAttribute('aria-selected', String(uploadActive));
       manualButton.setAttribute('aria-selected', String(!photoActive));
       document.getElementById('photoEntryPanel').hidden = !photoActive || !state.photoPanelVisible;
       document.getElementById('manualEntryPanel').hidden = photoActive;
@@ -2284,14 +2341,11 @@
     function updateEntryConfirmationUi() {
       const hasPendingAi = state.pendingAiItems.length > 0;
       const manualActive = state.entryMode === 'manual';
-      const selectionRequired = manualActive || hasPendingAi;
       const caption = document.getElementById('mealTabsCaption');
       if (caption) {
-        caption.textContent = hasPendingAi
-          ? '最後選擇這份分析要加入哪一餐'
-          : manualActive
-            ? '輸入完成後，選擇要加入哪一餐'
-            : '選擇餐別後，可加入食物或查看已記錄內容';
+        caption.textContent = state.entryMealChosen
+          ? `已選擇：${mealLabels[state.activeMeal]}・接著選擇記錄方式`
+          : '第一步：先選擇這次要記錄的餐別';
       }
 
       const manualRow = document.getElementById('manualConfirmRow');
@@ -2321,6 +2375,7 @@
 
       // 無論目前在哪個輸入流程，都不把內部預設餐別畫成使用者已選。
       renderMealTabsSelectionState_();
+      updateMealDependentControls_();
     }
 
     function renderMealTabsSelectionState_() {
@@ -2329,6 +2384,19 @@
         const selected = state.entryMealChosen && button.dataset.mealKey === state.activeMeal;
         button.classList.toggle('active', selected);
         button.setAttribute('aria-selected', String(selected));
+      });
+    }
+
+    function updateMealDependentControls_() {
+      const locked = !state.entryMealChosen;
+      document.querySelectorAll('.meal-gated').forEach(element => {
+        element.classList.toggle('meal-locked', locked);
+        element.setAttribute('aria-disabled', String(locked));
+      });
+      if (!locked) return;
+      ['frequentFoodDetails', 'foodLibrary'].forEach(detailsId => {
+        const details = document.getElementById(detailsId);
+        if (details) details.open = false;
       });
     }
 
@@ -2422,6 +2490,18 @@
       }
     }
 
+    function selectEntryMeal_(key) {
+      if (!mealLabels[key]) return;
+      state.activeMeal = key;
+      state.entryMealChosen = true;
+      renderMealTabs();
+      renderFrequentFoods();
+      if (state.foodLibraryReady) renderFoods();
+      renderSelected();
+      updateCameraMealLabel();
+      updateEntryConfirmationUi();
+    }
+
     function renderMealTabs() {
       const root = document.getElementById('mealTabs');
       root.innerHTML = '';
@@ -2434,16 +2514,7 @@
         const selected = state.entryMealChosen && state.activeMeal === key;
         button.classList.toggle('active', selected);
         button.setAttribute('aria-selected', String(selected));
-        button.addEventListener('click', () => {
-          state.activeMeal = key;
-          state.entryMealChosen = true;
-          renderMealTabs();
-          renderFrequentFoods();
-          if (state.foodLibraryReady) renderFoods();
-          renderSelected();
-          updateCameraMealLabel();
-          updateEntryConfirmationUi();
-        });
+        button.addEventListener('click', () => selectEntryMeal_(key));
         root.append(button);
       });
       updateCameraMealLabel();
@@ -2465,9 +2536,13 @@
 
     function requireEntryMeal_() {
       if (state.entryMealChosen && mealLabels[state.activeMeal]) return true;
-      showToast('請先選擇要加入或查看的餐別。');
-      const tabs = document.getElementById('mealTabs');
-      if (tabs) tabs.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      showToast('先選餐別');
+      const step = document.querySelector('.entry-meal-step');
+      if (step) {
+        step.classList.remove('meal-required-shake');
+        void step.offsetWidth;
+        step.classList.add('meal-required-shake');
+      }
       return false;
     }
 
@@ -2475,21 +2550,22 @@
       const label = document.getElementById('cameraMealLabel');
       if (label) label.textContent = '直接拍照／上傳餐點';
       const customMealLabel = document.getElementById('customMealLabel');
-      if (customMealLabel) customMealLabel.textContent = '先輸入食物與熱量，再到下方選擇餐別。';
+      if (customMealLabel) {
+        customMealLabel.textContent = state.entryMealChosen
+          ? `目前會加入：${mealLabels[state.activeMeal]}`
+          : '先選餐別，再輸入食物與熱量。';
+      }
       updateEntryConfirmationUi();
     }
 
     function addCustomFood() {
       const nameInput = document.getElementById('customFoodName');
       const kcalInput = document.getElementById('customFoodKcal');
+      if (!requireEntryMeal_()) return;
       const calories = Math.round(Number(kcalInput.value || 0));
       if (!Number.isFinite(calories) || calories <= 0 || calories > 5000) {
         showToast('請輸入 1～5000 kcal 的熱量。');
         kcalInput.focus();
-        return;
-      }
-      if (!state.entryMealChosen) {
-        showToast('請先選擇要加入的餐別。');
         return;
       }
       const mealKey = state.activeMeal;
@@ -2591,15 +2667,15 @@
       const file = event.target.files && event.target.files[0];
       event.target.value = '';
       if (!file || state.analyzing) return;
+      if (!requireEntryMeal_()) return;
       if (String(file.type || '').toLowerCase().indexOf('image/') !== 0) {
         showToast('請選擇照片檔案。');
         return;
       }
 
-      // 拍照前不預設餐別；分析完成後再由使用者選擇早餐、午餐、晚餐等餐別。
+      // 餐別已在拍照前選好；分析完成後沿用同一餐別，不要求重選。
       state.pendingAiItems = [];
       state.pendingAiMeal = '';
-      state.entryMealChosen = false;
       renderAiReview();
       state.photoPanelVisible = true;
       const photoPanel = document.getElementById('photoEntryPanel');
@@ -2633,12 +2709,11 @@
               notes: item.notes || '',
             }));
             if (recognizedItems.length) {
-              // 先停在待確認區，讓使用者選餐別後才寫入該餐，避免早餐誤記。
+              // 先停在待確認區，確認內容後寫入拍照前選好的餐別。
               state.pendingAiItems = recognizedItems;
               state.pendingAiMeal = '';
-              state.entryMealChosen = false;
               renderAiReview();
-              setAnalyzing(false, '✅ 分析完成，請選擇要加入哪一餐。');
+              setAnalyzing(false, `✅ 分析完成，確認後會加入${mealLabels[state.activeMeal]}。`);
               const review = document.getElementById('aiResult');
               if (review) review.scrollIntoView({ behavior: 'smooth', block: 'center' });
             } else {
@@ -2794,10 +2869,7 @@
 
     function confirmAiItems() {
       const mealKey = state.activeMeal;
-      if (!state.entryMealChosen || !mealLabels[mealKey]) {
-        showToast('請先選擇要加入的餐別。');
-        return;
-      }
+      if (!requireEntryMeal_() || !mealLabels[mealKey]) return;
       const validItems = state.pendingAiItems
         .filter(item => item.name.trim() && Number(item.calories) > 0)
         .map(item => Object.assign({}, item, { calories: Math.round(Number(item.calories)) }));
@@ -2929,6 +3001,7 @@
       renderSelected();
       updateTotals();
       markRecordChanged();
+      showToast(`已加入${mealLabels[mealKey]}：${food.name}`);
     }
 
     function addFoodToActiveMeal(food) {
@@ -2943,9 +3016,11 @@
       renderSelected();
       updateTotals();
       markRecordChanged();
+      showToast(`已加入${mealLabels[state.activeMeal]}：${food.name}`);
     }
 
     function toggleFoodLibrary() {
+      if (!requireEntryMeal_()) return;
       const library = document.getElementById('foodLibrary');
       if (!library) return;
       if (library.open) {
