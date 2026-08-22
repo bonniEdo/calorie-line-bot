@@ -38,9 +38,9 @@
     .summary-card strong { display: block; font-size: 18px; }
     .summary-card span { font-size: 11px; color: #765c17; }
     .page-nav { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:7px; margin-top:12px; }
-    .page-nav a { min-height:42px; display:flex; align-items:center; justify-content:center; padding:8px 7px; border:1px solid var(--line); border-radius:12px; background:#fff; color:var(--ink); font-size:12px; font-weight:900; text-decoration:none; }
+    .page-nav a { min-height:42px; display:flex; align-items:center; justify-content:center; padding:8px 7px; border:1px solid #8bc9e8; border-radius:12px; background:#e8f6ff; color:#245f7d; font-size:12px; font-weight:900; text-decoration:none; }
     .page-nav a[hidden] { display:none !important; }
-    .page-nav a:first-child { border-color:#9fc7ae; background:#f0f8f2; color:#35684b; }
+    .page-nav a:first-child { border-color:#8bc9e8; background:#e8f6ff; color:#245f7d; }
 
     /* 日期只留一個選擇器，避免四個按鈕和外框把畫面切得太碎。 */
     .date-toolbar {
@@ -314,7 +314,7 @@
   -->
   <div id="publicData" hidden><?= publicJson ?></div>
   <script>
-    window.__publicWallBuild = '2026.08.22-74';
+    window.__publicWallBuild = '2026.08.22-75';
 
     const toast = document.getElementById('toast');
     const recordsPanel = document.getElementById('recordsPanel');
