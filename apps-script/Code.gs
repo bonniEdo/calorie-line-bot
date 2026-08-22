@@ -97,7 +97,11 @@ function setupProject() {
 /** Apps Script Web App：顯示手機版圖卡選餐頁。 */
 function doGet(e) {
   const startedAt = Date.now();
-  const view = String((e && e.parameter && e.parameter.view) || '');
+  // 排程推播使用 launch 啟動碼：Trigger 只負責發隨機碼，真正的 form token
+  // 由目前 /exec 的部署版本在使用者點擊時自己簽發、自己驗證，避免 HEAD 與部署版錯位。
+  const launchAccess = resolveScheduledLaunchAccess_(e);
+  const requestedView = String((e && e.parameter && e.parameter.view) || '');
+  const view = launchAccess.present && launchAccess.valid ? launchAccess.view : requestedView;
   if (view === 'public') {
     const publicUid = String((e && e.parameter && e.parameter.uid) || '');
     const publicSig = String((e && e.parameter && e.parameter.sig) || '');
@@ -124,9 +128,18 @@ function doGet(e) {
   }
   if (view === 'history') {
     const testAccess = getTestWebAccess_(e);
-    const historyUid = testAccess ? testAccess.uid : String((e && e.parameter && e.parameter.uid) || '');
-    const historySig = testAccess ? testAccess.sig : String((e && e.parameter && e.parameter.sig) || '');
-    const tokenState = inspectAccessToken_(historyUid, historySig, APP.tokenScopes.form);
+    const historyLaunchValid = launchAccess.present && launchAccess.valid && launchAccess.view === 'history';
+    const historyUid = testAccess
+      ? testAccess.uid
+      : (historyLaunchValid ? launchAccess.uid : String((e && e.parameter && e.parameter.uid) || ''));
+    const historySig = testAccess
+      ? testAccess.sig
+      : (historyLaunchValid
+        ? issueAccessToken_(historyUid, APP.tokenScopes.form, APP.tokenTtlSeconds.form)
+        : String((e && e.parameter && e.parameter.sig) || ''));
+    const tokenState = launchAccess.present && !launchAccess.valid
+      ? launchAccess.state
+      : inspectAccessToken_(historyUid, historySig, APP.tokenScopes.form);
     const historyTemplate = HtmlService.createTemplateFromFile('History');
     const historyData = tokenState === 'ok'
       ? getHistoryData_(historyUid, 365)
@@ -144,11 +157,21 @@ function doGet(e) {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
   }
-  // 測試專案可用 ?test=1 直接開啟指定測試帳號；正式環境沒有 TEST_MODE 時仍必須使用 LINE 發出的簽章網址。
+  // 測試專案可用 ?test=1 直接開啟指定測試帳號；正式環境可使用即時簽章網址，
+  // 或由排程推播的 launch 啟動碼進入。
   const testAccess = getTestWebAccess_(e);
-  const uid = testAccess ? testAccess.uid : String((e && e.parameter && e.parameter.uid) || '');
-  const sig = testAccess ? testAccess.sig : String((e && e.parameter && e.parameter.sig) || '');
-  const tokenState = inspectAccessToken_(uid, sig, APP.tokenScopes.form);
+  const formLaunchValid = launchAccess.present && launchAccess.valid && launchAccess.view === 'form';
+  const uid = testAccess
+    ? testAccess.uid
+    : (formLaunchValid ? launchAccess.uid : String((e && e.parameter && e.parameter.uid) || ''));
+  const sig = testAccess
+    ? testAccess.sig
+    : (formLaunchValid
+      ? issueAccessToken_(uid, APP.tokenScopes.form, APP.tokenTtlSeconds.form)
+      : String((e && e.parameter && e.parameter.sig) || ''));
+  const tokenState = launchAccess.present && !launchAccess.valid
+    ? launchAccess.state
+    : inspectAccessToken_(uid, sig, APP.tokenScopes.form);
   const valid = tokenState === 'ok';
   const member = valid ? getMemberById_(uid) : null;
   const waterSettings = valid ? getWaterSettings_(uid) : { enabled: false, goalMl: 2000 };
@@ -858,6 +881,8 @@ function sendReminderAt1800() { return sendReminderForSlot_('18:00'); }
 /** 09:00 結算與早晨提醒共用一個觸發器，避免兩個任務同時搶 ScriptLock。 */
 function sendMorningJobsAt0900() {
   const result = { ok: true };
+  // 清掉已過期的排程啟動碼，避免 Script Properties 長期累積。
+  try { cleanupExpiredScheduledLaunches_(); } catch (error) { console.warn(error); }
   try {
     result.ranking = sendPreviousDayRankingAt0900();
     // 群組推送失敗時仍要繼續執行個人通知；不要讓單一群組卡住整個早晨流程。
@@ -924,7 +949,7 @@ function sendReminderForSlot_(slot) {
         actions: [{
           type: 'uri',
           label: inProgress ? '繼續並完成打卡' : '開始今日打卡',
-          uri: getSignedFormUrl_(member.userId),
+          uri: getScheduledLaunchUrl_(member.userId, 'form'),
         }],
       },
     }];
@@ -1163,8 +1188,8 @@ function personalRankingMessages_(date, member, log) {
       type: 'buttons',
       text,
       actions: [
-        { type: 'uri', label: '開始今天打卡', uri: getSignedFormUrl_(member.userId) },
-        { type: 'uri', label: '查看歷史紀錄', uri: getHistoryUrl_(member.userId) },
+        { type: 'uri', label: '開始今天打卡', uri: getScheduledLaunchUrl_(member.userId, 'form') },
+        { type: 'uri', label: '查看歷史紀錄', uri: getScheduledLaunchUrl_(member.userId, 'history') },
       ],
     },
   }];
@@ -2984,6 +3009,129 @@ function manualFrequentId_(name) {
     Utilities.Charset.UTF_8
   );
   return `manual_frequent_${Utilities.base64EncodeWebSafe(bytes).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24)}`;
+}
+
+/**
+ * 排程推播專用的啟動網址。
+ *
+ * 為什麼不直接在 Trigger 裡塞 getSignedFormUrl_()：
+ * 時間觸發器可能跑編輯器最新 HEAD，而 /exec 仍是固定部署版本；若簽章邏輯曾調整，
+ * 就可能出現「早上剛收到的 uid+sig，點開卻 invalid」。
+ *
+ * launch 本身只是一段高熵隨機碼；真正的 uid 存在 Script Properties。
+ * 使用者點 /exec?launch=... 後，才由該 /exec 部署版本當場簽發 form token。
+ */
+function getScheduledLaunchUrl_(userId, view) {
+  userId = String(userId || '');
+  view = String(view || 'form') === 'history' ? 'history' : 'form';
+  if (!userId) throw new Error('無法建立排程連結：缺少 UserId。');
+
+  const baseUrl = ScriptApp.getService().getUrl();
+  if (!baseUrl) throw new Error('尚未部署 Apps Script 網頁應用程式。');
+
+  const launch = (
+    Utilities.getUuid().replace(/-/g, '')
+    + Utilities.getUuid().replace(/-/g, '')
+  );
+  const expiresAt = Math.floor(Date.now() / 1000) + APP.tokenTtlSeconds.form;
+  const key = scheduledLaunchPropertyKey_(launch);
+  PropertiesService.getScriptProperties().setProperty(key, JSON.stringify({
+    uid: userId,
+    view,
+    exp: expiresAt,
+  }));
+
+  const query = view === 'history'
+    ? `?view=history&launch=${encodeURIComponent(launch)}`
+    : `?launch=${encodeURIComponent(launch)}`;
+  return `${baseUrl}${query}`;
+}
+
+function scheduledLaunchPropertyKey_(launch) {
+  const digest = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(launch || ''),
+    Utilities.Charset.UTF_8
+  );
+  return `SCHEDULED_LAUNCH_${Utilities.base64EncodeWebSafe(digest).replace(/=+$/g, '')}`;
+}
+
+/**
+ * 解析排程 launch。回傳 present/valid/state，讓 doGet 能區分「沒帶 launch」與「launch 已失效」。
+ * launch 在有效期內可重複開啟，符合 LINE 使用者可能返回、重點按鈕的使用情境。
+ */
+function resolveScheduledLaunchAccess_(e) {
+  const launch = String((e && e.parameter && e.parameter.launch) || '');
+  if (!launch) return { present: false, valid: false, state: 'invalid', uid: '', view: 'form' };
+  // UUID x2 去掉連字號後應為 64 個十六進位字元；先限制格式，避免任意字串造成 Properties 查詢。
+  if (!/^[a-f0-9]{64}$/i.test(launch)) {
+    return { present: true, valid: false, state: 'invalid', uid: '', view: 'form' };
+  }
+
+  const raw = PropertiesService.getScriptProperties().getProperty(scheduledLaunchPropertyKey_(launch));
+  if (!raw) return { present: true, valid: false, state: 'invalid', uid: '', view: 'form' };
+
+  let data;
+  try { data = JSON.parse(raw); } catch (error) { data = null; }
+  const uid = data && String(data.uid || '');
+  const view = data && String(data.view || '') === 'history' ? 'history' : 'form';
+  const expiresAt = data ? Number(data.exp || 0) : 0;
+  if (!uid || !Number.isFinite(expiresAt)) {
+    return { present: true, valid: false, state: 'invalid', uid: '', view };
+  }
+  if (Math.floor(Date.now() / 1000) > expiresAt) {
+    return { present: true, valid: false, state: 'expired', uid: '', view };
+  }
+
+  // view 也要吻合，避免把 history launch 改掉 query 後拿去開表單，反之亦然。
+  const requestedView = String((e && e.parameter && e.parameter.view) || '');
+  if ((view === 'history' && requestedView !== 'history') || (view === 'form' && requestedView === 'history')) {
+    return { present: true, valid: false, state: 'invalid', uid: '', view };
+  }
+  return { present: true, valid: true, state: 'ok', uid, view };
+}
+
+function cleanupExpiredScheduledLaunches_() {
+  const props = PropertiesService.getScriptProperties();
+  const all = props.getProperties();
+  const now = Math.floor(Date.now() / 1000);
+  const expiredKeys = [];
+  Object.keys(all).forEach(key => {
+    if (!/^SCHEDULED_LAUNCH_/.test(key)) return;
+    try {
+      const data = JSON.parse(all[key] || '{}');
+      if (!Number(data.exp) || Number(data.exp) < now) expiredKeys.push(key);
+    } catch (error) {
+      expiredKeys.push(key);
+    }
+  });
+  expiredKeys.forEach(key => props.deleteProperty(key));
+  return { ok: true, removed: expiredKeys.length };
+}
+
+/**
+ * 部署新版後可在 Apps Script 編輯器手動執行，立即取得兩條排程式測試網址，
+ * 不必等隔天 09:00。開啟 formUrl 應能直接進打卡頁，網址應包含 launch= 而不是 uid+sig。
+ */
+function testScheduledLaunchLinks() {
+  const member = getMembers_().find(item => item && item.userId && item.isFriend)
+    || getMembers_().find(item => item && item.userId);
+  if (!member) throw new Error('找不到可測試的成員。');
+
+  const result = {
+    ok: true,
+    user: member.name || member.userId,
+    formUrl: getScheduledLaunchUrl_(member.userId, 'form'),
+    historyUrl: getScheduledLaunchUrl_(member.userId, 'history'),
+  };
+
+  console.log('=== 排程連結測試 ===');
+  console.log(`使用者：${result.user}`);
+  console.log(`打卡連結：${result.formUrl}`);
+  console.log(`歷史連結：${result.historyUrl}`);
+  console.log('網址應包含 launch=，不應直接出現 uid=...&sig=...');
+
+  return result;
 }
 
 function getSignedFormUrl_(userId) {
