@@ -45,6 +45,29 @@
     .legend-intake { background:#e59a32; }
     .legend-tdee { background:#4e8b69; }
     .chart-empty { padding:38px 10px; text-align:center; color:var(--muted); }
+    .period-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
+    .period-card { overflow:hidden; border:1px solid var(--line); border-radius:16px; background:#fffaf0; }
+    .period-card > summary { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 13px; color:#765c17; font-size:13px; font-weight:900; cursor:pointer; list-style:none; }
+    .period-card > summary::-webkit-details-marker { display:none; }
+    .period-card > summary::after { content:'＋'; font-size:16px; }
+    .period-card[open] > summary::after { content:'－'; }
+    .period-list { padding:0 12px 11px; }
+    .period-row { padding:10px 0; border-top:1px solid var(--line); }
+    .period-row:first-child { border-top:0; }
+    .period-label { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; font-weight:900; }
+    .period-label small { color:var(--muted); font-size:10px; font-weight:700; }
+    /* 週／月改成一行「進食／可消耗」加上視覺進度，不再分裂成兩張小卡。 */
+    .period-energy { margin-top:8px; padding:9px 10px; border-radius:11px; background:#fff; }
+    .period-energy-top { display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
+    .period-energy-top strong { color:#35684b; font-size:14px; }
+    .period-energy-top span { color:#4e8b69; font-size:10px; font-weight:900; white-space:nowrap; }
+    .period-energy-label { display:block; margin-top:6px; color:var(--muted); font-size:10px; font-weight:800; }
+    .period-bar { height:7px; margin-top:7px; overflow:hidden; border-radius:999px; background:#e6f0e8; }
+    .period-bar > span { display:block; height:100%; border-radius:inherit; background:#4e8b69; transition:width .2s ease; }
+    .period-energy.over .period-energy-top strong,
+    .period-energy.over .period-energy-top span { color:#b87318; }
+    .period-energy.over .period-bar { background:#fff0d7; }
+    .period-energy.over .period-bar > span { background:#e59a32; }
     .hint { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
     .record { border-top:1px solid var(--line); padding:13px 0 0; margin-top:13px; }
     .record:first-child { border-top:0; margin-top:0; padding-top:0; }
@@ -67,6 +90,7 @@
     .meal span:last-child { font-weight:900; }
     .empty, .error { padding:22px 10px; text-align:center; color:var(--muted); line-height:1.6; }
     .error { color:var(--red); }
+    @media (max-width:520px) { .period-grid { grid-template-columns:1fr; } }
     @media (max-width:420px) { .summary-card strong { font-size:17px; } .record summary { grid-template-columns:96px minmax(0,1fr) auto; gap:6px; } .detail { margin-left:0; } }
   </style>
 </head>
@@ -91,6 +115,7 @@
       const signed = value => value > 0 ? `+${number(value)}` : number(value);
       const records = Array.isArray(data.records) ? data.records : [];
       const summary = data.summary || {};
+      const nav = data.nav || {};
       let html = '<section class="hero">'
         + '<div class="eyebrow">CALORIE HISTORY</div>'
         + '<h1>📊 卡路里歷史紀錄</h1>'
@@ -99,14 +124,25 @@
         + '<div class="summary-card"><strong>' + number(summary.averageIntake) + '</strong><span>完成日平均攝取 kcal</span></div>'
         + '<div class="summary-card"><strong>' + number(summary.averageTdee) + '</strong><span>完成日平均 TDEE kcal</span></div>'
         + '<div class="summary-card"><strong>' + number(summary.completedDays) + '/' + number(summary.loggedDays) + '</strong><span>完成紀錄</span></div>'
-        + '</div></section>';
-      html += '<section class="section chart-section"><div class="section-head"><div><h2>📈 攝取趨勢</h2></div></div>';
+        + '</div></section>'
+        + '<nav class="page-nav" aria-label="頁面導覽">'
+        + (nav.formUrl ? '<a class="page-nav-primary" href="' + escapeAttr(nav.formUrl) + '" target="_top">📝 我要打卡</a>' : '')
+        + (nav.publicWallUrl ? '<a href="' + escapeAttr(nav.publicWallUrl) + '" target="_top">🌍 公開紀錄牆</a>' : '')
+        + '</nav>';
+      html += '<section class="section chart-section"><div class="section-head"><div><h2>📈 攝取趨勢</h2><p class="hint">折線圖顯示最近 30 筆記錄。</p></div></div>';
       if (!records.length) {
         html += '<div class="chart-empty">有紀錄後，這裡會顯示你的熱量趨勢圖。</div>';
       } else {
-        html += buildTrendChart(records);
+        html += buildTrendChart(records.slice(0, 30));
       }
       html += '</section>';
+      if (records.length) {
+          html += '<section class="section"><div class="section-head"><div><h2>🗓️ 週／月熱量總覽</h2><p class="hint">由每日紀錄加總・猛猛進食／可猛猛消耗。</p></div></div>'
+          + '<div class="period-grid">'
+          + renderPeriodCard('每週總計', aggregateByWeek(records), true)
+          + renderPeriodCard('每月總計', aggregateByMonth(records), false)
+          + '</div></section>';
+      }
       html += '<section class="section"><div class="section-head"><div><h2>📅 我的歷史紀錄</h2><p class="hint">點開日期查看餐別、運動與飲水。</p></div></div>';
       if (!records.length) {
         html += '<div class="empty">目前還沒有歷史紀錄。</div>';
@@ -121,11 +157,6 @@
         }
       }
       html += '</section>';
-      const nav = data.nav || {};
-      html += '<nav class="page-nav" aria-label="頁面導覽">'
-        + (nav.formUrl ? '<a class="page-nav-primary" href="' + escapeAttr(nav.formUrl) + '" target="_top">📝 我要打卡</a>' : '')
-        + (nav.publicWallUrl ? '<a href="' + escapeAttr(nav.publicWallUrl) + '" target="_top">🌍 公開紀錄牆</a>' : '')
-        + '</nav>';
       root.innerHTML = html;
 
       function escapeAttr(value) {
@@ -151,6 +182,84 @@
           result += '<div class="meal"><span>' + meal.label + (meal.names && meal.names.length ? '・' + meal.names.join('、') : '') + '</span><span>' + number(meal.kcal) + ' kcal</span></div>';
         });
         return result + '</div></div></details>';
+      }
+
+      function parseDateKey(value) {
+        const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12) : null;
+      }
+
+      function dateKey(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+
+      function aggregateByWeek(items) {
+        const groups = new Map();
+        items.forEach(record => {
+          const date = parseDateKey(record.date);
+          if (!date) return;
+          const monday = new Date(date);
+          monday.setDate(date.getDate() - ((date.getDay() + 6) % 7));
+          const sunday = new Date(monday);
+          sunday.setDate(monday.getDate() + 6);
+          const key = dateKey(monday);
+          const group = groups.get(key) || {
+            key,
+            label: `${dateLabel(dateKey(monday))}－${dateLabel(dateKey(sunday))}`,
+            intake: 0,
+            tdee: 0,
+            days: 0,
+          };
+          group.intake += Math.max(0, Number(record.intake || 0));
+          group.tdee += Math.max(0, Number(record.tdee || 0));
+          group.days += 1;
+          groups.set(key, group);
+        });
+        return Array.from(groups.values());
+      }
+
+      function aggregateByMonth(items) {
+        const groups = new Map();
+        items.forEach(record => {
+          const date = parseDateKey(record.date);
+          if (!date) return;
+          const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          const group = groups.get(key) || {
+            key,
+            label: `${date.getFullYear()} 年 ${date.getMonth() + 1} 月`,
+            intake: 0,
+            tdee: 0,
+            days: 0,
+          };
+          group.intake += Math.max(0, Number(record.intake || 0));
+          group.tdee += Math.max(0, Number(record.tdee || 0));
+          group.days += 1;
+          groups.set(key, group);
+        });
+        return Array.from(groups.values());
+      }
+
+      function renderPeriodCard(title, periods, open) {
+        const rows = periods.map(period => {
+          const intake = Math.max(0, Math.round(Number(period.intake || 0)));
+          const tdee = Math.max(0, Math.round(Number(period.tdee || 0)));
+          const over = tdee > 0 && intake > tdee;
+          const remaining = Math.max(0, tdee - intake);
+          const exceeded = Math.max(0, intake - tdee);
+          const width = tdee > 0 ? Math.min(100, Math.max(0, intake / tdee * 100)) : 0;
+          return '<div class="period-row">'
+            + '<div class="period-label"><span>' + period.label + '</span><small>' + number(period.days) + ' 個記錄日</small></div>'
+            + '<div class="period-energy' + (over ? ' over' : '') + '">'
+            + '<div class="period-energy-top"><strong>' + number(intake) + ' / ' + number(tdee) + ' kcal</strong>'
+            + '<span>' + (over ? '超過 ' + number(exceeded) + ' kcal' : '還可 ' + number(remaining) + ' kcal') + '</span></div>'
+            + '<div class="period-bar"><span style="width:' + width.toFixed(1) + '%"></span></div>'
+            + '<small class="period-energy-label">猛猛進食／可猛猛消耗</small>'
+            + '</div></div>';
+        }).join('');
+        return '<details class="period-card"' + (open ? ' open' : '') + '><summary>' + title + '</summary><div class="period-list">' + rows + '</div></details>';
       }
 
       function buildTrendChart(items) {

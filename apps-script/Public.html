@@ -53,7 +53,8 @@
       border-bottom: 1px solid var(--line);
     }
     .date-toolbar-title { color: var(--muted); font-size: 12px; font-weight: 900; white-space: nowrap; }
-    .date-toolbar-actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    /* 日期選單與「今天」是真正可點擊的 2:1 操作區，避免今天看起來像一段文字。 */
+    .date-toolbar-actions { display: grid; grid-template-columns: minmax(0, 2fr) minmax(92px, 1fr); align-items: center; gap: 8px; min-width: 0; }
     .date-select {
       min-height: 36px;
       width: 100%;
@@ -68,16 +69,22 @@
       cursor: pointer;
     }
     .date-today {
-      flex: 0 0 auto;
-      padding: 6px 0;
-      border: 0;
-      background: transparent;
-      color: var(--green);
+      min-height: 36px;
+      width: 100%;
+      padding: 0 10px;
+      border: 1px solid #dfbb45;
+      border-radius: 10px;
+      background: #fff3c9;
+      color: #765c17;
       font-size: 12px;
       font-weight: 900;
       white-space: nowrap;
       cursor: pointer;
+      box-shadow: 0 3px 9px rgba(119, 88, 18, .08);
     }
+    .date-today:hover { background: #ffe69a; }
+    .date-today:active { transform: translateY(1px); }
+    .date-today:disabled { cursor: wait; opacity: .62; }
     .date-range-hint { grid-column: 1 / -1; color: #928879; font-size: 11px; line-height: 1.4; }
 
     /* 頁籤改成底線，不再套第二層大圓角卡片。 */
@@ -144,7 +151,9 @@
     .energy-line small { color: #5b7865; font-size: 10px; font-weight: 700; }
     .meal-group { padding-top: 10px; }
     .meal-group + .meal-group { margin-top: 8px; border-top: 1px solid #f3ecde; }
-    .meal-title { margin-bottom: 3px; color: var(--green); font-size: 12px; font-weight: 900; }
+    .meal-title { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:3px; color:var(--green); font-size:12px; font-weight:900; }
+    .meal-total-kcal { padding:3px 7px; border-radius:999px; background:#eef8f1; color:#35684b; font-size:11px; font-weight:900; white-space:nowrap; }
+    .meal-total-only { padding: 7px 0 2px; color: var(--muted); font-size: 11px; }
     .food-item {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -167,6 +176,7 @@
       border-bottom: 1px solid #f3ecde;
     }
     .rank-row:last-child { border-bottom: 0; }
+    .rank-row.no-rank { grid-template-columns: minmax(0, 1fr) auto auto; }
     .place { text-align: center; font-weight: 900; }
     .rank-name { min-width: 0; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .streak { text-align: right; font-weight: 900; font-size: 14px; white-space: nowrap; }
@@ -243,6 +253,7 @@
       .person-name { font-size: 14px; }
       .kcal { font-size: 14px; }
       .rank-row { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 6px; }
+      .rank-row.no-rank { grid-template-columns: minmax(0, 1fr) auto auto; }
       .like-button { padding-left: 7px; padding-right: 7px; }
     }
     @media (max-width: 460px) {
@@ -260,7 +271,7 @@
       <div class="summary">
         <div class="summary-card"><strong id="publicCount">0</strong><span id="publicCountLabel">今日公開</span></div>
         <div class="summary-card"><strong id="completedCount">0</strong><span id="completedCountLabel">已完成</span></div>
-        <div class="summary-card"><strong id="rankingCount">0</strong><span id="rankingCountLabel">參加連續排行</span></div>
+        <div class="summary-card"><strong id="rankingCount">0</strong><span id="rankingCountLabel">參加連續紀錄</span></div>
       </div>
     </section>
 
@@ -273,14 +284,14 @@
       <div class="date-toolbar-title">📅 公開紀錄日期</div>
       <div class="date-toolbar-actions">
         <select id="publicDateSelect" class="date-select" aria-label="選擇公開紀錄日期"></select>
-        <button id="publicDateToday" class="date-today" type="button">今天</button>
+        <button id="publicDateToday" class="date-today" type="button" title="回到今天的公開紀錄">今天</button>
       </div>
       <div id="dateRangeHint" class="date-range-hint"></div>
     </section>
 
     <nav class="tabs" role="tablist" aria-label="公開功能頁籤">
       <button id="recordsTab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="recordsPanel">公開紀錄</button>
-      <button id="streaksTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="streaksPanel">連續排行</button>
+      <button id="streaksTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="streaksPanel">連續紀錄</button>
     </nav>
 
     <section id="recordsPanel" class="panel" role="tabpanel" aria-labelledby="recordsTab"></section>
@@ -303,7 +314,7 @@
   -->
   <div id="publicData" hidden><?= publicJson ?></div>
   <script>
-    window.__publicWallBuild = '2026.08.21-70';
+    window.__publicWallBuild = '2026.08.22-74';
 
     const toast = document.getElementById('toast');
     const recordsPanel = document.getElementById('recordsPanel');
@@ -339,9 +350,9 @@
     document.getElementById('rankingCount').textContent = number(DATA.summary && DATA.summary.rankingCount);
     document.getElementById('publicCountLabel').textContent = `${selectedDateLabel}公開`;
     document.getElementById('completedCountLabel').textContent = `${selectedDateLabel}已完成`;
-    document.getElementById('rankingCountLabel').textContent = `${selectedDateLabel}排行`;
+    document.getElementById('rankingCountLabel').textContent = `${selectedDateLabel}連續紀錄`;
     document.getElementById('recordsTab').textContent = '公開紀錄';
-    document.getElementById('streaksTab').textContent = '連續排行';
+    document.getElementById('streaksTab').textContent = '連續紀錄';
     document.getElementById('updated').textContent = `更新時間：${DATA.generatedAt || ''}`;
 
     initDatePicker();
@@ -454,9 +465,9 @@
       document.getElementById('rankingCount').textContent = number(DATA.summary && DATA.summary.rankingCount);
       document.getElementById('publicCountLabel').textContent = `${dateLabel}公開`;
       document.getElementById('completedCountLabel').textContent = `${dateLabel}已完成`;
-      document.getElementById('rankingCountLabel').textContent = `${dateLabel}排行`;
+      document.getElementById('rankingCountLabel').textContent = `${dateLabel}連續紀錄`;
       document.getElementById('recordsTab').textContent = '公開紀錄';
-      document.getElementById('streaksTab').textContent = '連續排行';
+      document.getElementById('streaksTab').textContent = '連續紀錄';
       document.getElementById('updated').textContent = `更新時間：${DATA.generatedAt || ''}`;
       initDatePicker();
     }
@@ -494,7 +505,10 @@
      * 用原生的 details/summary，鍵盤與螢幕閱讀器都能直接操作。
      */
     function renderRecords() {
-      const records = Array.isArray(DATA.records) ? DATA.records : [];
+      const records = sortSelfFirst(Array.isArray(DATA.records) ? DATA.records : [], (a, b) => {
+        const difference = publicDeficit(a) - publicDeficit(b);
+        return difference || aliasCompare(a, b);
+      });
       if (!records.length) {
         recordsPanel.innerHTML = '<div class="empty">這天還沒有公開紀錄。<br>每個人的公開設定預設都是關閉的。</div>';
         return;
@@ -553,14 +567,29 @@
     }
 
     function foodDetailsHtml(record) {
+      const mealTotals = Array.isArray(record.mealTotals)
+        ? record.mealTotals.filter(meal => meal && Number(meal.kcal || 0) > 0)
+        : [];
       const mealDetails = Array.isArray(record.mealDetails)
         ? record.mealDetails.filter(meal => meal && Array.isArray(meal.items) && meal.items.length)
         : [];
       if (!mealDetails.length) {
-        return '<div class="no-details">這位夥伴沒有公開食物細項。</div>';
+        if (!mealTotals.length) {
+          return '<div class="no-details">這位夥伴沒有公開食物細項。</div>';
+        }
+        return mealTotals.map(meal => '<section class="meal-group">'
+          + '<div class="meal-title"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="meal-total-kcal">本餐共 ' + number(meal.kcal) + ' kcal</span></div>'
+          + '<div class="meal-total-only">未公開食物細項</div>'
+          + '</section>').join('');
       }
 
       return mealDetails.map(meal => {
+        const calculatedTotal = Math.round(meal.items.reduce(
+          (sum, item) => sum + Math.max(0, Number(item && item.calories || 0)),
+          0
+        ));
+        const matchedTotal = mealTotals.find(item => String(item.label || '') === String(meal.label || ''));
+        const mealTotal = matchedTotal ? Math.round(Number(matchedTotal.kcal || 0)) : calculatedTotal;
         const items = meal.items.map(item => {
           const quantity = Math.max(0, Number(item.quantity || 0));
           const meta = [];
@@ -574,27 +603,49 @@
             + '</div>';
         }).join('');
         return '<section class="meal-group">'
-          + '<div class="meal-title">' + escapeHtml(meal.label || '餐點') + '</div>'
+          + '<div class="meal-title"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="meal-total-kcal">本餐共 ' + number(mealTotal) + ' kcal</span></div>'
           + items
           + '</section>';
       }).join('');
     }
 
     function renderStreaks() {
-      const streaks = Array.isArray(DATA.streaks) ? DATA.streaks : [];
+      const streaks = sortSelfFirst(Array.isArray(DATA.streaks) ? DATA.streaks : [], (a, b) => {
+        const difference = Number(b && b.streak || 0) - Number(a && a.streak || 0);
+        return difference || aliasCompare(a, b);
+      });
       if (!streaks.length) {
-        streaksPanel.innerHTML = '<div class="empty">還沒有人選擇參加公開連續打卡排行。</div>';
+        streaksPanel.innerHTML = '<div class="empty">還沒有人選擇參加公開連續紀錄。</div>';
         return;
       }
-      streaksPanel.innerHTML = '<div class="rank-card">' + streaks.map((item, index) => {
-        const place = ['🥇', '🥈', '🥉'][index] || String(index + 1);
-        return '<div class="rank-row">'
-          + '<div class="place">' + place + '</div>'
+      streaksPanel.innerHTML = '<div class="rank-card">' + streaks.map(item => {
+        return '<div class="rank-row no-rank">'
           + '<div class="rank-name">' + escapeHtml(item.alias) + '</div>'
           + '<div class="streak">' + number(item.streak) + ' 天<small>' + (item.completedOnDate ? selectedDateLabel + '已完成' : selectedDateLabel + '尚未完成') + '</small></div>'
           + likeButtonHtml(item)
           + '</div>';
       }).join('') + '</div>';
+    }
+
+    function sortSelfFirst(items, compareOthers) {
+      return items.slice().sort((a, b) => {
+        const selfFirst = Number(Boolean(b && b.isSelf)) - Number(Boolean(a && a.isSelf));
+        return selfFirst || compareOthers(a, b);
+      });
+    }
+
+    function publicDeficit(item) {
+      if (item && item.deficit !== null && item.deficit !== undefined && item.deficit !== '') {
+        const value = Number(item.deficit);
+        if (Number.isFinite(value)) return value;
+      }
+      const allowance = Number(item && item.allowance || 0);
+      const intake = Number(item && item.intake || 0);
+      return allowance > 0 ? allowance - intake : Number.POSITIVE_INFINITY;
+    }
+
+    function aliasCompare(a, b) {
+      return String(a && a.alias || '').localeCompare(String(b && b.alias || ''), 'zh-Hant');
     }
 
     function likeButtonHtml(item) {

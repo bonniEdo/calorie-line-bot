@@ -1,6 +1,6 @@
-// 應用程式版本：2026.08.22-71
+// 應用程式版本：2026.08.22-74
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.22-71';
+const APP_BUILD = '2026.08.22-74';
 
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
@@ -129,7 +129,7 @@ function doGet(e) {
     const tokenState = inspectAccessToken_(historyUid, historySig, APP.tokenScopes.form);
     const historyTemplate = HtmlService.createTemplateFromFile('History');
     const historyData = tokenState === 'ok'
-      ? getHistoryData_(historyUid, 30)
+      ? getHistoryData_(historyUid, 365)
       : { valid: false, invalidReason: tokenState };
     if (tokenState === 'ok') {
       // 歷史頁是本人表單權限，導覽可安全提供回到打卡與公開紀錄的入口。
@@ -1473,11 +1473,13 @@ function getPublicWallData_(viewerId, viewerSignature, selectedDate) {
     alias: item.alias,
     intake: item.intake,
     allowance: item.allowance,
+    deficit: item.deficit,
     bmr: item.bmr,
     exerciseKcal: item.exerciseKcal,
     bmrPlusExercise: item.bmrPlusExercise,
     tdeeEstimate: item.tdeeEstimate,
     meals: item.meals,
+    mealTotals: Array.isArray(item.mealTotals) ? item.mealTotals : [],
     mealDetails: Array.isArray(item.mealDetails) ? item.mealDetails : [],
     isComplete: item.isComplete,
     updatedAt: item.updatedAt,
@@ -1544,7 +1546,7 @@ function getPublicWallData_(viewerId, viewerSignature, selectedDate) {
  */
 function getPublicWallBaseData_(selectedDate, members) {
   const date = validatePublicWallDate_(selectedDate || today_());
-  const cacheKey = `public-wall-base:v6:${date}`;
+  const cacheKey = `public-wall-base:v7:${date}`;
   const cached = readJsonCache_(cacheKey);
   if (cached && Array.isArray(cached.records) && Array.isArray(cached.streaks)) {
     return cached;
@@ -1586,9 +1588,14 @@ function getPublicWallBaseData_(selectedDate, members) {
     const bmr = Math.round(numberInRange_(row[14], 0, 10000));
     const exerciseKcal = Math.round(numberInRange_(row[13], 0, 10000));
     const meals = [];
+    const mealTotals = [];
     [[4, '早餐'], [5, '午餐'], [6, '晚餐'], [8, '宵夜'], [7, '點心']]
       .forEach(([column, label]) => {
-        if (numberInRange_(row[column], 0, 100000) > 0) meals.push(label);
+        const kcal = Math.round(numberInRange_(row[column], 0, 100000));
+        if (kcal > 0) {
+          meals.push(label);
+          mealTotals.push({ label, kcal });
+        }
       });
     const publishFoodDetails = row[23] === true || String(row[23]).toUpperCase() === 'TRUE';
     return {
@@ -1596,11 +1603,13 @@ function getPublicWallBaseData_(selectedDate, members) {
       alias: publicAliasForMember_(member),
       intake,
       allowance,
+      deficit: allowance === null ? null : allowance - intake,
       bmr,
       exerciseKcal,
       bmrPlusExercise: bmr > 0 ? bmr + exerciseKcal : 0,
       tdeeEstimate: bmr > 0 ? Math.round(bmr * 1.2 + exerciseKcal) : 0,
       meals,
+      mealTotals,
       mealDetails: publishFoodDetails ? buildPublicMealDetails_(row[17]) : [],
       isComplete: isLogComplete_(row[20]),
       updatedAt: formatPublicTime_(row[19]),
@@ -2090,7 +2099,7 @@ function parseExerciseRecords_(json, legacyName, legacyMinutes, legacyKcal) {
 /** 只讀取本人最近一段時間的每日紀錄，供歷史頁使用。 */
 function getHistoryData_(userId, dayCount) {
   userId = String(userId || '');
-  const days = Math.min(90, Math.max(7, Number(dayCount) || 30));
+  const days = Math.min(365, Math.max(7, Number(dayCount) || 30));
   const cacheKey = `history:v2:${userId}:${days}:${today_()}`;
   const cached = readJsonCache_(cacheKey);
   if (cached) return cached;
@@ -2103,7 +2112,9 @@ function getHistoryData_(userId, dayCount) {
   const latestByDate = new Map();
   const lastRow = sheet.getLastRow();
   if (lastRow >= 2) {
-    const rowCount = Math.min(lastRow - 1, 1000);
+    // 週／月總覽最多讀一年。多人共用表格時，1000 列通常不足以涵蓋完整月份，
+    // 因此保留最近 20000 列，再依 UserId 與日期縮小成個人資料。
+    const rowCount = Math.min(lastRow - 1, 20000);
     const startRow = lastRow - rowCount + 1;
     const rows = sheet.getRange(startRow, 1, rowCount, APP.headers.logs.length).getValues();
     for (let index = rows.length - 1; index >= 0; index -= 1) {
@@ -2811,6 +2822,7 @@ function upsertMember_(data) {
   cache.remove(`public-wall-base:v4:${today_()}`);
   cache.remove(`public-wall-base:v5:${today_()}`);
   cache.remove(`public-wall-base:v6:${today_()}`);
+  cache.remove(`public-wall-base:v7:${today_()}`);
   try {
     cache.remove(`public-like-target:v2:${publicLikeTargetKey_(data.userId)}`);
   } catch (error) {
@@ -3670,6 +3682,7 @@ function invalidateLogCache_(date, userId) {
   cache.remove(`public-wall-base:v4:${date}`);
   cache.remove(`public-wall-base:v5:${date}`);
   cache.remove(`public-wall-base:v6:${date}`);
+  cache.remove(`public-wall-base:v7:${date}`);
   // 補登過去日期可能改變「公開連續打卡」，因此也要清掉今日公開頁快取。
   if (date && date !== today_()) {
     cache.remove(`public-wall-base:v2:${today_()}`);
@@ -3677,10 +3690,12 @@ function invalidateLogCache_(date, userId) {
     cache.remove(`public-wall-base:v4:${today_()}`);
     cache.remove(`public-wall-base:v5:${today_()}`);
     cache.remove(`public-wall-base:v6:${today_()}`);
+    cache.remove(`public-wall-base:v7:${today_()}`);
   }
   if (userId) {
     cache.remove(`history:v1:${userId}:30:${today_()}`);
     cache.remove(`history:v2:${userId}:30:${today_()}`);
+    cache.remove(`history:v2:${userId}:365:${today_()}`);
     try {
       cache.remove(`public-like-target:v2:${publicLikeTargetKey_(userId)}`);
     } catch (error) {
