@@ -1288,7 +1288,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.22-81';
+    window.__dietAppBuild = '2026.08.23-82';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1488,7 +1488,30 @@
         submitLog(todayIsComplete, true);
         return;
       }
-      window.location.reload();
+      navigateToFreshToday_();
+    }
+
+    function navigateToFreshToday_() {
+      const baseUrl = String((BOOTSTRAP && BOOTSTRAP.formUrl) || '');
+      if (!baseUrl) {
+        state.midnightReloadPending = false;
+        showToast('跨日更新失敗，請關閉頁面後從 LINE 重新輸入「打卡」。');
+        return;
+      }
+      const separator = baseUrl.indexOf('?') >= 0 ? '&' : '?';
+      const link = document.createElement('a');
+      link.href = `${baseUrl}${separator}dayRefresh=${Date.now()}`;
+      link.target = '_top';
+      link.rel = 'noopener';
+      link.hidden = true;
+      document.body.append(link);
+      link.click();
+      window.setTimeout(() => {
+        if (!document.contains(link)) return;
+        link.remove();
+        state.midnightReloadPending = false;
+        showToast('尚未完成跨日更新，請關閉頁面後從 LINE 重新輸入「打卡」。');
+      }, 5000);
     }
 
     function startTaipeiDayWatcher() {
@@ -3409,7 +3432,7 @@
         loadRecordDate(targetDate);
         return true;
       } else if (state.midnightReloadPending) {
-        window.location.reload();
+        navigateToFreshToday_();
         return true;
       }
       return false;
@@ -3521,6 +3544,7 @@
       const requestSignature = JSON.stringify(payload);
       if (automatic && requestSignature === state.lastSavedSignature) {
         state.savedMealRevision = Math.max(state.savedMealRevision, requestRevision);
+        if (finishSave(requestRevision)) return;
         updateSubmitButtons();
         return;
       }
