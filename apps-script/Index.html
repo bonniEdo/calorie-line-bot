@@ -811,8 +811,12 @@
       gap: 7px;
       margin-top: 10px;
     }
-    .food-entry-actions .entry-mode-button { border: 1px solid var(--line); background: #fff; }
-    .food-entry-actions .entry-mode-button.active { border-color: var(--yellow-dark); background: var(--yellow); }
+    .food-entry-actions .entry-mode-button { border: 1px solid var(--line); background: transparent; }
+    .food-entry-actions .entry-mode-button.active { border-color: var(--yellow-dark); background: var(--yellow); color: var(--ink); }
+    .food-entry-actions .entry-mode-button:focus-visible {
+      outline: 3px solid rgba(227, 139, 33, .24);
+      outline-offset: 1px;
+    }
     .manual-entry-link {
       display: inline-flex;
       align-items: center;
@@ -830,9 +834,9 @@
       cursor: pointer;
     }
     .food-entry-actions .manual-entry-link {
-      border-color: var(--yellow-dark);
-      background: var(--yellow);
-      color: var(--ink);
+      border-color: var(--line);
+      background: transparent;
+      color: var(--muted);
     }
     .food-library-quick-note {
       margin: 8px 0 0;
@@ -1274,7 +1278,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.22-78';
+    window.__dietAppBuild = '2026.08.22-79';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1361,7 +1365,7 @@
     const RECORD_DATES = BOOTSTRAP && Array.isArray(BOOTSTRAP.recordDates)
       ? BOOTSTRAP.recordDates
       : [];
-    const mealLabels = { breakfast: '早餐', lunch: '午餐', dinner: '晚餐', lateNight: '宵夜', snack: '點心' };
+    const mealLabels = { breakfast: '早', lunch: '午', dinner: '晚', lateNight: '宵', snack: '點心' };
     // 必須在啟動時還原今天紀錄前先宣告，否則 normalizeExerciseRecord()
     // 會在 const 的暫時死區（TDZ）被呼叫，導致整個頁面無法載入。
     const commonExercises = {
