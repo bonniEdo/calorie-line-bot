@@ -223,6 +223,9 @@ function doGet(e) {
     frequentFoods,
     todayLog: valid ? (dailyLogs[today_()] || null) : null,
     dailyLogs,
+    // 跨日時由前端導向一個全新的頂層頁面，避免只 reload Apps Script
+    // 內層 iframe 而出現白畫面；每次載入都重新簽發有效網址。
+    formUrl: valid ? getSignedFormUrl_(uid) : '',
     publicWallUrl: getPublicWallUrl_(valid ? uid : ''),
     historyUrl: getHistoryUrl_(valid ? uid : ''),
   };
@@ -3734,14 +3737,9 @@ function formatSheets_() {
 }
 
 function today_() {
-  const now = new Date();
-  const dietDate = new Date(now.getTime() - 3 * 60 * 60 * 1000);
-
-  return Utilities.formatDate(
-    dietDate,
-    APP.timezone,
-    'yyyy-MM-dd'
-  );
+  // 飲控日於台北時間 00:00 正式換日，需與前端跨日偵測及午夜結算一致。
+  // 舊版曾扣除 3 小時，會讓 00:00～02:59 仍停在昨天，並觸發前端重載循環。
+  return Utilities.formatDate(new Date(), APP.timezone, 'yyyy-MM-dd');
 }
 
 function dateKeyDaysAgo_(baseDateKey, days) {
