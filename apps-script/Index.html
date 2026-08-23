@@ -294,6 +294,7 @@
     .exercise-custom-control input { flex: 1; min-width: 0; }
     .exercise-custom-control button { margin-top: 5px; min-height: 44px; padding: 8px 10px; white-space: nowrap; }
     .exercise-record .danger-small { min-height: 40px; }
+    .exercise-record input[readonly] { border-color: #c6ddd0; background: #edf7f0; color: #35684b; font-weight: 800; }
     .exercise-add-row { display: flex; gap: 8px; margin-top: 10px; }
     .exercise-add-row button { min-height: 40px; }
     .exercise-weight-note {
@@ -1303,7 +1304,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.23-87';
+    window.__dietAppBuild = '2026.08.23-88';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1635,8 +1636,8 @@
         name: String(record.name || '').slice(0, 60),
         minutes: Math.max(0, Math.min(1440, Number(record.minutes || 0))) || '',
         kcal: Math.max(0, Math.min(10000, Number(record.kcal || record.calories || 0))) || '',
-        // 常見運動預設跟著體重自動重算；直接改過熱量的那筆則尊重手動數字。
-        kcalMode: canAutoEstimate && record.kcalMode !== 'manual' ? 'auto' : 'manual',
+        // 常見運動永遠跟著體重重算；只有自訂運動可以固定手動熱量。
+        kcalMode: canAutoEstimate ? 'auto' : 'manual',
       };
     }
 
@@ -1653,7 +1654,7 @@
       let changed = false;
       state.exerciseRecords = state.exerciseRecords.map(rawRecord => {
         const record = normalizeExerciseRecord(rawRecord);
-        if (record.type !== 'none' && record.type !== 'custom' && record.kcalMode !== 'manual') {
+        if (record.type !== 'none' && record.type !== 'custom') {
           const estimated = estimateExerciseKcal(record) || '';
           if (Number(record.kcal || 0) !== Number(estimated || 0)) {
             record.kcal = estimated;
@@ -1775,7 +1776,7 @@
         minutesInput.placeholder = '分鐘';
         minutesInput.addEventListener('input', event => {
           record.minutes = Math.max(0, Math.min(1440, Number(event.target.value || 0)));
-          if (record.type !== 'custom' && record.type !== 'none' && record.kcalMode !== 'manual') {
+          if (record.type !== 'custom' && record.type !== 'none') {
             record.kcal = estimateExerciseKcal(record) || '';
             kcalInput.value = record.kcal;
             updateTotals();
@@ -1783,20 +1784,27 @@
           markRecordChanged();
         });
         minutesLabel.append(minutesInput);
-        const kcalLabel = el('label', '', '活動熱量');
+        const isCommonExercise = normalized.type !== 'custom' && normalized.type !== 'none';
+        const kcalLabel = el('label', '', isCommonExercise ? '活動熱量（自動估算）' : '活動熱量');
         const kcalInput = document.createElement('input');
         kcalInput.type = 'number';
         kcalInput.inputMode = 'numeric';
         kcalInput.min = '0';
         kcalInput.max = '10000';
         kcalInput.value = normalized.kcal;
-        kcalInput.placeholder = 'kcal';
-        kcalInput.addEventListener('input', event => {
-          record.kcal = Math.max(0, Math.min(10000, Number(event.target.value || 0)));
-          record.kcalMode = 'manual';
-          updateTotals();
-          markRecordChanged();
-        });
+        kcalInput.placeholder = isCommonExercise ? '依體重計算' : 'kcal';
+        kcalInput.readOnly = isCommonExercise;
+        if (isCommonExercise) {
+          kcalInput.title = '常見運動會依體重與時間自動估算熱量';
+          kcalInput.setAttribute('aria-label', '活動熱量，自動依體重估算');
+        } else {
+          kcalInput.addEventListener('input', event => {
+            record.kcal = Math.max(0, Math.min(10000, Number(event.target.value || 0)));
+            record.kcalMode = 'manual';
+            updateTotals();
+            markRecordChanged();
+          });
+        }
         kcalLabel.append(kcalInput);
         const remove = el('button', 'danger-small', '刪除');
         remove.type = 'button';
