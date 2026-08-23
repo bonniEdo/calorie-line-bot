@@ -296,6 +296,20 @@
     .exercise-record .danger-small { min-height: 40px; }
     .exercise-add-row { display: flex; gap: 8px; margin-top: 10px; }
     .exercise-add-row button { min-height: 40px; }
+    .exercise-weight-note {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 132px;
+      gap: 10px;
+      align-items: end;
+      margin: -2px 0 12px;
+      padding: 10px 11px;
+      border: 1px solid #d8e5df;
+      border-radius: 13px;
+      background: #f6fbf7;
+    }
+    .exercise-weight-note p { margin: 0; color: #547164; font-size: 11px; font-weight: 700; line-height: 1.45; }
+    .exercise-weight-note label { min-width: 0; color: #416351; font-size: 11px; }
+    .exercise-weight-note input { margin-top: 4px; padding: 9px 10px; }
     .custom-food-grid { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 10px; }
     .custom-food-grid .secondary { grid-column: 1 / -1; width: 100%; }
     label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); }
@@ -599,7 +613,7 @@
     .reminder-settings[open] > summary::after { transform: rotate(180deg); }
     .reminder-settings-body { padding: 10px 14px 14px; }
     .reminder-settings-body p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
-    .reminder-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
+    .reminder-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
     .reminder-toggle {
       display: flex;
       align-items: center;
@@ -618,6 +632,7 @@
     .reminder-save-status { min-height: 16px; margin-top: 8px; color: #4e8b69; font-size: 10px; font-weight: 800; }
     @media (max-width: 560px) {
       .reminder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .exercise-weight-note { grid-template-columns: 1fr; }
     }
     .public-wall-link {
       display: inline-flex;
@@ -1288,7 +1303,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.23-82';
+    window.__dietAppBuild = '2026.08.23-87';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1353,12 +1368,11 @@
     const WATER_SETTINGS = BOOTSTRAP && BOOTSTRAP.waterSettings
       ? BOOTSTRAP.waterSettings
       : { enabled: false, goalMl: 2000 };
-    // 四個提醒時段各自獨立；舊好友欄位留白時由後端視為開啟。
+    // 三個提醒時段各自獨立；舊好友欄位留白時由後端視為開啟。
     const REMINDER_SETTINGS = {
       morning: MEMBER.personalReminder !== false && MEMBER.reminderMorning !== false,
       noon: MEMBER.personalReminder !== false && MEMBER.reminderNoon !== false,
       evening: MEMBER.personalReminder !== false && MEMBER.reminderEvening !== false,
-      late: MEMBER.personalReminder !== false && MEMBER.reminderLate !== false,
     };
     const FOOD_BY_ID = {};
     const foodCardNodes = {};
@@ -1384,6 +1398,7 @@
       strength: { label: '重訓', met: 5 },
       swim: { label: '游泳', met: 6 },
       badminton: { label: '打羽球', met: 5.5 },
+      basketball: { label: '打籃球', met: 6.5 },
       run: { label: '跑步', met: 8 },
       bicycle: { label: '腳踏車', met: 7.5 },
       incline: { label: '爬坡', met: 6.5 },
@@ -1600,19 +1615,28 @@
     }
 
     function newExerciseRecord() {
-      return { type: 'none', name: '', minutes: '', kcal: '' };
+      return { type: 'none', name: '', minutes: '', kcal: '', kcalMode: 'manual' };
     }
 
     function normalizeExerciseRecord(record) {
       record = record || {};
       const hasLegacyValue = Boolean(record.name || Number(record.minutes || 0) || Number(record.kcal || record.calories || 0));
+      const inferredType = Object.keys(commonExercises).find(key => (
+        key !== 'none'
+        && key !== 'custom'
+        && commonExercises[key].label === String(record.name || '')
+      ));
+      const type = Object.prototype.hasOwnProperty.call(commonExercises, record.type)
+        ? record.type
+        : (inferredType || (hasLegacyValue ? 'custom' : 'none'));
+      const canAutoEstimate = type !== 'none' && type !== 'custom';
       return {
-        type: Object.prototype.hasOwnProperty.call(commonExercises, record.type)
-          ? record.type
-          : (hasLegacyValue ? 'custom' : 'none'),
+        type,
         name: String(record.name || '').slice(0, 60),
         minutes: Math.max(0, Math.min(1440, Number(record.minutes || 0))) || '',
         kcal: Math.max(0, Math.min(10000, Number(record.kcal || record.calories || 0))) || '',
+        // 常見運動預設跟著體重自動重算；直接改過熱量的那筆則尊重手動數字。
+        kcalMode: canAutoEstimate && record.kcalMode !== 'manual' ? 'auto' : 'manual',
       };
     }
 
@@ -1623,6 +1647,22 @@
       // MET 估算：MET × 3.5 × 體重kg ÷ 200 × 分鐘。
       const weight = Number(state.exerciseWeightKg || 60);
       return Math.round(definition.met * 3.5 * weight / 200 * minutes);
+    }
+
+    function refreshAutoEstimatedExerciseKcal_() {
+      let changed = false;
+      state.exerciseRecords = state.exerciseRecords.map(rawRecord => {
+        const record = normalizeExerciseRecord(rawRecord);
+        if (record.type !== 'none' && record.type !== 'custom' && record.kcalMode !== 'manual') {
+          const estimated = estimateExerciseKcal(record) || '';
+          if (Number(record.kcal || 0) !== Number(estimated || 0)) {
+            record.kcal = estimated;
+            changed = true;
+          }
+        }
+        return record;
+      });
+      return changed;
     }
 
     function exerciseSummary() {
@@ -1682,7 +1722,7 @@
         } else {
           const typeSelect = document.createElement('select');
           typeSelect.setAttribute('aria-label', '運動項目');
-          const exerciseChoiceOrder = ['none', 'strength', 'swim', 'badminton', 'run', 'bicycle', 'incline', 'custom'];
+          const exerciseChoiceOrder = ['none', 'strength', 'swim', 'badminton', 'basketball', 'run', 'bicycle', 'incline', 'custom'];
           exerciseChoiceOrder.forEach(key => {
             const definition = commonExercises[key];
             const option = document.createElement('option');
@@ -1701,6 +1741,7 @@
             if (nextType === 'custom') {
               record.name = '';
               record.kcal = '';
+              record.kcalMode = 'manual';
               updateTotals();
               markRecordChanged();
               window.setTimeout(() => {
@@ -1712,8 +1753,10 @@
             } else if (nextType === 'none') {
               record.name = '';
               record.kcal = '';
+              record.kcalMode = 'manual';
             } else {
               record.name = definition.label;
+              record.kcalMode = 'auto';
               record.kcal = estimateExerciseKcal(record) || '';
             }
             updateTotals();
@@ -1732,7 +1775,7 @@
         minutesInput.placeholder = '分鐘';
         minutesInput.addEventListener('input', event => {
           record.minutes = Math.max(0, Math.min(1440, Number(event.target.value || 0)));
-          if (record.type !== 'custom' && record.type !== 'none') {
+          if (record.type !== 'custom' && record.type !== 'none' && record.kcalMode !== 'manual') {
             record.kcal = estimateExerciseKcal(record) || '';
             kcalInput.value = record.kcal;
             updateTotals();
@@ -1750,6 +1793,7 @@
         kcalInput.placeholder = 'kcal';
         kcalInput.addEventListener('input', event => {
           record.kcal = Math.max(0, Math.min(10000, Number(event.target.value || 0)));
+          record.kcalMode = 'manual';
           updateTotals();
           markRecordChanged();
         });
@@ -1822,12 +1866,11 @@
           '<details id="reminderSettings" class="reminder-settings">',
             '<summary>🔔 LINE提醒設定</summary>',
             '<div class="reminder-settings-body">',
-              '<p>每個時段可以單獨開關，建議養成紀錄習慣再關閉通知</p>',
+              '<p>每個時段可以單獨開關；晚間提醒會在晚餐後提醒你補充今天的紀錄</p>',
               '<div class="reminder-grid">',
                 '<label class="reminder-toggle"><input id="reminderMorning" type="checkbox" ' + (REMINDER_SETTINGS.morning ? 'checked' : '') + '><span>☀️ 早上<small>09:00</small></span></label>',
                 '<label class="reminder-toggle"><input id="reminderNoon" type="checkbox" ' + (REMINDER_SETTINGS.noon ? 'checked' : '') + '><span>🌤️ 中午<small>12:00</small></span></label>',
-                '<label class="reminder-toggle"><input id="reminderEvening" type="checkbox" ' + (REMINDER_SETTINGS.evening ? 'checked' : '') + '><span>🌆 晚上<small>18:00</small></span></label>',
-                '<label class="reminder-toggle"><input id="reminderLate" type="checkbox" ' + (REMINDER_SETTINGS.late ? 'checked' : '') + '><span>🌙 微半夜<small>23:00</small></span></label>',
+                '<label class="reminder-toggle"><input id="reminderEvening" type="checkbox" ' + (REMINDER_SETTINGS.evening ? 'checked' : '') + '><span>🌙 最後通知<small>19:30</small></span></label>',
               '</div>',
               '<div id="reminderSaveStatus" class="reminder-save-status" aria-live="polite"></div>',
             '</div>',
@@ -1941,6 +1984,10 @@
         '</section>',
         '<section class="section">',
           '<h2 class="section-title">🏋️ 運動</h2>',
+          '<div class="exercise-weight-note">',
+            '<p>填寫體重可讓運動熱量估算更準確；未填時將以 60 kg 估算。</p>',
+            '<label>體重 kg（不會有人知道）<input id="exerciseWeightKg" type="number" min="20" max="500" step="0.1" inputmode="decimal" placeholder="例如 60" value="' + (state.exerciseWeightKg ? state.exerciseWeightKg : '') + '"></label>',
+          '</div>',
           '<div id="exerciseRecords" class="exercise-list"></div>',
           '<div class="exercise-add-row">',
             '<button id="addExerciseButton" class="secondary" type="button">＋ 新增運動</button>',
@@ -2119,6 +2166,28 @@
         });
       });
 
+      const exerciseWeightInput = document.getElementById('exerciseWeightKg');
+      if (exerciseWeightInput) {
+        exerciseWeightInput.addEventListener('input', () => {
+          const raw = String(exerciseWeightInput.value || '').trim();
+          const weight = Number(raw);
+          if (raw && weight >= 20 && weight <= 500) {
+            state.exerciseWeightKg = weight;
+            saveLocalWeightKg_(weight);
+          } else {
+            state.exerciseWeightKg = 0;
+            clearLocalWeightKg_();
+          }
+          const recalculated = refreshAutoEstimatedExerciseKcal_();
+          updateTotals();
+          if (recalculated) {
+            renderExerciseRecords();
+            // 變更體重後的自動估算結果也要寫回當日紀錄。
+            markRecordChanged(600);
+          }
+        });
+      }
+
       document
         .getElementById('addExerciseButton')
         .addEventListener('click', () => {
@@ -2178,7 +2247,7 @@
           markPublicSettingsChanged(false);
         });
 
-      ['reminderMorning', 'reminderNoon', 'reminderEvening', 'reminderLate']
+      ['reminderMorning', 'reminderNoon', 'reminderEvening']
         .forEach(id => {
           const input = document.getElementById(id);
           if (input) input.addEventListener('change', savePersonalReminderSettings);
@@ -2458,7 +2527,6 @@
         morning: 'reminderMorning',
         noon: 'reminderNoon',
         evening: 'reminderEvening',
-        late: 'reminderLate',
       };
       const settings = Object.fromEntries(Object.entries(ids).map(([key, id]) => [
         key,
@@ -2497,6 +2565,10 @@
       const estimate = Math.round(10 * weight + 6.25 * height - 5 * age + (sex === 'male' ? 5 : -161));
       state.exerciseWeightKg = weight;
       saveLocalWeightKg_(weight);
+      const exerciseWeightInput = document.getElementById('exerciseWeightKg');
+      if (exerciseWeightInput) exerciseWeightInput.value = weight;
+      const recalculated = refreshAutoEstimatedExerciseKcal_();
+      if (recalculated) renderExerciseRecords();
       document.getElementById('bmr').value = estimate;
       updateTotals();
       const result = document.getElementById('bmrResult');
@@ -2522,6 +2594,14 @@
     function saveLocalWeightKg_(value) {
       try {
         window.localStorage.setItem(localWeightStorageKey_(), String(value));
+      } catch (error) {
+        // LINE 內嵌瀏覽器若禁止 localStorage，仍可正常使用 BMR 與運動紀錄。
+      }
+    }
+
+    function clearLocalWeightKg_() {
+      try {
+        window.localStorage.removeItem(localWeightStorageKey_());
       } catch (error) {
         // LINE 內嵌瀏覽器若禁止 localStorage，仍可正常使用 BMR 與運動紀錄。
       }
