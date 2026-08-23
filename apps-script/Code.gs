@@ -1,6 +1,6 @@
-// 應用程式版本：2026.08.22-76（正式連結固定／已完成仍提醒）
+// 應用程式版本：2026.08.23-79（19:30 最後通知）
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.22-76';
+const APP_BUILD = '2026.08.23-79';
 
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
@@ -25,7 +25,7 @@ const APP = Object.freeze({
       'UserId', '姓名', '基礎代謝BMR', '體重kg', '身高cm', '年齡',
       '生理性別', '已加好友', '建立時間', '更新時間', '群組中',
       '公開暱稱', '參與公開排行', '預設公開紀錄', '預設公開食物細項', '個人提醒',
-      '個人提醒早上', '個人提醒中午', '個人提醒晚上', '個人提醒23點',
+      '個人提醒早上', '個人提醒中午', '個人提醒晚間', '舊23點提醒（已停用）',
     ],
     groups: ['GroupId', '群組名稱', '啟用排行', '建立時間', '更新時間'],
     groupMembers: ['GroupId', 'UserId', '群組中', '加入時間', '更新時間'],
@@ -470,7 +470,7 @@ function handleLineEvent_(event) {
       reminderEvening: false,
       reminderLate: false,
     });
-    replyMessage_(event.replyToken, [{ type: 'text', text: '已關閉全部個人提醒 💤\n早上、中午、晚上、23 點提醒與 09:00 個人結算都會停止。想恢復時輸入「開啟唧唧唧」即可。' }]);
+    replyMessage_(event.replyToken, [{ type: 'text', text: '已關閉全部個人提醒 💤\n早上、中午、19:30 晚間提醒與 09:00 個人結算都會停止。想恢復時輸入「開啟唧唧唧」即可。' }]);
     return;
   }
 
@@ -488,9 +488,10 @@ function handleLineEvent_(event) {
       reminderMorning: true,
       reminderNoon: true,
       reminderEvening: true,
-      reminderLate: true,
+      // 舊 23:00 欄位保留在試算表作相容用途，但不再啟用。
+      reminderLate: false,
     });
-    replyMessage_(event.replyToken, [{ type: 'text', text: '已開啟全部個人提醒 🔔\n09:00、12:00、18:00、23:00 會依設定提醒。' }]);
+    replyMessage_(event.replyToken, [{ type: 'text', text: '已開啟全部個人提醒 🔔\n09:00、12:00、19:30 會依設定提醒。' }]);
     return;
   }
 
@@ -505,7 +506,7 @@ function handleLineEvent_(event) {
     replyMessage_(event.replyToken, [{
       type: 'text',
       text: enabled
-        ? `目前個人提醒：已開啟 🔔\n早上 ${settings.morning ? '✅' : '—'}　中午 ${settings.noon ? '✅' : '—'}　晚上 ${settings.evening ? '✅' : '—'}　23點 ${settings.late ? '✅' : '—'}\n想全部停止請輸入「關閉咕咕咕」。`
+        ? `目前個人提醒：已開啟 🔔\n早上 09:00 ${settings.morning ? '✅' : '—'}　中午 12:00 ${settings.noon ? '✅' : '—'}　晚間 19:30 ${settings.evening ? '✅' : '—'}\n想全部停止請輸入「關閉咕咕咕」。`
         : '目前個人提醒：已關閉 💤\n想全部恢復請輸入「開啟唧唧唧」。',
     }]);
     return;
@@ -575,7 +576,7 @@ function handleLineEvent_(event) {
   if (/^(說明|help|幫助)$/i.test(compact)) {
     replyMessage_(event.replyToken, [{
       type: 'text',
-      text: '可用指令：\n・打卡：拍照或從相簿上傳，記錄今天飲食\n・啟用排行：在群組第一次設定排行榜\n・今日排行：只查看該群組成員的完成狀況\n・公開紀錄：查看自願公開的今日紀錄與連續打卡排行\n・個人提醒：查看早上／中午／晚上／23點提醒狀態\n・開啟唧唧唧／關閉咕咕咕：全部開啟或關閉個人提醒\n・綁定：身分異常時重新綁定\n\n個人提醒預設開啟；群組排行與公開功能彼此獨立。',
+      text: '可用指令：\n・打卡：拍照或從相簿上傳，記錄今天飲食\n・啟用排行：在群組第一次設定排行榜\n・今日排行：只查看該群組成員的完成狀況\n・公開紀錄：查看自願公開的今日紀錄與連續打卡排行\n・個人提醒：查看 09:00／12:00／19:30 提醒狀態\n・開啟唧唧唧／關閉咕咕咕：全部開啟或關閉個人提醒\n・綁定：身分異常時重新綁定\n\n個人提醒預設開啟；群組排行與公開功能彼此獨立。',
     }]);
   }
 }
@@ -584,7 +585,7 @@ function welcomeMessages_(userId, name) {
   return [
     {
       type: 'text',
-      text: `${name}，歡迎加入飲控打卡緊迫盯人 🐥\n好友身分已自動建立完成 ✅\n個人提醒預設開啟 🔔（09:00／12:00／18:00／23:00）\n\n使用方式：\n1️⃣ 選早餐、午餐、晚餐、宵夜或點心\n2️⃣ 直接拍照或從相簿上傳\n3️⃣ 確認 AI 估算總熱量，細項可展開修改\n4️⃣ 內容會自動儲存為「打卡中」\n5️⃣ 今天確定不再補充時，按「送出打卡完成」\n\n同一天可以隨時再開啟補充；新增、刪除或修改內容後會自動切回打卡中。午夜結算，隔天早上 9 點：有群組就在群組公布，沒有群組則私訊個人結算。\n\n可在打卡頁個人設定調整四個提醒；全部關閉輸入「關閉咕咕咕」，全部恢復輸入「開啟唧唧唧」。`,
+      text: `${name}，歡迎加入飲控打卡緊迫盯人 🐥\n好友身分已自動建立完成 ✅\n個人提醒預設開啟 🔔（09:00／12:00／19:30）\n\n使用方式：\n1️⃣ 選早餐、午餐、晚餐、宵夜或點心\n2️⃣ 直接拍照或從相簿上傳\n3️⃣ 確認 AI 估算總熱量，細項可展開修改\n4️⃣ 內容會自動儲存為「打卡中」\n5️⃣ 今天確定不再補充時，按「送出打卡完成」\n\n同一天可以隨時再開啟補充；新增、刪除或修改內容後會自動切回打卡中。午夜結算，隔天早上 9 點：有群組就在群組公布，沒有群組則私訊個人結算。\n\n可在打卡頁個人設定調整三個提醒；全部關閉輸入「關閉咕咕咕」，全部恢復輸入「開啟唧唧唧」。`,
     },
     {
       type: 'template',
@@ -784,9 +785,11 @@ function saveDailyLog(payload) {
   const exerciseRecords = (Array.isArray(payload.exerciseRecords) ? payload.exerciseRecords : [])
     .slice(0, 20)
     .map(record => ({
+      type: cleanText_(record && record.type, 30),
       name: cleanText_(record && record.name, 60),
       minutes: Math.round(numberInRange_(record && record.minutes, 0, 1440)),
       kcal: Math.round(numberInRange_(record && (record.kcal !== undefined ? record.kcal : record.calories), 0, 10000)),
+      kcalMode: record && record.kcalMode === 'manual' ? 'manual' : 'auto',
     }))
     .filter(record => record.name || record.minutes > 0 || record.kcal > 0);
   // 相容舊版頁面：若沒有 exerciseRecords，仍讀取原本的三個運動欄位。
@@ -886,22 +889,24 @@ function getDailyFormForDate(payload) {
   };
 }
 
-/** 每日分時提醒：09:00、12:00、18:00，以及 23:00（微半夜）。 */
+/** 每日分時提醒：09:00、12:00、19:30（最後通知）。 */
 function sendReminderIfDue() {
   const now = new Date();
   const hour = Number(Utilities.formatDate(now, APP.timezone, 'HH'));
   const minute = Number(Utilities.formatDate(now, APP.timezone, 'mm'));
   if (hour === 9) return sendReminderForSlot_('09:00');
   if (hour === 12) return sendReminderForSlot_('12:00');
-  if (hour === 18) return sendReminderForSlot_('18:00');
-  // 23:30 已取消；若每小時總控在 23:00～23:29 執行，只送一次 23:00 提醒。
-  if (hour === 23 && minute < 30) return sendReminderForSlot_('23:00');
+  if (hour === 19 && minute >= 25 && minute <= 40) return sendReminderForSlot_('19:30');
   return { ok: true, skipped: 'not_due' };
 }
 
 function sendReminderAt0900() { return sendReminderForSlot_('09:00'); }
 function sendReminderAt1200() { return sendReminderForSlot_('12:00'); }
-function sendReminderAt1800() { return sendReminderForSlot_('18:00'); }
+function sendReminderAt1930() { return sendReminderForSlot_('19:30'); }
+
+/** 舊觸發器的相容入口：重新安裝前也不會再在 18:00 或 23:00 發通知。 */
+function sendReminderAt1800() { return { ok: true, skipped: 'retired_replaced_by_19_30' }; }
+function sendReminderAt2300() { return { ok: true, skipped: 'retired_replaced_by_19_30' }; }
 
 /** 09:00 結算與早晨提醒共用一個觸發器，避免兩個任務同時搶 ScriptLock。 */
 function sendMorningJobsAt0900() {
@@ -924,10 +929,6 @@ function sendMorningJobsAt0900() {
   }
   result.ok = !result.rankingError && !result.reminderError;
   return result;
-}
-
-function sendReminderAt2300() {
-  return sendReminderForSlot_('23:00');
 }
 
 function sendReminderForSlot_(slot) {
@@ -976,7 +977,7 @@ function sendReminderForSlot_(slot) {
         text,
         actions: [{
           type: 'uri',
-          label: completed ? '補充下一餐' : (inProgress ? '繼續打卡' : '開始猛猛打卡'),
+          label: completed ? '補充下一餐' : (inProgress ? '繼續猛猛打卡' : '開始猛猛打卡'),
           uri: getScheduledLaunchUrl_(member.userId, 'form'),
         }],
       },
@@ -991,13 +992,12 @@ function sendReminderForSlot_(slot) {
   }
 }
 
-/** 四個時段的個人化提醒文案；23:00 使用「微半夜」開關與文案。 */
+/** 三個時段的個人化提醒文案。 */
 function reminderGreeting_(slot, name) {
   const safeName = cleanText_(name || '小夥伴', 40);
   if (slot === '09:00') return `${safeName}，古咕咕📣起床飲控啦！`;
-  if (slot === '12:00') return `午安 ${safeName} 小傢伙，午餐解釋一下(fried chicken)(pizza)(dumpling)(bibimbap)(fried egg)`;
-  if (slot === '18:00') return `Bonsoir ${safeName}，晚上你值得吃點好的`;
-  if (String(slot || '').indexOf('23:') === 0) return `${safeName} 回顧一下今天的猛猛進食🤭🤭🤭`;
+  if (slot === '12:00') return `午安 ${safeName} 小傢伙，午餐解釋一下🍖🍜🥟🍣🍲🥝🍺`;
+  if (slot === '19:30') return `Bonsoir ${safeName}，今天的最後提醒：還有要補充的嗎？`;
   return `${safeName}，緊迫盯人打卡！`;
 }
 
@@ -1228,23 +1228,24 @@ function sendPreviousDayRankingAt0800() {
   return sendPreviousDayRankingAt0900();
 }
 
-/** 只移除舊版 23:30 觸發器，不影響其他排程。部署新版後可手動執行一次。 */
+/** 舊函式名稱保留；執行時會清理已淘汰的 18:00／23:00 晚間提醒觸發器。 */
 function removeReminderAt2330Trigger() {
   let removed = 0;
   ScriptApp.getProjectTriggers().forEach(trigger => {
-    if (trigger.getHandlerFunction() === 'sendReminderAt2330') {
+    if (['sendReminderAt1800', 'sendReminderAt2300', 'sendReminderAt2330'].includes(trigger.getHandlerFunction())) {
       ScriptApp.deleteTrigger(trigger);
       removed += 1;
     }
   });
-  return { ok: true, removed, message: removed ? '已移除 23:30 提醒排程。' : '找不到 23:30 舊排程，無需處理。' };
+  return { ok: true, removed, message: removed ? '已移除舊的 18:00／23:00 提醒排程。' : '找不到舊的晚間提醒排程，無需處理。' };
 }
 
 function installReminderTrigger() {
   const handlers = [
     'sendReminderIfDue', 'sendRankingIfDue', 'runScheduledJobs',
-    'sendReminderAt0900', 'sendMorningJobsAt0900', 'sendReminderAt1200', 'sendReminderAt1800',
-    // 舊版 23:30 觸發器列在清理名單，重新安裝時會一併移除，但不再建立新的。
+    'sendReminderAt0900', 'sendMorningJobsAt0900', 'sendReminderAt1200', 'sendReminderAt1930',
+    // 已淘汰的晚間提醒列在清理名單，重新安裝時會一併移除，但不再建立新的。
+    'sendReminderAt1800',
     'sendReminderAt2300', 'sendReminderAt2330', 'sendFinalRankingAtMidnight',
     'finalizePreviousDayAtMidnight', 'sendPreviousDayRankingAt0800',
     'sendPreviousDayRankingAt0900',
@@ -1253,17 +1254,15 @@ function installReminderTrigger() {
     .filter(trigger => handlers.includes(trigger.getHandlerFunction()))
     .forEach(trigger => ScriptApp.deleteTrigger(trigger));
 
-  ScriptApp.newTrigger('sendReminderAt2300')
-    .timeBased().atHour(23).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
   ScriptApp.newTrigger('sendMorningJobsAt0900')
     .timeBased().atHour(9).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
   ScriptApp.newTrigger('sendReminderAt1200')
     .timeBased().atHour(12).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
-  ScriptApp.newTrigger('sendReminderAt1800')
-    .timeBased().atHour(18).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
+  ScriptApp.newTrigger('sendReminderAt1930')
+    .timeBased().atHour(19).nearMinute(30).everyDays(1).inTimezone(APP.timezone).create();
   ScriptApp.newTrigger('finalizePreviousDayAtMidnight')
     .timeBased().atHour(0).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
-  return { ok: true, message: '已建立排程：09:00 單一總控（先群組結算、再個人通知）、12:00、18:00、23:00 個人提醒，00:00 結算。' };
+  return { ok: true, message: '已建立排程：09:00 單一總控（先群組結算、再個人通知）、12:00、19:30 最後通知，00:00 結算。' };
 }
 
 function buildTodayRanking_(groupId) {
@@ -2134,15 +2133,19 @@ function parseExerciseRecords_(json, legacyName, legacyMinutes, legacyKcal) {
     records = [];
   }
   records = records.map(record => ({
+    type: cleanText_(record && record.type, 30),
     name: cleanText_(record && record.name, 60),
     minutes: Math.round(numberInRange_(record && record.minutes, 0, 1440)),
     kcal: Math.round(numberInRange_(record && (record.kcal !== undefined ? record.kcal : record.calories), 0, 10000)),
+    kcalMode: record && record.kcalMode === 'manual' ? 'manual' : 'auto',
   })).filter(record => record.name || record.minutes || record.kcal);
   if (!records.length) {
     const legacy = {
+      type: '',
       name: cleanText_(legacyName, 60),
       minutes: Math.round(numberInRange_(legacyMinutes, 0, 1440)),
       kcal: Math.round(numberInRange_(legacyKcal, 0, 10000)),
+      kcalMode: 'manual',
     };
     if (legacy.name || legacy.minutes || legacy.kcal) records.push(legacy);
   }
@@ -2355,9 +2358,6 @@ function getMembers_() {
       reminderEvening: row[18] === '' || row[18] === null
         ? true
         : (row[18] === true || String(row[18]).toUpperCase() === 'TRUE'),
-      reminderLate: row[19] === '' || row[19] === null
-        ? true
-        : (row[19] === true || String(row[19]).toUpperCase() === 'TRUE'),
     }));
   writeJsonCache_('members:v5', members, 180);
   return members;
@@ -2370,7 +2370,6 @@ function getPersonalReminderSettings_(member) {
     morning: master && member.reminderMorning !== false,
     noon: master && member.reminderNoon !== false,
     evening: master && member.reminderEvening !== false,
-    late: master && member.reminderLate !== false,
   };
 }
 
@@ -2386,20 +2385,20 @@ function savePersonalReminderSettings(payload) {
   const morning = Boolean(settings.morning);
   const noon = Boolean(settings.noon);
   const evening = Boolean(settings.evening);
-  const late = Boolean(settings.late);
   upsertMember_({
     userId,
     name: current.name || '成員',
     isFriend: true,
-    personalReminder: morning || noon || evening || late,
+    personalReminder: morning || noon || evening,
     reminderMorning: morning,
     reminderNoon: noon,
     reminderEvening: evening,
-    reminderLate: late,
+    // 主動關閉資料表內已淘汰的 23:00 欄位。
+    reminderLate: false,
   });
   return {
     ok: true,
-    settings: { morning, noon, evening, late },
+    settings: { morning, noon, evening },
   };
 }
 
@@ -2760,9 +2759,8 @@ function reminderSlotEnabled_(member, slot) {
   const settings = getPersonalReminderSettings_(member);
   if (slot === '09:00') return settings.morning;
   if (slot === '12:00') return settings.noon;
-  if (slot === '18:00') return settings.evening;
-  if (String(slot || '').indexOf('23:') === 0) return settings.late;
-  return settings.morning || settings.noon || settings.evening || settings.late;
+  if (slot === '19:30') return settings.evening;
+  return settings.morning || settings.noon || settings.evening;
 }
 
 function getMemberById_(userId) {
@@ -2861,7 +2859,7 @@ function upsertMember_(data) {
   if (data.reminderEvening !== undefined) row[18] = Boolean(data.reminderEvening);
   else if (row[18] === undefined || row[18] === '') row[18] = true;
   if (data.reminderLate !== undefined) row[19] = Boolean(data.reminderLate);
-  else if (row[19] === undefined || row[19] === '') row[19] = true;
+  else if (row[19] === undefined || row[19] === '') row[19] = false;
 
   if (rowNumber > 0) sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
   else sheet.appendRow(row);

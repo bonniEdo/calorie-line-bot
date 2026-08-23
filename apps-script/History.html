@@ -254,7 +254,7 @@
             + '<div class="period-label"><span>' + period.label + '</span><small>' + number(period.days) + ' 個記錄日</small></div>'
             + '<div class="period-energy' + (over ? ' over' : '') + '">'
             + '<div class="period-energy-top"><strong>' + number(intake) + ' / ' + number(tdee) + ' kcal</strong>'
-            + '<span>' + (over ? '超過 ' + number(exceeded) + ' kcal' : '還可 ' + number(remaining) + ' kcal') + '</span></div>'
+            + '<span>' + (over ? '++ ' + number(exceeded) + ' kcal' : '-- ' + number(remaining) + ' kcal') + '</span></div>'
             + '<div class="period-bar"><span style="width:' + width.toFixed(1) + '%"></span></div>'
             + '<small class="period-energy-label">猛猛進食／可猛猛消耗</small>'
             + '</div></div>';
