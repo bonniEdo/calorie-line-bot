@@ -850,7 +850,7 @@
               + '</div>';
           }).join('');
           return '<section class="meal-group">'
-            + '<div class="meal-title"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="meal-total-kcal">本餐共 ' + number(mealTotal) + ' kcal' + (mealProteinG > 0 ? ' ・🥩 ' + proteinNumber(mealProteinG) + ' g' : '') + '</span></div>'
+            + '<div class="meal-title"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="meal-total-kcal">本餐共 ' + number(mealTotal) + ' kcal' + (mealProteinG > 0 ? ' ・🍖 ' + proteinNumber(mealProteinG) + ' g' : '') + '</span></div>'
             + items
             + '</section>';
         }).join('');
@@ -1032,7 +1032,7 @@
     }
     function proteinBadgeHtml(record) {
       const grams = Math.max(0, Number(record && record.proteinG || 0));
-      return grams > 0 ? '<span class="protein-badge" title="蛋白質估算">🥩 ' + proteinNumber(grams) + 'g</span>' : '<span aria-hidden="true"></span>';
+      return grams > 0 ? '<span class="protein-badge" title="蛋白質估算">🍖 ' + proteinNumber(grams) + 'g</span>' : '<span aria-hidden="true"></span>';
     }
     function formatQuantity(value) {
       const quantity = Math.max(0, Number(value || 0));
