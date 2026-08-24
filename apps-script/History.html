@@ -71,7 +71,7 @@
     .hint { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
     .record { border-top:1px solid var(--line); padding:13px 0 0; margin-top:13px; }
     .record:first-child { border-top:0; margin-top:0; padding-top:0; }
-    .record summary { display:grid; grid-template-columns:112px minmax(0,1fr) auto; gap:8px; align-items:center; cursor:pointer; list-style:none; }
+    .record summary { display:grid; grid-template-columns:104px minmax(0,1fr) auto auto; gap:8px; align-items:center; cursor:pointer; list-style:none; }
     .record summary::-webkit-details-marker { display:none; }
     .history-more { margin-top:14px; border-top:1px dashed var(--line); padding-top:12px; }
     .history-more > summary { color:#765c17; font-size:13px; font-weight:900; cursor:pointer; }
@@ -79,6 +79,7 @@
     .energy { min-width:0; }
     .energy strong { font-size:17px; }
     .energy small { display:block; color:var(--muted); font-size:11px; }
+    .protein-badge { display:inline-flex; align-items:center; justify-content:center; padding:5px 7px; border:1px solid #b8d9c4; border-radius:999px; background:#eef8f1; color:#35684b; font-size:11px; font-weight:900; white-space:nowrap; }
     .status { padding:4px 8px; border-radius:999px; background:#e5f2e8; color:#35684b; font-size:11px; font-weight:900; white-space:nowrap; }
     .status.progress { background:#fff4d4; color:#765c17; }
     .detail { margin:12px 0 0 120px; padding:11px 12px; border-radius:14px; background:#fffaf0; }
@@ -91,7 +92,7 @@
     .empty, .error { padding:22px 10px; text-align:center; color:var(--muted); line-height:1.6; }
     .error { color:var(--red); }
     @media (max-width:520px) { .period-grid { grid-template-columns:1fr; } }
-    @media (max-width:420px) { .summary-card strong { font-size:17px; } .record summary { grid-template-columns:96px minmax(0,1fr) auto; gap:6px; } .detail { margin-left:0; } }
+    @media (max-width:420px) { .summary-card strong { font-size:17px; } .record summary { grid-template-columns:88px minmax(0,1fr) auto auto; gap:6px; } .protein-badge { padding:4px 6px; font-size:10px; } .detail { margin-left:0; } }
   </style>
 </head>
 <body>
@@ -108,6 +109,10 @@
         return;
       }
       const number = value => Number(value || 0).toLocaleString('zh-TW');
+      const proteinNumber = value => {
+        const grams = Math.max(0, Number(value || 0));
+        return Number.isInteger(grams) ? String(grams) : grams.toFixed(1).replace(/\.0$/, '');
+      };
       const dateLabel = value => {
         const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
         return match ? `${match[2]}/${match[3]}` : String(value || '');
@@ -126,8 +131,8 @@
         + '<div class="summary-card"><strong>' + number(summary.completedDays) + '/' + number(summary.loggedDays) + '</strong><span>完成紀錄天數</span></div>'
         + '</div></section>'
         + '<nav class="page-nav" aria-label="頁面導覽">'
-        + (nav.formUrl ? '<a class="page-nav-primary" href="' + escapeAttr(nav.formUrl) + '" target="_top">📝 我要打卡</a>' : '')
-        + (nav.publicWallUrl ? '<a href="' + escapeAttr(nav.publicWallUrl) + '" target="_top">🌐 紀錄牆</a>' : '')
+        + (nav.formUrl ? '<a class="page-nav-primary" href="' + escapeAttr(nav.formUrl) + '" target="_top">📝 猛猛打卡</a>' : '')
+        + (nav.publicWallUrl ? '<a href="' + escapeAttr(nav.publicWallUrl) + '" target="_top">🌐 猛猛紀錄牆</a>' : '')
         + '</nav>';
       html += '<section class="section chart-section"><div class="section-head"><div><h2>📈 攝取趨勢</h2><p class="hint">折線圖顯示最近 30 筆記錄。</p></div></div>';
       if (!records.length) {
@@ -165,16 +170,20 @@
 
       function renderRecord(record) {
         const progress = record.status !== '完成';
+        const proteinG = Math.max(0, Number(record.proteinG || 0));
+        const protein = proteinG > 0 ? '<span class="protein-badge" title="蛋白質估算">🥚 ' + proteinNumber(proteinG) + 'g</span>' : '';
         const waterMl = Math.max(0, Number(record.waterMl || 0));
         const waterGoalMl = Math.max(0, Number(record.waterGoalMl || 0));
         const waterTracked = Boolean(record.waterTracked && waterGoalMl > 0);
         let result = '<details class="record"><summary>'
           + '<span class="date"><strong>' + dateLabel(record.date) + '</strong></span>'
           + '<span class="energy"><strong>' + number(record.intake) + ' / ' + number(record.tdee) + ' kcal</strong><small>差額 ' + signed(record.deficit) + ' kcal</small></span>'
+          + protein
           + '<span class="status ' + (progress ? 'progress' : '') + '">' + (progress ? '打卡中' : '已完成') + '</span>'
           + '</summary><div class="detail"><div class="detail-grid">'
           + '<div class="detail-item"><strong>' + number(record.exerciseKcal) + ' kcal</strong>運動消耗</div>'
           + '<div class="detail-item"><strong>' + number(record.exerciseMinutes) + ' 分鐘</strong>運動時間</div>'
+          + '<div class="detail-item"><strong>' + (proteinG > 0 ? proteinNumber(proteinG) + ' g' : '—') + '</strong>蛋白質估算</div>'
           + '<div class="detail-item"><strong>' + (waterTracked ? number(waterMl) + ' / ' + number(waterGoalMl) + ' ml' : '未啟用') + '</strong>飲水量</div>'
           + '<div class="detail-item"><strong>' + (record.exerciseName || '未填寫') + '</strong>運動項目</div>'
           + '</div><div class="meal-list">';

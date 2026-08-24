@@ -123,7 +123,7 @@
     .person-row {
       min-height: 34px;
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+      grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
       align-items: center;
       gap: 9px;
     }
@@ -132,6 +132,7 @@
     .person-name { min-width: 0; font-size: 15px; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .kcal { font-size: 15px; font-weight: 900; white-space: nowrap; letter-spacing: -.01em; }
     .kcal small { margin-left: 1px; color: var(--muted); font-size: 11px; font-weight: 700; }
+    .protein-badge { display:inline-flex; align-items:center; justify-content:center; min-height:25px; padding:4px 6px; border:1px solid #b8d9c4; border-radius:999px; background:#eef8f1; color:#35684b; font-size:11px; font-weight:900; white-space:nowrap; }
     .chevron { width: 14px; color: #b7ac9c; font-size: 11px; text-align: center; transition: transform .16s ease; }
     .person[open] .chevron { transform: rotate(180deg); }
 
@@ -267,6 +268,7 @@
       .person-row { gap: 7px; }
       .person-name { font-size: 14px; }
       .kcal { font-size: 14px; }
+      .protein-badge { padding:4px 5px; font-size:10px; }
       .rank-row { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 6px; }
       .rank-row.no-rank { grid-template-columns: minmax(0, 1fr) auto auto; }
       .like-button { padding-left: 7px; padding-right: 7px; }
@@ -281,7 +283,7 @@
   <main class="app">
     <section class="hero">
       <div class="eyebrow">HEALTH LOG</div>
-      <h1 id="wallTitle">🌐 飲控紀錄牆</h1>
+      <h1 id="wallTitle">🌐 猛猛紀錄牆</h1>
       <p id="heroDate"></p>
       <div class="summary">
         <div class="summary-card"><strong id="publicCount">0</strong><span id="publicCountLabel">今日公開</span></div>
@@ -291,12 +293,12 @@
     </section>
 
     <nav class="page-nav" aria-label="頁面導覽">
-      <a id="publicCheckinLink" href="#" target="_top" hidden>📝 我要打卡</a>
+      <a id="publicCheckinLink" href="#" target="_top" hidden>📝 猛猛打卡</a>
       <a id="publicHistoryLink" href="#" target="_top" hidden>📈 猛猛卡路里歷史</a>
     </nav>
 
-    <section class="wall-frame" aria-label="紀錄牆內容">
-      <nav id="wallTabs" class="wall-tabs" role="tablist" aria-label="紀錄牆來源"></nav>
+    <section class="wall-frame" aria-label="猛猛紀錄牆內容">
+      <nav id="wallTabs" class="wall-tabs" role="tablist" aria-label="猛猛紀錄牆來源"></nav>
 
     <section class="wall-body">
     <section class="date-toolbar" aria-label="公開牆日期選擇">
@@ -508,7 +510,7 @@
 
     function refreshDateView() {
       const dateLabel = formatDateLabel(selectedDate);
-      document.getElementById('wallTitle').textContent = '🌐 飲控紀錄牆';
+      document.getElementById('wallTitle').textContent = '🌐 猛猛紀錄牆';
       document.getElementById('heroDate').textContent = `${dateLabel}・只顯示本人主動公開的內容`;
       document.getElementById('publicCount').textContent = number(DATA.summary && DATA.summary.publicCount);
       document.getElementById('completedCount').textContent = number(DATA.summary && DATA.summary.completedCount);
@@ -709,7 +711,7 @@
         const kcal = hasAllowance
           ? '<span class="kcal">' + number(intake) + '<small> / ' + number(allowance) + '</small></span>'
           : '<span class="kcal">' + number(intake) + '<small> kcal</small></span>';
-        return '<details class="person' + (record.isSelf ? ' group-self' : '') + '"><summary><div class="person-row"><span class="dot ' + (record.isComplete ? 'complete' : '') + '" aria-hidden="true"></span><span class="person-name">' + escapeHtml(record.alias || '群組夥伴') + (record.isSelf ? '（我）' : '') + '</span>' + kcal + '<span></span><span class="chevron" aria-hidden="true">▼</span></div>' + (hasAllowance ? '<div class="bar ' + (over ? 'over' : '') + '"><span style="width:' + ratio + '%"></span></div>' : '') + '</summary><div class="person-body">' + personMetaHtml(record, hasAllowance) + foodDetailsHtml(record, '這筆紀錄沒有可顯示的食物細項。') + '</div></details>';
+        return '<details class="person' + (record.isSelf ? ' group-self' : '') + '"><summary><div class="person-row"><span class="dot ' + (record.isComplete ? 'complete' : '') + '" aria-hidden="true"></span><span class="person-name">' + escapeHtml(record.alias || '群組夥伴') + (record.isSelf ? '（我）' : '') + '</span>' + proteinBadgeHtml(record) + kcal + '<span></span><span class="chevron" aria-hidden="true">▼</span></div>' + (hasAllowance ? '<div class="bar ' + (over ? 'over' : '') + '"><span style="width:' + ratio + '%"></span></div>' : '') + '</summary><div class="person-body">' + personMetaHtml(record, hasAllowance) + foodDetailsHtml(record, '這筆紀錄沒有可顯示的食物細項。') + '</div></details>';
       }).join('');
     }
 
@@ -759,6 +761,7 @@
               '<div class="person-row">',
                 '<span class="dot ' + (record.isComplete ? 'complete' : '') + '" aria-hidden="true"></span>',
                 '<span class="person-name">' + escapeHtml(record.alias) + '</span>',
+                proteinBadgeHtml(record),
                 kcal,
                 likeButtonHtml(record),
                 '<span class="chevron" aria-hidden="true">▼</span>',
@@ -1008,6 +1011,14 @@
     }
 
     function number(value) { return Math.max(0, Math.round(Number(value || 0))).toLocaleString('zh-TW'); }
+    function proteinNumber(value) {
+      const grams = Math.max(0, Number(value || 0));
+      return Number.isInteger(grams) ? String(grams) : grams.toFixed(1).replace(/\.0$/, '');
+    }
+    function proteinBadgeHtml(record) {
+      const grams = Math.max(0, Number(record && record.proteinG || 0));
+      return grams > 0 ? '<span class="protein-badge" title="蛋白質估算">🥚 ' + proteinNumber(grams) + 'g</span>' : '<span aria-hidden="true"></span>';
+    }
     function formatQuantity(value) {
       const quantity = Math.max(0, Number(value || 0));
       return Number.isInteger(quantity) ? String(quantity) : quantity.toFixed(1).replace(/\.0$/, '');

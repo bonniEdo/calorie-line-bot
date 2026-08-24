@@ -1,8 +1,22 @@
-// 應用程式版本：2026.08.24-94（新功能公告）
+// 應用程式版本：2026.08.24-100（蛋白質主數字列）
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.24-94';
+const APP_BUILD = '2026.08.24-100';
 // 每位使用者只會看到一次的打卡頁公告版本；未來有真正的新一波功能時再換這個值。
-const NEW_FEATURE_NOTICE_ID = '2026_08_check_in_space_and_reminders';
+const NEW_FEATURE_NOTICE_ID = '2026_08_check_in_space_reminders_and_protein_testing';
+
+// 食物庫尚未手動填寫蛋白質時，內建食物仍可提供每份的保守估算值。
+// 使用者自建食物可直接在「食物庫」的「蛋白質g」欄位填寫，優先權高於這份預設資料。
+const DEFAULT_FOOD_PROTEIN_G = Object.freeze({
+  common_yangtao_breakfast: 18, common_egg_sandwich: 16, common_overnight_oats: 12, common_boiled_egg: 6,
+  staple_rice_half: 1.4, staple_rice_bowl: 2.8, staple_brown_half: 3, staple_toast: 3, staple_sweet_potato: 2, staple_oat: 5,
+  protein_egg: 6, protein_chicken: 31, protein_tofu: 8, protein_salmon: 22, protein_pork: 26, protein_beef: 25,
+  veg_boiled: 3, veg_stir: 3, veg_salad: 2,
+  fruit_banana: 1, fruit_apple: 0.5, fruit_guava: 2,
+  drink_soy: 12, drink_milk: 8, drink_latte: 8, drink_tea: 0,
+  snack_nuts: 5, snack_chocolate: 2, snack_yogurt: 7,
+  breakfast_egg_pancake: 12, breakfast_radish: 4,
+  meal_bento_half: 28, meal_bento_full: 30, meal_hotpot: 32, meal_noodle: 18,
+});
 
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
@@ -34,14 +48,14 @@ const APP = Object.freeze({
     groupMembers: ['GroupId', 'UserId', '群組中', '加入時間', '更新時間'],
     foods: [
       'FoodId', '分類', '名稱', '標準份量', '熱量kcal', 'Emoji',
-      '圖片網址', '啟用', '資料來源', '估算等級', '排序',
+      '圖片網址', '啟用', '資料來源', '估算等級', '排序', '蛋白質g',
     ],
     logs: [
       '建立時間', '日期', 'UserId', '姓名', '早餐kcal', '午餐kcal',
       '晚餐kcal', '點心kcal', '宵夜kcal', '總攝取kcal', '飲水ml',
       '運動項目', '運動分鐘', '活動熱量kcal', '基礎代謝BMR',
       '估算總消耗kcal', '估算赤字kcal', '食物明細JSON', '備註', '更新時間',
-      '打卡狀態', '公開紀錄', '公開時間', '公開食物細項', '運動明細JSON', '飲水目標ml', '群組紀錄牆公開',
+      '打卡狀態', '公開紀錄', '公開時間', '公開食物細項', '運動明細JSON', '飲水目標ml', '群組紀錄牆公開', '蛋白質g',
     ],
     publicLikes: ['日期', '按讚者UserId', '被按讚者UserId', '建立時間', '更新時間'],
   },
@@ -147,7 +161,7 @@ function doGet(e) {
       });
     }
     return publicTemplate.evaluate()
-      .setTitle('飲控紀錄牆')
+      .setTitle('猛猛紀錄牆')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
   }
@@ -170,7 +184,7 @@ function doGet(e) {
       });
     }
     return groupTemplate.evaluate()
-      .setTitle('群組飲控紀錄牆')
+      .setTitle('群組猛猛紀錄牆')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
   }
@@ -808,7 +822,7 @@ function handleLineEvent_(event) {
     return;
   }
 
-  if (/^(公開紀錄|公開紀錄牆|公開排行|紀錄牆|飲控紀錄牆)$/.test(compact)) {
+  if (/^(公開紀錄|公開紀錄牆|公開排行|紀錄牆|猛猛紀錄牆|飲控紀錄牆)$/.test(compact)) {
     replyMessage_(event.replyToken, publicWallButtonMessages_(userId));
     return;
   }
@@ -816,7 +830,7 @@ function handleLineEvent_(event) {
   if (/^(說明|help|幫助)$/i.test(compact)) {
     replyMessage_(event.replyToken, [{
       type: 'text',
-      text: '可用指令：\n・打卡：拍照或從相簿上傳，記錄今天飲食\n・建立打卡空間 名稱：建立不用 LINE 群組的私人打卡空間\n・直接傳邀請碼：加入朋友建立的打卡空間\n・打卡空間：查看自己的空間與邀請碼\n・紀錄牆／公開紀錄：查看公開紀錄、連續打卡排行與你的空間牆\n・個人提醒：查看 09:00／12:00／19:30 提醒狀態\n・開啟唧唧唧／關閉咕咕咕：全部開啟或關閉個人提醒\n・綁定：身分異常時重新綁定\n\n打卡空間不會發早上群組總結；大家可在紀錄牆自行選日期查看。',
+      text: '可用指令：\n・打卡：拍照或從相簿上傳，記錄今天飲食\n・建立打卡空間 名稱：建立不用 LINE 群組的私人打卡空間\n・直接傳邀請碼：加入朋友建立的打卡空間\n・打卡空間：查看自己的空間與邀請碼\n・猛猛紀錄牆／公開紀錄：查看公開紀錄、連續打卡排行與你的空間牆\n・個人提醒：查看 09:00／12:00／19:30 提醒狀態\n・開啟唧唧唧／關閉咕咕咕：全部開啟或關閉個人提醒\n・綁定：身分異常時重新綁定\n\n打卡空間不會發早上群組總結；大家可在猛猛紀錄牆自行選日期查看。',
     }]);
   }
 }
@@ -836,7 +850,7 @@ function welcomeMessages_(userId, name) {
         actions: [
           { type: 'uri', label: '開始今天打卡', uri: getSignedFormUrl_(userId) },
           { type: 'uri', label: '查看歷史紀錄', uri: getHistoryUrl_(userId) },
-          { type: 'uri', label: '查看紀錄牆', uri: getPublicWallUrl_(userId) },
+          { type: 'uri', label: '查看猛猛紀錄牆', uri: getPublicWallUrl_(userId) },
         ],
       },
     },
@@ -853,7 +867,7 @@ function bindSuccessMessages_(userId, name) {
       actions: [
         { type: 'uri', label: '開啟今日打卡', uri: getSignedFormUrl_(userId) },
         { type: 'uri', label: '查看歷史紀錄', uri: getHistoryUrl_(userId) },
-        { type: 'uri', label: '查看紀錄牆', uri: getPublicWallUrl_(userId) },
+        { type: 'uri', label: '查看猛猛紀錄牆', uri: getPublicWallUrl_(userId) },
       ],
     },
   }];
@@ -869,7 +883,7 @@ function formButtonMessages_(userId) {
       actions: [
         { type: 'uri', label: '填寫今日紀錄', uri: getSignedFormUrl_(userId) },
         { type: 'uri', label: '查看歷史紀錄', uri: getHistoryUrl_(userId) },
-        { type: 'uri', label: '查看紀錄牆', uri: getPublicWallUrl_(userId) },
+        { type: 'uri', label: '查看猛猛紀錄牆', uri: getPublicWallUrl_(userId) },
       ],
     },
   }];
@@ -878,11 +892,11 @@ function formButtonMessages_(userId) {
 function publicWallButtonMessages_(userId) {
   return [{
     type: 'template',
-    altText: '查看飲控紀錄牆',
+    altText: '查看猛猛紀錄牆',
     template: {
       type: 'buttons',
       text: '公開紀錄、連續打卡排行與你加入打卡空間的分享紀錄都集中在這裡。在公開頁還可以幫別人按每日鼓勵讚 👍',
-      actions: [{ type: 'uri', label: '開啟紀錄牆', uri: getPublicWallUrl_(userId) }],
+      actions: [{ type: 'uri', label: '開啟猛猛紀錄牆', uri: getPublicWallUrl_(userId) }],
     },
   }];
 }
@@ -978,6 +992,7 @@ function saveDailyLog(payload) {
         portion: food.portion,
         quantity,
         calories,
+        proteinG: proteinGrams_(Number(food.proteinG || 0) * quantity),
       });
     });
 
@@ -1001,6 +1016,8 @@ function saveDailyLog(payload) {
         baseCalories: Math.round(numberInRange_(item.baseCalories, 0, 5000)),
         baseLow: Math.round(numberInRange_(item.baseLow, 0, 5000)),
         baseHigh: Math.round(numberInRange_(item.baseHigh, 0, 5000)),
+        baseProteinG: proteinGrams_(item.baseProteinG),
+        proteinG: proteinGrams_(item.proteinG),
         quantity: 1,
         calories,
         confidence: source === 'manual'
@@ -1026,6 +1043,9 @@ function saveDailyLog(payload) {
     });
   }
   const totalIntake = mealKeys.reduce((sum, key) => sum + mealTotals[key], 0);
+  const totalProteinG = proteinGrams_(mealKeys.reduce((sum, mealKey) => (
+    sum + selectedDetails[mealKey].reduce((mealSum, item) => mealSum + proteinGrams_(item && item.proteinG), 0)
+  ), 0));
   const waterMl = waterEnabled
     ? Math.round(numberInRange_(payload.waterMl, 0, 10000))
     : 0;
@@ -1091,6 +1111,7 @@ function saveDailyLog(payload) {
     JSON.stringify(exerciseRecords),
     waterEnabled ? waterGoalMl : '',
     publishToGroup,
+    totalProteinG,
   ];
 
   // 只在真正寫入工作表時持有全域鎖，避免自動儲存長時間卡住公開頁按讚。
@@ -1105,6 +1126,7 @@ function saveDailyLog(payload) {
     // 今日紀錄會影響「常吃的食物」統計，儲存後立即清除快捷區快取，
     // 避免使用者關閉頁面重開時還看到儲存前的四個預設項目。
     CacheService.getScriptCache().remove(`frequent-foods:v5:${userId}:${today_()}`);
+    CacheService.getScriptCache().remove(`frequent-foods:v6:${userId}:${today_()}`);
   } finally {
     lock.releaseLock();
   }
@@ -1124,6 +1146,7 @@ function saveDailyLog(payload) {
     publishFoodDetails,
     publishToGroup,
     defaultPublishToGroup: requestedDefaultPublishToGroup,
+    totalProteinG,
   };
 }
 
@@ -1773,6 +1796,7 @@ function getPublicWallData_(viewerId, viewerSignature, selectedDate) {
     exerciseKcal: item.exerciseKcal,
     bmrPlusExercise: item.bmrPlusExercise,
     tdeeEstimate: item.tdeeEstimate,
+    proteinG: item.proteinG,
     meals: item.meals,
     mealTotals: Array.isArray(item.mealTotals) ? item.mealTotals : [],
     mealDetails: Array.isArray(item.mealDetails) ? item.mealDetails : [],
@@ -1843,7 +1867,7 @@ function getPublicWallData_(viewerId, viewerSignature, selectedDate) {
  */
 function getPublicWallBaseData_(selectedDate, members) {
   const date = validatePublicWallDate_(selectedDate || today_());
-  const cacheKey = `public-wall-base:v7:${date}`;
+  const cacheKey = `public-wall-base:v8:${date}`;
   const cached = readJsonCache_(cacheKey);
   if (cached && Array.isArray(cached.records) && Array.isArray(cached.streaks)) {
     return cached;
@@ -1905,6 +1929,8 @@ function getPublicWallBaseData_(selectedDate, members) {
       exerciseKcal,
       bmrPlusExercise: bmr > 0 ? bmr + exerciseKcal : 0,
       tdeeEstimate: bmr > 0 ? Math.round(bmr * 1.2 + exerciseKcal) : 0,
+      // 蛋白質屬於食物營養資料；公開牆只有原本已選擇公開食物細項的人才顯示。
+      proteinG: publishFoodDetails ? proteinGrams_(row[27]) : 0,
       meals,
       mealTotals,
       mealDetails: publishFoodDetails ? buildPublicMealDetails_(row[17]) : [],
@@ -2001,7 +2027,7 @@ function getGroupWallData_(viewerId, viewerSignature, groupId, selectedDate) {
 function getGroupWallBaseData_(groupId, selectedDate) {
   groupId = String(groupId || '');
   const date = validatePublicWallDate_(selectedDate || today_());
-  const cacheKey = `group-wall-base:v2:${groupId}:${date}`;
+  const cacheKey = `group-wall-base:v3:${groupId}:${date}`;
   const cached = readJsonCache_(cacheKey);
   if (cached && Array.isArray(cached.records)) return cached;
 
@@ -2041,6 +2067,7 @@ function getGroupWallBaseData_(groupId, selectedDate) {
       intake,
       allowance,
       deficit: allowance === null ? null : allowance - intake,
+      proteinG: proteinGrams_(row[27]),
       meals,
       mealTotals,
       // 群組分享一律包含食物名稱、份量與熱量；仍不回傳照片、體重、BMR 或備註。
@@ -2464,6 +2491,8 @@ function dailyFormDataFromRow_(savedRow, foods, recordDate) {
         baseCalories: Math.round(numberInRange_(item.baseCalories, 0, 5000)),
         baseLow: Math.round(numberInRange_(item.baseLow, 0, 5000)),
         baseHigh: Math.round(numberInRange_(item.baseHigh, 0, 5000)),
+        baseProteinG: proteinGrams_(item.baseProteinG),
+        proteinG: proteinGrams_(item.proteinG),
         calories,
         low: calories,
         high: calories,
@@ -2509,6 +2538,7 @@ function dailyFormDataFromRow_(savedRow, foods, recordDate) {
     isPublic: savedRow[21] === true || String(savedRow[21]).toUpperCase() === 'TRUE',
     publishFoodDetails: savedRow[23] === true || String(savedRow[23]).toUpperCase() === 'TRUE',
     isGroupPublic: savedRow[26] === true || String(savedRow[26]).toUpperCase() === 'TRUE',
+    totalProteinG: proteinGrams_(savedRow[27]),
   };
 }
 
@@ -2544,7 +2574,7 @@ function parseExerciseRecords_(json, legacyName, legacyMinutes, legacyKcal) {
 function getHistoryData_(userId, dayCount) {
   userId = String(userId || '');
   const days = Math.min(365, Math.max(7, Number(dayCount) || 30));
-  const cacheKey = `history:v2:${userId}:${days}:${today_()}`;
+  const cacheKey = `history:v3:${userId}:${days}:${today_()}`;
   const cached = readJsonCache_(cacheKey);
   if (cached) return cached;
 
@@ -2584,6 +2614,7 @@ function getHistoryData_(userId, dayCount) {
       exerciseKcal: Math.round(numberInRange_(row[13], 0, 10000)),
       exerciseMinutes: Math.round(numberInRange_(row[12], 0, 1440)),
       exerciseName: cleanText_(row[11], 80),
+      proteinG: proteinGrams_(row[27]),
       waterMl,
       waterGoalMl,
       waterTracked: waterGoalMl > 0 && (storedWaterGoalMl > 0 || waterMl > 0),
@@ -2638,7 +2669,7 @@ function historyMealTotals_(detailsJson, fallbackTotals) {
  */
 function ensureLogStatusHeader_(sheet) {
   const cache = CacheService.getScriptCache();
-  if (cache.get('log-headers:v7') === 'ok') return;
+  if (cache.get('log-headers:v8') === 'ok') return;
   const current = sheet.getRange(1, 1, 1, APP.headers.logs.length).getValues()[0];
   let changed = false;
   APP.headers.logs.forEach((header, index) => {
@@ -2652,7 +2683,7 @@ function ensureLogStatusHeader_(sheet) {
       .setFontWeight('bold')
       .setHorizontalAlignment('center');
   }
-  cache.put('log-headers:v7', 'ok', 21600);
+  cache.put('log-headers:v8', 'ok', 21600);
 }
 
 function isLogComplete_(value) {
@@ -3163,9 +3194,9 @@ function checkInSpaceJoinedMessages_(userId, space) {
     altText: message,
     template: {
       type: 'buttons',
-      text: `${message}\n\n到「紀錄牆」即可看到這個空間的分頁。想讓自己的紀錄出現在空間牆，請到打卡頁開啟「顯示在我的打卡空間／群組紀錄牆」。`,
+      text: `${message}\n\n到「猛猛紀錄牆」即可看到這個空間的分頁。想讓自己的紀錄出現在空間牆，請到打卡頁開啟「顯示在我的打卡空間／群組猛猛紀錄牆」。`,
       actions: [
-        { type: 'uri', label: '開啟紀錄牆', uri: getPublicWallUrl_(userId) },
+        { type: 'uri', label: '開啟猛猛紀錄牆', uri: getPublicWallUrl_(userId) },
         { type: 'uri', label: '前往打卡設定', uri: getSignedFormUrl_(userId) },
       ],
     },
@@ -3517,6 +3548,7 @@ function upsertMember_(data) {
   cache.remove(`public-wall-base:v5:${today_()}`);
   cache.remove(`public-wall-base:v6:${today_()}`);
   cache.remove(`public-wall-base:v7:${today_()}`);
+  cache.remove(`public-wall-base:v8:${today_()}`);
   try {
     cache.remove(`public-like-target:v2:${publicLikeTargetKey_(data.userId)}`);
   } catch (error) {
@@ -3524,17 +3556,38 @@ function upsertMember_(data) {
   }
 }
 
+/** 首次讀取食物庫時補上蛋白質欄位，不需要使用者手動執行 setupProject。 */
+function ensureFoodProteinHeader_(sheet) {
+  const cache = CacheService.getScriptCache();
+  if (cache.get('food-headers:v1') === 'ok') return;
+  const column = APP.headers.foods.length;
+  const current = String(sheet.getRange(1, column).getValue() || '');
+  if (current !== APP.headers.foods[column - 1]) {
+    sheet.getRange(1, column).setValue(APP.headers.foods[column - 1]);
+    sheet.getRange(1, 1, 1, column)
+      .setBackground('#F5D77A')
+      .setFontWeight('bold')
+      .setHorizontalAlignment('center');
+  }
+  cache.put('food-headers:v1', 'ok', 21600);
+}
+
+function defaultFoodProteinG_(foodId) {
+  return proteinGrams_(DEFAULT_FOOD_PROTEIN_G[String(foodId || '')]);
+}
+
 function getFoods_() {
   const cache = CacheService.getScriptCache();
-  const cached = cache.get('active-foods:v1');
+  const cached = cache.get('active-foods:v2');
   if (cached) {
     try {
       return JSON.parse(cached);
     } catch (error) {
-      cache.remove('active-foods:v1');
+      cache.remove('active-foods:v2');
     }
   }
   const sheet = getSheet_(APP.sheets.foods);
+  ensureFoodProteinHeader_(sheet);
   if (sheet.getLastRow() < 2) return [];
   const foods = sheet.getRange(2, 1, sheet.getLastRow() - 1, APP.headers.foods.length).getValues()
     .filter(row => row[0] && (row[7] === true || String(row[7]).toUpperCase() === 'TRUE'))
@@ -3549,9 +3602,12 @@ function getFoods_() {
       source: String(row[8] || ''),
       estimateLevel: String(row[9] || ''),
       sort: Number(row[10] || 999),
+      proteinG: proteinGrams_(row[11] === '' || row[11] === null
+        ? defaultFoodProteinG_(row[0])
+        : row[11]),
     }))
     .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name, 'zh-Hant'));
-  cache.put('active-foods:v1', JSON.stringify(foods), 300);
+  cache.put('active-foods:v2', JSON.stringify(foods), 300);
   return foods;
 }
 
@@ -3578,7 +3634,7 @@ function getFrequentFoods_(userId, foods, limit) {
   if (!userId || !foods.length) return fallback.slice(0, limit);
 
   const cache = CacheService.getScriptCache();
-  const cacheKey = `frequent-foods:v5:${userId}:${today_()}`;
+  const cacheKey = `frequent-foods:v6:${userId}:${today_()}`;
   const cached = cache.get(cacheKey);
   if (cached) {
     try {
@@ -3633,10 +3689,12 @@ function getFrequentFoods_(userId, foods, limit) {
             name,
             count: 0,
             calories: 0,
+            proteinG: 0,
             portion: cleanText_(item && item.portion, 80) || '自行輸入',
           };
           current.count += 1;
           current.calories = Math.round(numberInRange_(item && item.calories, 0, 5000)) || current.calories;
+          current.proteinG = proteinGrams_(item && item.proteinG) || current.proteinG;
           manualCounts.set(key, current);
         });
       });
@@ -3655,6 +3713,7 @@ function getFrequentFoods_(userId, foods, limit) {
       name: item.name,
       portion: item.portion || '自行輸入',
       kcal: item.calories,
+      proteinG: item.proteinG,
       emoji: '✍️',
       sort: 0,
       isManualFrequent: true,
@@ -4090,6 +4149,7 @@ function analyzeFoodPhoto(payload) {
     '請使用繁體中文，分析照片中看得到的所有食物。',
     '估算份量、重量與熱量，並考慮油、醬料、糖與裹粉造成的誤差。',
     '每個食物請另外給可調整的數值 estimatedAmount 與 unit；液體用 ml，固體用 g。estimatedAmount 是照片中估算的原始份量，必須大於 0。',
+    '每個食物也請估算 estimatedProteinG（蛋白質克數，可為 0）；肉、蛋、魚、奶、豆製品請特別留意。',
     '看不出來就說明不確定；不是食物照片時 items 回傳空陣列。',
     'summary、portion、notes 請保持簡短，每個 notes 最多 20 個中文字。',
   ].join('\n');
@@ -4109,12 +4169,13 @@ function analyzeFoodPhoto(payload) {
             estimatedAmount: { type: 'INTEGER' },
             unit: { type: 'STRING', enum: ['g', 'ml'] },
             estimatedCalories: { type: 'INTEGER' },
+            estimatedProteinG: { type: 'NUMBER' },
             caloriesLow: { type: 'INTEGER' },
             caloriesHigh: { type: 'INTEGER' },
             confidence: { type: 'STRING', enum: ['高', '中', '低'] },
             notes: { type: 'STRING' },
           },
-          required: ['name', 'portion', 'estimatedGrams', 'estimatedAmount', 'unit', 'estimatedCalories', 'caloriesLow', 'caloriesHigh', 'confidence', 'notes'],
+          required: ['name', 'portion', 'estimatedGrams', 'estimatedAmount', 'unit', 'estimatedCalories', 'estimatedProteinG', 'caloriesLow', 'caloriesHigh', 'confidence', 'notes'],
         },
       },
       warnings: { type: 'ARRAY', items: { type: 'STRING' } },
@@ -4171,6 +4232,7 @@ function analyzeFoodPhoto(payload) {
     estimatedAmount: Math.round(numberInRange_(item.estimatedAmount || item.estimatedGrams, 0, 5000)),
     unit: String(item.unit || '').toLowerCase() === 'ml' ? 'ml' : 'g',
     estimatedCalories: Math.round(numberInRange_(item.estimatedCalories, 0, 5000)),
+    estimatedProteinG: proteinGrams_(item.estimatedProteinG),
     caloriesLow: Math.round(numberInRange_(item.caloriesLow, 0, 5000)),
     caloriesHigh: Math.round(numberInRange_(item.caloriesHigh, 0, 5000)),
     confidence: ['高', '中', '低'].includes(item.confidence) ? item.confidence : '低',
@@ -4184,6 +4246,7 @@ function analyzeFoodPhoto(payload) {
     totalCalories: items.reduce((sum, item) => sum + item.estimatedCalories, 0),
     totalCaloriesLow: items.reduce((sum, item) => sum + item.caloriesLow, 0),
     totalCaloriesHigh: items.reduce((sum, item) => sum + item.caloriesHigh, 0),
+    totalProteinG: proteinGrams_(items.reduce((sum, item) => sum + item.estimatedProteinG, 0)),
     warnings: (Array.isArray(parsed.warnings) ? parsed.warnings : []).slice(0, 5).map(item => cleanText_(item, 200)),
   };
 }
@@ -4364,6 +4427,7 @@ function seedFoods_() {
     ['meal_hotpot', '常見外食', '個人小火鍋', '1鍋不含飲料', 700, '🍲', '', true, '示範估算，湯料差異大', '低', 152],
     ['meal_noodle', '常見外食', '湯麵', '1碗', 500, '🍜', '', true, '示範估算，配料差異大', '低', 153],
   ];
+  const rowsWithProtein = rows.map(row => row.concat(defaultFoodProteinG_(row[0])));
   const existingRows = sheet.getLastRow() > 1
     ? sheet.getRange(2, 1, sheet.getLastRow() - 1, APP.headers.foods.length).getValues()
     : [];
@@ -4373,12 +4437,28 @@ function seedFoods_() {
   if (oldNameRow >= 0 && String(existingRows[oldNameRow][2]) !== '楊桃可口早餐') {
     sheet.getRange(oldNameRow + 2, 3).setValue('楊桃可口早餐');
     CacheService.getScriptCache().remove('active-foods:v1');
+    CacheService.getScriptCache().remove('active-foods:v2');
   }
-  const missingRows = rows.filter(row => !existingIds.has(String(row[0])));
+  const proteinColumn = APP.headers.foods.length;
+  if (existingRows.length) {
+    const proteinRange = sheet.getRange(2, proteinColumn, existingRows.length, 1);
+    const proteinValues = proteinRange.getValues();
+    let proteinChanged = false;
+    proteinValues.forEach((value, index) => {
+      if (value[0] !== '' && value[0] !== null) return;
+      const estimated = defaultFoodProteinG_(existingRows[index][0]);
+      if (!estimated) return;
+      value[0] = estimated;
+      proteinChanged = true;
+    });
+    if (proteinChanged) proteinRange.setValues(proteinValues);
+  }
+  const missingRows = rowsWithProtein.filter(row => !existingIds.has(String(row[0])));
   if (missingRows.length) {
     sheet.getRange(sheet.getLastRow() + 1, 1, missingRows.length, APP.headers.foods.length)
       .setValues(missingRows);
     CacheService.getScriptCache().remove('active-foods:v1');
+    CacheService.getScriptCache().remove('active-foods:v2');
   }
 }
 
@@ -4512,6 +4592,7 @@ function invalidateLogCache_(date, userId) {
   cache.remove(`public-wall-base:v5:${date}`);
   cache.remove(`public-wall-base:v6:${date}`);
   cache.remove(`public-wall-base:v7:${date}`);
+  cache.remove(`public-wall-base:v8:${date}`);
   invalidateGroupWallCachesForUser_(date, userId);
   // 補登過去日期可能改變「公開連續打卡」，因此也要清掉今日公開頁快取。
   if (date && date !== today_()) {
@@ -4521,11 +4602,14 @@ function invalidateLogCache_(date, userId) {
     cache.remove(`public-wall-base:v5:${today_()}`);
     cache.remove(`public-wall-base:v6:${today_()}`);
     cache.remove(`public-wall-base:v7:${today_()}`);
+    cache.remove(`public-wall-base:v8:${today_()}`);
   }
   if (userId) {
     cache.remove(`history:v1:${userId}:30:${today_()}`);
     cache.remove(`history:v2:${userId}:30:${today_()}`);
     cache.remove(`history:v2:${userId}:365:${today_()}`);
+    cache.remove(`history:v3:${userId}:30:${today_()}`);
+    cache.remove(`history:v3:${userId}:365:${today_()}`);
     try {
       cache.remove(`public-like-target:v2:${publicLikeTargetKey_(userId)}`);
     } catch (error) {
@@ -4539,6 +4623,7 @@ function invalidateGroupWallCachesForUser_(date, userId) {
   const cache = CacheService.getScriptCache();
   getActiveGroupIdsForUser_(userId).forEach(groupId => {
     cache.remove(`group-wall-base:v2:${groupId}:${date}`);
+    cache.remove(`group-wall-base:v3:${groupId}:${date}`);
   });
 }
 
@@ -4575,6 +4660,7 @@ function invalidateAllGroupWallCachesForUser_(userId) {
   getActiveGroupIdsForUser_(userId).forEach(groupId => {
     for (let daysAgo = 0; daysAgo < 30; daysAgo += 1) {
       cache.remove(`group-wall-base:v2:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+      cache.remove(`group-wall-base:v3:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
     }
   });
 }
@@ -4585,6 +4671,7 @@ function invalidateGroupWallCachesForGroup_(groupId) {
   const cache = CacheService.getScriptCache();
   for (let daysAgo = 0; daysAgo < 30; daysAgo += 1) {
     cache.remove(`group-wall-base:v2:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+    cache.remove(`group-wall-base:v3:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
   }
 }
 
@@ -4610,6 +4697,12 @@ function numberInRange_(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) return 0;
   return Math.min(max, Math.max(min, number));
+}
+
+/** 蛋白質以 g 為單位，保留一位小數；避免 AI 或手動輸入寫進不合理的大值。 */
+function proteinGrams_(value) {
+  const grams = numberInRange_(value, 0, 500);
+  return Math.round(grams * 10) / 10;
 }
 
 function safeEqual_(a, b) {

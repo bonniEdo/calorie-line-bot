@@ -38,6 +38,7 @@
     .status.complete { background:#e8f5ed; color:#397653; }
     .energy { padding:0 14px 11px; font-size:22px; font-weight:900; }
     .energy small { color:var(--muted); font-size:12px; font-weight:800; }
+    .protein-badge { display:inline-flex; align-items:center; justify-content:center; margin-left:7px; padding:4px 7px; border:1px solid #b8d9c4; border-radius:999px; background:#eef8f1; color:#35684b; font-size:11px; font-weight:900; vertical-align:middle; white-space:nowrap; }
     .remaining { color:var(--green); font-size:13px; font-weight:900; }
     .meal-list { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 12px; }
     .meal { padding:5px 8px; border-radius:9px; background:#fff7e6; color:#745c2b; font-size:12px; font-weight:800; }
@@ -58,12 +59,13 @@
   <script>
     let DATA = {};
     try { DATA = JSON.parse(document.getElementById('groupData').textContent || '{}'); }
-    catch (error) { DATA = { error: '群組紀錄牆資料無法讀取，請回 LINE 重新開啟。' }; }
+    catch (error) { DATA = { error: '群組猛猛紀錄牆資料無法讀取，請回 LINE 重新開啟。' }; }
     const app = document.getElementById('app');
 
     function escapeHtml(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[char]); }
     function escapeAttr(value) { return escapeHtml(value).replace(/`/g, '&#96;'); }
     function number(value) { return Math.max(0, Math.round(Number(value || 0))).toLocaleString('zh-TW'); }
+    function proteinNumber(value) { const grams = Math.max(0, Number(value || 0)); return Number.isInteger(grams) ? String(grams) : grams.toFixed(1).replace(/\.0$/, ''); }
     function dateOptions() {
       const today = String(DATA.today || ''); const min = String(DATA.minDate || ''); const selected = String(DATA.date || today);
       const out = [];
@@ -74,12 +76,12 @@
     }
     function subtractOneDay(date) { const value = new Date(date + 'T12:00:00'); value.setDate(value.getDate() - 1); return value.getFullYear() + '-' + String(value.getMonth() + 1).padStart(2, '0') + '-' + String(value.getDate()).padStart(2, '0'); }
     function render() {
-      if (DATA.error) { app.innerHTML = '<div class="error"><strong>無法開啟群組紀錄牆</strong><br>' + escapeHtml(DATA.error) + '</div>'; return; }
+      if (DATA.error) { app.innerHTML = '<div class="error"><strong>無法開啟群組猛猛紀錄牆</strong><br>' + escapeHtml(DATA.error) + '</div>'; return; }
       const group = DATA.group || {}; const summary = DATA.summary || {}; const records = Array.isArray(DATA.records) ? DATA.records : [];
       app.innerHTML = [
         '<section class="hero">',
           '<div class="eyebrow">GROUP HEALTH LOG</div>',
-          '<h1>👥 ' + escapeHtml(group.name || '群組紀錄牆') + '</h1>',
+          '<h1>👥 ' + escapeHtml(group.name || '群組猛猛紀錄牆') + '</h1>',
           '<p>' + escapeHtml(DATA.date || '') + '・只顯示成員主動分享到這個群組的紀錄</p>',
           '<div class="summary">',
             '<div class="summary-card"><strong>' + number(summary.sharedCount) + '</strong><span>今日分享</span></div>',
@@ -87,22 +89,24 @@
             '<div class="summary-card"><strong>' + number(summary.memberCount) + '</strong><span>群組成員</span></div>',
           '</div>',
         '</section>',
-        '<nav class="nav"><a href="' + escapeAttr(DATA.nav && DATA.nav.formUrl || '') + '">✍️ 我要打卡</a><a href="' + escapeAttr(DATA.nav && DATA.nav.historyUrl || '') + '">📈 我的歷史</a></nav>',
+        '<nav class="nav"><a href="' + escapeAttr(DATA.nav && DATA.nav.formUrl || '') + '">✍️ 猛猛打卡</a><a href="' + escapeAttr(DATA.nav && DATA.nav.historyUrl || '') + '">📈 我的歷史</a></nav>',
         '<div class="toolbar"><label for="dateSelect">查看日期</label><select id="dateSelect">' + dateOptions() + '</select><button id="todayButton" class="today" type="button">今天</button></div>',
         '<details class="privacy"><summary>🔒 這個群組牆怎麼保護隱私？</summary><p>只有目前仍在本群組的成員，且從自己的專屬連結開啟，才能查看。你可隨時選擇顯示或不顯示在群組牆；內容會顯示食物細項，但不會顯示照片、體重、BMR 或備註。連結會到期，請不要轉傳。</p></details>',
-        records.length ? records.map(renderRecord).join('') : '<div class="empty">今天還沒有人分享到群組牆。<br>完成或儲存打卡時，開啟「分享到我的群組紀錄牆」就會顯示在這裡。</div>',
+        records.length ? records.map(renderRecord).join('') : '<div class="empty">今天還沒有人分享到群組牆。<br>完成或儲存打卡時，開啟「分享到我的群組猛猛紀錄牆」就會顯示在這裡。</div>',
       ].join('');
       document.getElementById('dateSelect').addEventListener('change', event => loadDate(event.target.value));
       document.getElementById('todayButton').addEventListener('click', () => loadDate(DATA.today));
     }
     function renderRecord(record) {
       const allowance = record.allowance === null || record.allowance === undefined ? null : Number(record.allowance);
+      const proteinG = Math.max(0, Number(record.proteinG || 0));
+      const protein = proteinG > 0 ? '<span class="protein-badge" title="蛋白質估算">🥚 ' + proteinNumber(proteinG) + 'g</span>' : '';
       const remaining = allowance === null ? '尚未設定今日額度' : (allowance - Number(record.intake || 0) >= 0 ? '還可 ' + number(allowance - Number(record.intake || 0)) + ' kcal' : '超出 ' + number(Number(record.intake || 0) - allowance) + ' kcal');
       const mealText = Array.isArray(record.mealTotals) && record.mealTotals.length ? record.mealTotals.map(meal => '<span class="meal">' + escapeHtml(meal.label) + ' ' + number(meal.kcal) + '</span>').join('') : '<span class="meal">尚未記錄餐別</span>';
       const foodDetails = Array.isArray(record.mealDetails) && record.mealDetails.length
         ? '<div class="food-details"><div class="food-heading">🍽️ 食物細項</div>' + record.mealDetails.map(meal => '<div class="food-meal"><strong>' + escapeHtml(meal.label) + '</strong>' + (Array.isArray(meal.items) ? meal.items.map(item => '<div class="food-item">' + escapeHtml(item.name || '食物') + (item.portion ? '・' + escapeHtml(item.portion) : '') + (Number(item.quantity || 0) > 1 ? ' × ' + escapeHtml(item.quantity) : '') + '・' + number(item.calories) + ' kcal</div>').join('') : '') + '</div>').join('') + '</div>'
         : '<div class="food-details"><div class="food-heading">🍽️ 食物細項</div><div class="food-item">這筆紀錄沒有可顯示的食物細項。</div></div>';
-      return '<article class="record' + (record.isSelf ? ' mine' : '') + '"><div class="record-head"><div class="name">' + escapeHtml(record.alias || '群組夥伴') + (record.isSelf ? '<span class="mine-label">我</span>' : '') + '</div><span class="status' + (record.isComplete ? ' complete' : '') + '">' + (record.isComplete ? '✅ 已完成' : '📝 打卡中') + '</span></div><div class="energy">' + number(record.intake) + (allowance === null ? '' : ' <small>/ ' + number(allowance) + ' kcal</small>') + '<div class="remaining">' + remaining + '</div></div><div class="meal-list">' + mealText + '</div>' + foodDetails + '<div class="record-foot">最後更新：' + escapeHtml(record.updatedAt || '—') + '</div></article>';
+      return '<article class="record' + (record.isSelf ? ' mine' : '') + '"><div class="record-head"><div class="name">' + escapeHtml(record.alias || '群組夥伴') + (record.isSelf ? '<span class="mine-label">我</span>' : '') + '</div><span class="status' + (record.isComplete ? ' complete' : '') + '">' + (record.isComplete ? '✅ 已完成' : '📝 打卡中') + '</span></div><div class="energy">' + number(record.intake) + (allowance === null ? '' : ' <small>/ ' + number(allowance) + ' kcal</small>') + protein + '<div class="remaining">' + remaining + '</div></div><div class="meal-list">' + mealText + '</div>' + foodDetails + '<div class="record-foot">最後更新：' + escapeHtml(record.updatedAt || '—') + '</div></article>';
     }
     function loadDate(date) {
       if (!date || !DATA.viewer || !DATA.group) return;
