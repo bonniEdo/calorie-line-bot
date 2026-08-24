@@ -42,13 +42,24 @@
     .page-nav a[hidden] { display:none !important; }
     .page-nav a:first-child { border-color:#8bc9e8; background:#e8f6ff; color:#245f7d; }
 
+    /* 資料夾折頁：被選取的卡夾會直接往下接到同色的內容框。 */
+    .wall-frame { margin-top:14px; }
+    .wall-tabs { position:relative; z-index:2; display:flex; gap:8px; overflow-x:auto; margin:0 14px -2px; padding:0 2px; scrollbar-width:none; }
+    .wall-tabs::-webkit-scrollbar { display:none; }
+    .wall-tab { flex:0 0 auto; max-width:min(72vw, 360px); min-height:50px; overflow:hidden; padding:12px 16px; border:2px solid #eadfca; border-bottom-color:#efbc45; border-radius:18px 18px 0 0; background:#fffaf0; color:var(--muted); font-size:13px; font-weight:900; text-overflow:ellipsis; cursor:pointer; white-space:nowrap; transition:background .14s ease, border-color .14s ease, color .14s ease, box-shadow .14s ease; }
+    .wall-tab.active { position:relative; z-index:3; min-height:52px; padding-bottom:14px; border-color:#efbc45; border-bottom:0; background:#fffdf7; color:#76500c; box-shadow:0 -3px 9px rgba(122,86,19,.08); }
+    .wall-tab.active::after { content:''; position:absolute; z-index:4; right:0; bottom:-4px; left:0; height:5px; background:#fffdf7; }
+    .wall-tab:focus-visible { outline:3px solid rgba(78,139,105,.24); outline-offset:2px; }
+    .wall-body { position:relative; z-index:1; padding:12px 12px 14px; border:2px solid #efbc45; border-radius:22px; background:#fffdf7; box-shadow:0 7px 20px rgba(122,86,19,.07); }
+    .group-panel { margin-top:10px; }
+
     /* 日期只留一個選擇器，避免四個按鈕和外框把畫面切得太碎。 */
     .date-toolbar {
       display: grid;
       grid-template-columns: auto minmax(0, 1fr);
       align-items: center;
       gap: 7px 12px;
-      margin-top: 14px;
+      margin-top: 0;
       padding: 8px 2px 10px;
       border-bottom: 1px solid var(--line);
     }
@@ -165,6 +176,10 @@
     .food-meta { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; font-weight: 500; }
     .food-kcal { color: var(--ink); font-size: 12px; font-weight: 900; white-space: nowrap; }
     .no-details { padding-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .food-details { margin-top:11px; border:1px solid #e8dfcf; border-radius:11px; background:#fffdf8; overflow:hidden; }
+    .food-details summary { padding:9px 10px; color:#765c17; font-size:12px; font-weight:900; cursor:pointer; list-style-position:inside; }
+    .food-details[open] summary { border-bottom:1px solid #f0e7d7; background:#fff8e8; }
+    .food-details-body { padding:0 10px 10px; }
 
     .rank-card { margin-top: 8px; padding: 4px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--white); }
     .rank-row {
@@ -266,7 +281,7 @@
   <main class="app">
     <section class="hero">
       <div class="eyebrow">HEALTH LOG</div>
-      <h1>🌏 公開飲控紀錄</h1>
+      <h1 id="wallTitle">🌐 飲控紀錄牆</h1>
       <p id="heroDate"></p>
       <div class="summary">
         <div class="summary-card"><strong id="publicCount">0</strong><span id="publicCountLabel">今日公開</span></div>
@@ -280,8 +295,12 @@
       <a id="publicHistoryLink" href="#" target="_top" hidden>📈 猛猛卡路里歷史</a>
     </nav>
 
+    <section class="wall-frame" aria-label="紀錄牆內容">
+      <nav id="wallTabs" class="wall-tabs" role="tablist" aria-label="紀錄牆來源"></nav>
+
+    <section class="wall-body">
     <section class="date-toolbar" aria-label="公開牆日期選擇">
-      <div class="date-toolbar-title">📅 公開紀錄日期</div>
+      <div id="wallDateTitle" class="date-toolbar-title">📅 公開紀錄日期</div>
       <div class="date-toolbar-actions">
         <select id="publicDateSelect" class="date-select" aria-label="選擇公開紀錄日期"></select>
         <button id="publicDateToday" class="date-today" type="button" title="回到今天的公開紀錄">今天</button>
@@ -289,21 +308,33 @@
       <div id="dateRangeHint" class="date-range-hint"></div>
     </section>
 
-    <nav class="tabs" role="tablist" aria-label="公開功能頁籤">
-      <button id="recordsTab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="recordsPanel">公開紀錄</button>
-      <button id="streaksTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="streaksPanel">連續紀錄</button>
-    </nav>
+    <section id="publicWallContent">
+      <nav class="tabs" role="tablist" aria-label="公開功能頁籤">
+        <button id="recordsTab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="recordsPanel">公開紀錄</button>
+        <button id="streaksTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="streaksPanel">連續紀錄</button>
+      </nav>
 
-    <section id="recordsPanel" class="panel" role="tabpanel" aria-labelledby="recordsTab"></section>
-    <section id="streaksPanel" class="panel" role="tabpanel" aria-labelledby="streaksTab" hidden></section>
+      <section id="recordsPanel" class="panel" role="tabpanel" aria-labelledby="recordsTab"></section>
+      <section id="streaksPanel" class="panel" role="tabpanel" aria-labelledby="streaksTab" hidden></section>
 
-    <div id="likeHint" class="like-hint"></div>
+      <div id="likeHint" class="like-hint"></div>
 
-    <details class="privacy">
-      <summary>🔒 本頁說明</summary>
-      <p>這是自願公開區，每個人的公開設定預設都是關閉的。只有本人勾選公開時才會出現！</p>
-    </details>
-    <div id="updated" class="updated"></div>
+      <details class="privacy">
+        <summary>🔒 本頁說明</summary>
+        <p>這是自願公開區，每個人的公開設定預設都是關閉的。只有本人勾選公開時才會出現！</p>
+      </details>
+    </section>
+
+    <section id="groupWallContent" class="group-panel" hidden>
+      <section id="groupRecordsPanel" class="panel"></section>
+      <details class="privacy">
+        <summary>🔒 群組牆說明</summary>
+        <p>只顯示目前群組成員主動選擇分享的紀錄與食物細項；不會顯示照片、體重、BMR 或備註。</p>
+      </details>
+    </section>
+      <div id="updated" class="updated"></div>
+    </section>
+    </section>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -314,12 +345,16 @@
   -->
   <div id="publicData" hidden><?= publicJson ?></div>
   <script>
-    window.__publicWallBuild = '2026.08.22-75';
+    window.__publicWallBuild = '2026.08.24-89';
 
     const toast = document.getElementById('toast');
     const recordsPanel = document.getElementById('recordsPanel');
     const streaksPanel = document.getElementById('streaksPanel');
     const likeHint = document.getElementById('likeHint');
+    const publicWallContent = document.getElementById('publicWallContent');
+    const groupWallContent = document.getElementById('groupWallContent');
+    const groupRecordsPanel = document.getElementById('groupRecordsPanel');
+    const wallTabs = document.getElementById('wallTabs');
 
     let DATA;
     try {
@@ -333,6 +368,11 @@
 
     let likeRequestInFlight = false;
     let dateRequestInFlight = false;
+    let activeWallTab = 'public';
+    let GROUP_DATA = null;
+    let groupViewRequestKey = '';
+    const GROUP_CACHE = new Map();
+    const groupLoadWaiters = new Map();
     let selectedDate = String(DATA.date || DATA.today || '');
     let selectedDateLabel = formatDateLabel(selectedDate);
 
@@ -369,6 +409,7 @@
       publicHistoryLink.hidden = false;
     }
 
+    renderWallTabs();
     function initDatePicker() {
       const select = document.getElementById('publicDateSelect');
       const todayButton = document.getElementById('publicDateToday');
@@ -396,10 +437,18 @@
       select.value = selectedDate;
       select.onchange = () => navigateToDate(select.value);
       todayButton.onclick = () => navigateToDate(maxDate);
-      document.getElementById('dateRangeHint').textContent = `可查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)} · 主動公開的紀錄。`;
+      const group = activeWallTab === 'public' ? null : currentGroupTab_();
+      document.getElementById('wallDateTitle').textContent = group ? '📅 群組紀錄日期' : '📅 公開紀錄日期';
+      document.getElementById('dateRangeHint').textContent = group
+        ? `可查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)} · 本群組主動分享的紀錄。`
+        : `可查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)} · 主動公開的紀錄。`;
     }
 
     function navigateToDate(date) {
+      if (activeWallTab !== 'public') {
+        navigateGroupToDate(date);
+        return;
+      }
       if (dateRequestInFlight) return;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return;
       const minDate = String(DATA.minDate || '');
@@ -459,6 +508,7 @@
 
     function refreshDateView() {
       const dateLabel = formatDateLabel(selectedDate);
+      document.getElementById('wallTitle').textContent = '🌐 飲控紀錄牆';
       document.getElementById('heroDate').textContent = `${dateLabel}・只顯示本人主動公開的內容`;
       document.getElementById('publicCount').textContent = number(DATA.summary && DATA.summary.publicCount);
       document.getElementById('completedCount').textContent = number(DATA.summary && DATA.summary.completedCount);
@@ -483,6 +533,184 @@
     function formatDateLabel(date) {
       const matched = String(date || '').match(/^\d{4}-(\d{2})-(\d{2})$/);
       return matched ? `${matched[1]}/${matched[2]}` : String(date || '');
+    }
+
+    function wallTabItems_() {
+      return [{ key: 'public', label: '🌍 公開' }].concat(
+        (Array.isArray(DATA.groupTabs) ? DATA.groupTabs : []).map(group => ({
+          key: 'group:' + String(group.groupId || ''),
+          groupId: String(group.groupId || ''),
+          label: '👥 ' + String(group.name || '我的群組'),
+        })).filter(item => item.groupId)
+      );
+    }
+
+    function currentGroupTab_() {
+      return wallTabItems_().find(item => item.key === activeWallTab) || null;
+    }
+
+    function renderWallTabs() {
+      const items = wallTabItems_();
+      wallTabs.innerHTML = items.map(item => '<button class="wall-tab' + (item.key === activeWallTab ? ' active' : '') + '" type="button" role="tab" aria-selected="' + String(item.key === activeWallTab) + '" title="' + escapeAttr(item.label) + '" data-wall-tab="' + escapeAttr(item.key) + '">' + escapeHtml(item.label) + '</button>').join('');
+      wallTabs.querySelectorAll('[data-wall-tab]').forEach(button => {
+        button.addEventListener('click', () => activateWallTab(button.getAttribute('data-wall-tab') || 'public'));
+      });
+    }
+
+    function activateWallTab(tabKey) {
+      const next = wallTabItems_().find(item => item.key === tabKey);
+      if (!next) return;
+      activeWallTab = next.key;
+      renderWallTabs();
+      if (activeWallTab === 'public') {
+        publicWallContent.hidden = false;
+        groupWallContent.hidden = true;
+        if (String(DATA.date || '') !== selectedDate) {
+          navigateToDate(selectedDate);
+          return;
+        }
+        refreshDateView();
+        renderRecords();
+        renderStreaks();
+        updateLikeHint();
+        return;
+      }
+      publicWallContent.hidden = true;
+      groupWallContent.hidden = false;
+      loadGroupWall(next.groupId, selectedDate);
+    }
+
+    function navigateGroupToDate(date) {
+      const group = currentGroupTab_();
+      if (!group || !/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) return;
+      const minDate = String(DATA.minDate || '');
+      const maxDate = String(DATA.maxDate || DATA.today || selectedDate);
+      if ((minDate && date < minDate) || (maxDate && date > maxDate)) {
+        showToast(`只能查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)}。`, 2200);
+        return;
+      }
+      if (date === selectedDate && GROUP_DATA && String(GROUP_DATA.date) === date && String(GROUP_DATA.group && GROUP_DATA.group.groupId) === group.groupId) return;
+      // 先更新目前選擇，使用者可以立刻再選另一個日期；舊請求回來也不會蓋掉新畫面。
+      selectedDate = date;
+      selectedDateLabel = formatDateLabel(selectedDate);
+      loadGroupWall(group.groupId, date);
+    }
+
+    function groupCacheKey_(groupId, date) {
+      return String(groupId || '') + '::' + String(date || '');
+    }
+
+    // 每個「群組 + 日期」各存一份。切回已看過的群組完全不需要再等 Apps Script。
+    function requestGroupWallData_(groupId, date, callback) {
+      const key = groupCacheKey_(groupId, date);
+      const cached = GROUP_CACHE.get(key);
+      if (cached) {
+        callback(null, cached);
+        return;
+      }
+      if (groupLoadWaiters.has(key)) {
+        groupLoadWaiters.get(key).push(callback);
+        return;
+      }
+      groupLoadWaiters.set(key, [callback]);
+      const finish = (error, nextData) => {
+        const waiters = groupLoadWaiters.get(key) || [];
+        groupLoadWaiters.delete(key);
+        if (!error && nextData && !nextData.error) GROUP_CACHE.set(key, nextData);
+        waiters.forEach(waiter => waiter(error, nextData));
+      };
+      google.script.run
+        .withSuccessHandler(nextData => {
+          finish(null, nextData);
+        })
+        .withFailureHandler(error => {
+          finish(error, null);
+        })
+        .getGroupWallDataForClient(DATA.viewer && DATA.viewer.uid || '', DATA.viewer && DATA.viewer.sig || '', groupId, date);
+    }
+
+    function loadGroupWall(groupId, date, options) {
+      const display = !options || options.display !== false;
+      const key = groupCacheKey_(groupId, date);
+      const cached = GROUP_CACHE.get(key);
+      if (cached) {
+        if (display && activeWallTab === 'group:' + groupId && selectedDate === date) {
+          GROUP_DATA = cached;
+          refreshGroupView();
+        }
+        return;
+      }
+      if (display) {
+        groupViewRequestKey = key;
+        groupRecordsPanel.innerHTML = '<div class="empty">正在載入群組紀錄…</div>';
+      }
+      requestGroupWallData_(groupId, date, (error, nextData) => {
+        // 預載只進快取，不影響使用者目前正在看的分頁。
+        if (!display) return;
+        if (activeWallTab !== 'group:' + groupId || selectedDate !== date || groupViewRequestKey !== key) return;
+        if (error || !nextData || nextData.error) {
+          groupRecordsPanel.innerHTML = '<div class="empty">' + escapeHtml(error && error.message || nextData && nextData.error || '群組紀錄載入失敗，請稍後再試。') + '</div>';
+          return;
+        }
+        GROUP_DATA = nextData;
+        selectedDate = String(GROUP_DATA.date || date);
+        selectedDateLabel = formatDateLabel(selectedDate);
+        refreshGroupView();
+      });
+    }
+
+    // 首頁的公開資料顯示完後，在背景依序備好群組資料。
+    // 使用者切換時多半已在手機裡，因此不會再出現等待畫面。
+    function prefetchGroupWalls() {
+      const groups = wallTabItems_().filter(item => item.groupId);
+      if (!groups.length) return;
+      const start = () => groups.forEach((group, index) => {
+        window.setTimeout(() => loadGroupWall(group.groupId, selectedDate, { display: false }), index * 160);
+      });
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(start, { timeout: 1200 });
+      } else {
+        window.setTimeout(start, 350);
+      }
+    }
+
+    function refreshGroupView() {
+      if (!GROUP_DATA || !GROUP_DATA.group) return;
+      const summary = GROUP_DATA.summary || {};
+      const groupName = String(GROUP_DATA.group.name || '我的群組');
+      document.getElementById('wallTitle').textContent = '👥 ' + groupName;
+      document.getElementById('heroDate').textContent = `${selectedDateLabel}・只顯示本群組成員主動分享的內容`;
+      document.getElementById('publicCount').textContent = number(summary.sharedCount);
+      document.getElementById('completedCount').textContent = number(summary.completedCount);
+      document.getElementById('rankingCount').textContent = number(summary.memberCount);
+      document.getElementById('publicCountLabel').textContent = `${selectedDateLabel}分享`;
+      document.getElementById('completedCountLabel').textContent = `${selectedDateLabel}已完成`;
+      document.getElementById('rankingCountLabel').textContent = '群組成員';
+      document.getElementById('updated').textContent = `更新時間：${GROUP_DATA.generatedAt || ''}`;
+      initDatePicker();
+      renderGroupRecords();
+    }
+
+    function renderGroupRecords() {
+      const records = sortSelfFirst(Array.isArray(GROUP_DATA && GROUP_DATA.records) ? GROUP_DATA.records : [], (a, b) => {
+        if (Boolean(a.isComplete) !== Boolean(b.isComplete)) return a.isComplete ? -1 : 1;
+        return aliasCompare(a, b);
+      });
+      if (!records.length) {
+        groupRecordsPanel.innerHTML = '<div class="empty">這天還沒有人分享到群組牆。</div>';
+        return;
+      }
+      groupRecordsPanel.innerHTML = records.map(record => {
+        const intake = Math.max(0, Number(record.intake || 0));
+        const allowance = Math.max(0, Number(record.allowance || 0));
+        const hasAllowance = allowance > 0;
+        const ratio = hasAllowance ? Math.min(100, Math.round(intake / allowance * 100)) : 0;
+        const over = hasAllowance && intake > allowance;
+        const kcal = hasAllowance
+          ? '<span class="kcal">' + number(intake) + '<small> / ' + number(allowance) + '</small></span>'
+          : '<span class="kcal">' + number(intake) + '<small> kcal</small></span>';
+        return '<details class="person' + (record.isSelf ? ' group-self' : '') + '"><summary><div class="person-row"><span class="dot ' + (record.isComplete ? 'complete' : '') + '" aria-hidden="true"></span><span class="person-name">' + escapeHtml(record.alias || '群組夥伴') + (record.isSelf ? '（我）' : '') + '</span>' + kcal + '<span></span><span class="chevron" aria-hidden="true">▼</span></div>' + (hasAllowance ? '<div class="bar ' + (over ? 'over' : '') + '"><span style="width:' + ratio + '%"></span></div>' : '') + '</summary><div class="person-body">' + personMetaHtml(record, hasAllowance) + foodDetailsHtml(record, '這筆紀錄沒有可顯示的食物細項。') + '</div></details>';
+      }).join('');
     }
 
     function switchTab(tab) {
@@ -566,47 +794,50 @@
       return '<div class="person-meta">' + parts.join('<br>') + energyLine + '</div>';
     }
 
-    function foodDetailsHtml(record) {
+    function foodDetailsHtml(record, noDetailsText) {
       const mealTotals = Array.isArray(record.mealTotals)
         ? record.mealTotals.filter(meal => meal && Number(meal.kcal || 0) > 0)
         : [];
       const mealDetails = Array.isArray(record.mealDetails)
         ? record.mealDetails.filter(meal => meal && Array.isArray(meal.items) && meal.items.length)
         : [];
+      let content = '';
       if (!mealDetails.length) {
         if (!mealTotals.length) {
-          return '<div class="no-details">這位夥伴沒有公開食物細項。</div>';
+          content = '<div class="no-details">' + escapeHtml(noDetailsText || '這位夥伴沒有公開食物細項。') + '</div>';
+        } else {
+          content = mealTotals.map(meal => '<section class="meal-group">'
+            + '<div class="meal-title"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="meal-total-kcal">本餐共 ' + number(meal.kcal) + ' kcal</span></div>'
+            + '<div class="meal-total-only">' + escapeHtml(noDetailsText || '未公開食物細項') + '</div>'
+            + '</section>').join('');
         }
-        return mealTotals.map(meal => '<section class="meal-group">'
-          + '<div class="meal-title"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="meal-total-kcal">本餐共 ' + number(meal.kcal) + ' kcal</span></div>'
-          + '<div class="meal-total-only">未公開食物細項</div>'
-          + '</section>').join('');
-      }
-
-      return mealDetails.map(meal => {
-        const calculatedTotal = Math.round(meal.items.reduce(
-          (sum, item) => sum + Math.max(0, Number(item && item.calories || 0)),
-          0
-        ));
-        const matchedTotal = mealTotals.find(item => String(item.label || '') === String(meal.label || ''));
-        const mealTotal = matchedTotal ? Math.round(Number(matchedTotal.kcal || 0)) : calculatedTotal;
-        const items = meal.items.map(item => {
-          const quantity = Math.max(0, Number(item.quantity || 0));
-          const meta = [];
-          if (item.portion) meta.push(String(item.portion));
-          if (quantity > 1) meta.push('×' + formatQuantity(quantity));
-          return '<div class="food-item">'
-            + '<div class="food-name">' + escapeHtml(item.name || '未命名食物')
-            + (meta.length ? '<span class="food-meta">' + escapeHtml(meta.join('・')) + '</span>' : '')
-            + '</div>'
-            + '<div class="food-kcal">' + number(item.calories) + ' kcal</div>'
-            + '</div>';
+      } else {
+        content = mealDetails.map(meal => {
+          const calculatedTotal = Math.round(meal.items.reduce(
+            (sum, item) => sum + Math.max(0, Number(item && item.calories || 0)),
+            0
+          ));
+          const matchedTotal = mealTotals.find(item => String(item.label || '') === String(meal.label || ''));
+          const mealTotal = matchedTotal ? Math.round(Number(matchedTotal.kcal || 0)) : calculatedTotal;
+          const items = meal.items.map(item => {
+            const quantity = Math.max(0, Number(item.quantity || 0));
+            const meta = [];
+            if (item.portion) meta.push(String(item.portion));
+            if (quantity > 1) meta.push('×' + formatQuantity(quantity));
+            return '<div class="food-item">'
+              + '<div class="food-name">' + escapeHtml(item.name || '未命名食物')
+              + (meta.length ? '<span class="food-meta">' + escapeHtml(meta.join('・')) + '</span>' : '')
+              + '</div>'
+              + '<div class="food-kcal">' + number(item.calories) + ' kcal</div>'
+              + '</div>';
+          }).join('');
+          return '<section class="meal-group">'
+            + '<div class="meal-title"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="meal-total-kcal">本餐共 ' + number(mealTotal) + ' kcal</span></div>'
+            + items
+            + '</section>';
         }).join('');
-        return '<section class="meal-group">'
-          + '<div class="meal-title"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="meal-total-kcal">本餐共 ' + number(mealTotal) + ' kcal</span></div>'
-          + items
-          + '</section>';
-      }).join('');
+      }
+      return '<details class="food-details"><summary>🍽️ 食物細項（點選查看）</summary><div class="food-details-body">' + content + '</div></details>';
     }
 
     function renderStreaks() {
@@ -791,6 +1022,7 @@
     renderRecords();
     renderStreaks();
     updateLikeHint();
+    prefetchGroupWalls();
   </script>
 </body>
 </html>

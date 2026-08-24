@@ -585,6 +585,22 @@
     .privacy-toggle input { width: 20px; height: 20px; margin: 0; flex: 0 0 auto; accent-color: var(--green); }
     .privacy-toggle span { font-size: 13px; line-height: 1.45; }
     .privacy-toggle input:disabled + span { opacity: .48; }
+    .space-settings { margin-top: 12px; }
+    .space-settings .public-settings-icon { background: #e8f6ff; }
+    .space-create-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+    .space-create-row button { min-height: 44px; white-space: nowrap; }
+    .space-list { display: grid; gap: 9px; margin-top: 12px; }
+    .space-card { padding: 11px; border: 1px solid #d8e5df; border-radius: 14px; background: #f8fcf9; }
+    .space-card-owner { border-color: #e5ca70; background: #fffaf0; }
+    .space-card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .space-card strong { color: var(--ink); font-size: 14px; }
+    .space-member-count { flex: 0 0 auto; padding: 3px 7px; border-radius: 999px; background: #e8f6ff; color: #245f7d; font-size: 11px; font-weight: 900; }
+    .space-card p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .space-invite { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 9px; }
+    .space-invite code { padding: 6px 8px; border-radius: 8px; background: #fff; color: #765c17; font-size: 13px; font-weight: 900; letter-spacing: .04em; }
+    .space-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 9px; }
+    .space-actions button { min-height: 34px; padding: 6px 9px; font-size: 11px; }
+    .space-status { min-height: 18px; margin-top: 8px; color: var(--green); font-size: 11px; font-weight: 800; }
     .reminder-settings {
       margin-top: 12px;
       border: 1px solid #c4ddeb;
@@ -614,6 +630,39 @@
     .reminder-settings[open] > summary::after { transform: rotate(180deg); }
     .reminder-settings-body { padding: 10px 14px 14px; }
     .reminder-settings-body p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .feature-notice {
+      margin-top: 10px;
+      overflow: hidden;
+      border: 1px solid #d9bd58;
+      border-radius: 15px;
+      background: #fff9e8;
+      box-shadow: 0 5px 13px rgba(119, 88, 18, .08);
+    }
+    .feature-notice > summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 48px;
+      padding: 10px 13px;
+      color: #765c17;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      list-style: none;
+    }
+    .feature-notice > summary::-webkit-details-marker { display: none; }
+    .feature-notice > summary::marker { display: none; content: ''; }
+    .feature-notice > summary::after { content: '⌄'; color: #a57a1c; font-size: 18px; transition: transform .18s ease; }
+    .feature-notice[open] > summary { border-bottom: 1px solid #eadb9e; background: #fff4cc; }
+    .feature-notice[open] > summary::after { transform: rotate(180deg); }
+    .feature-notice-body { padding: 11px 13px 13px; }
+    .feature-notice-body p { margin: 0; color: #705f39; font-size: 12px; line-height: 1.55; }
+    .feature-notice-list { display: grid; gap: 7px; margin: 10px 0 12px; }
+    .feature-notice-item { padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.7); color: #645636; font-size: 12px; line-height: 1.45; }
+    .feature-notice-item strong { color: #76500c; }
+    .feature-notice-dismiss { width: 100%; min-height: 39px; border: 1px solid #d7ad39; border-radius: 11px; background: #fffdf7; color: #76500c; font-size: 12px; font-weight: 900; cursor: pointer; }
+    .feature-notice-dismiss:hover { background: #ffe9a0; }
     .reminder-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
     .reminder-toggle {
       display: flex;
@@ -1274,6 +1323,8 @@
       .hero-backfill > summary { min-height: 32px; padding: 5px 9px; }
       .personal-form-grid { grid-template-columns: 1fr; }
       .bmr-helper-body .form-grid { grid-template-columns: 1fr; }
+      .space-create-row { grid-template-columns: 1fr; }
+      .space-create-row button { width: 100%; }
       .frequent-food-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .exercise-record-grid { grid-template-columns: minmax(0, 1fr) 82px 92px auto; }
       .exercise-record-grid > label:first-child { grid-column: 1 / -1; }
@@ -1304,7 +1355,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.23-88';
+    window.__dietAppBuild = '2026.08.24-94';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1375,6 +1426,13 @@
       noon: MEMBER.personalReminder !== false && MEMBER.reminderNoon !== false,
       evening: MEMBER.personalReminder !== false && MEMBER.reminderEvening !== false,
     };
+    const NEW_FEATURE_NOTICE = BOOTSTRAP && BOOTSTRAP.newFeatureNotice
+      ? BOOTSTRAP.newFeatureNotice
+      : { show: false };
+    let CHECK_IN_SPACES = BOOTSTRAP && Array.isArray(BOOTSTRAP.checkInSpaces)
+      ? BOOTSTRAP.checkInSpaces
+      : [];
+    let CHECK_IN_SPACE_IDS = new Set(CHECK_IN_SPACES.map(space => String(space.groupId || '')));
     const FOOD_BY_ID = {};
     const foodCardNodes = {};
     FOODS.forEach(food => { FOOD_BY_ID[food.id] = food; });
@@ -1837,6 +1895,10 @@
       const defaultPublishToday = Boolean(MEMBER.defaultPublishToday);
       const defaultPublishFoodDetails = defaultPublishToday
         && Boolean(MEMBER.defaultPublishFoodDetails);
+      const groupWalls = Array.isArray(BOOTSTRAP.groupWalls) ? BOOTSTRAP.groupWalls : [];
+      const groupWallNames = groupWalls.map(group => String(group.name || '我的群組')).join('、');
+      // 群組分享是成員長期偏好；切換一次會套用到所有日期紀錄與之後的新紀錄。
+      const publishToGroup = Boolean(MEMBER.defaultPublishToGroup);
       app.innerHTML = [
         '<section class="hero">',
           '<div class="hero-header">',
@@ -1883,9 +1945,10 @@
               '<div id="reminderSaveStatus" class="reminder-save-status" aria-live="polite"></div>',
             '</div>',
           '</details>',
+          renderNewFeatureNotice_(),
         '</section>',
         '<nav class="page-nav" aria-label="頁面導覽">',
-          (BOOTSTRAP.publicWallUrl ? '<a class="page-nav-primary" href="' + escapeAttr(BOOTSTRAP.publicWallUrl) + '" target="_top">🌍 公開紀錄牆</a>' : ''),
+          (BOOTSTRAP.publicWallUrl ? '<a class="page-nav-primary" href="' + escapeAttr(BOOTSTRAP.publicWallUrl) + '" target="_top">🌐 紀錄牆</a>' : ''),
           (BOOTSTRAP.historyUrl ? '<a href="' + escapeAttr(BOOTSTRAP.historyUrl) + '" target="_top">📈 猛猛卡路里歷史</a>' : ''),
         '</nav>',
         '<details id="personalSettings" class="section personal-settings">',
@@ -1920,7 +1983,7 @@
             '<summary class="public-settings-summary">',
               '<span class="public-settings-icon" aria-hidden="true">🌍</span>',
               '<span>',
-                '<span class="public-settings-heading"><strong>我要上公開牆</strong><em class="public-settings-badge">選填</em></span>',
+                '<span class="public-settings-heading"><strong>公開／空間分享設定</strong><em class="public-settings-badge">選填</em></span>',
                 '<small id="publicSettingsStatus" class="public-settings-status"></small>',
               '</span>',
               '<span class="public-settings-chevron" aria-hidden="true">⌄</span>',
@@ -1931,8 +1994,10 @@
               '<label class="privacy-toggle"><input id="publishToday" type="checkbox" ' + (defaultPublishToday ? 'checked' : '') + '><span><strong>公開我的飲控紀錄</strong><br>開啟後每天沿用，只公開暱稱、已攝取／今日額度、餐別與完成狀態。</span></label>',
               '<label class="privacy-toggle"><input id="publishFoodDetails" type="checkbox" ' + (defaultPublishFoodDetails ? 'checked' : '') + '><span><strong>同時公開我吃了什麼</strong><br>開啟後每天沿用，顯示食物名稱、份量與估算熱量；不會顯示照片。</span></label>',
               '<label class="privacy-toggle"><input id="joinPublicRanking" type="checkbox" ' + (MEMBER.joinPublicRanking ? 'checked' : '') + '><span><strong>參加公開連續打卡排行</strong><br>只比較完成打卡的連續天數，不比較誰吃得最少。</span></label>',
+              (groupWalls.length ? '<label class="privacy-toggle"><input id="publishToGroup" type="checkbox" ' + (publishToGroup ? 'checked' : '') + '><span><strong>顯示在我的打卡空間／群組紀錄牆</strong><br>切換後會套用到所有日期紀錄與之後的新紀錄，分享給 ' + escapeHtml(groupWallNames) + ' 的現有成員；會顯示食物細項，但不會出現在公開紀錄牆。</span></label>' : ''),
             '</div>',
           '</details>',
+          renderCheckInSpaceSettings_(),
           '</div>',
         '</details>',
         '<section class="section meal-entry-section">',
@@ -2033,6 +2098,7 @@
       submitBar.hidden = false;
       updateSubmitButtons();
       bindStaticEvents();
+      bindCheckInSpaceEvents_();
       bindKeyboardAvoidance();
       updatePublicSettingsSummary();
       renderMealTabs();
@@ -2042,6 +2108,204 @@
       renderSelected();
       updateTotals();
       renderWaterProgress();
+    }
+
+    function renderNewFeatureNotice_() {
+      if (!NEW_FEATURE_NOTICE || !NEW_FEATURE_NOTICE.show) return '';
+      return [
+        '<details id="newFeatureNotice" class="feature-notice" open>',
+          '<summary>✨ 新功能與提醒設定</summary>',
+          '<div class="feature-notice-body">',
+            '<p>這些功能現在都可以自己決定要不要使用：</p>',
+            '<div class="feature-notice-list">',
+              '<div class="feature-notice-item">👥 <strong>打卡空間</strong>：不用建立 LINE 群組，也能邀請朋友一起看紀錄牆。<br><small>入口：展開「個人設定」→「打卡空間」</small></div>',
+              '<div class="feature-notice-item">🫶 <strong>空間／群組分享紀錄</strong>：可選擇分享給同一個打卡空間或 LINE 群組的成員。<br><small>入口：個人設定 → 公開／空間分享設定</small></div>',
+              '<div class="feature-notice-item">🔔 <strong>LINE 提醒可自行開關</strong>：早上 09:00、中午 12:00、晚上 19:30 可分別設定。<br><small>入口：打卡頁最上方的「LINE提醒設定」</small></div>',
+              '<div class="feature-notice-item">🌙 <strong>晚間改為最後通知</strong>：19:30 提醒你補充今天還沒記完的餐點。<br><small>開關也在「LINE提醒設定」內</small></div>',
+            '</div>',
+            '<button id="dismissNewFeatureNotice" class="feature-notice-dismiss" type="button">我知道了，不再顯示</button>',
+          '</div>',
+        '</details>',
+      ].join('');
+    }
+
+    function renderCheckInSpaceSettings_() {
+      return [
+        '<details id="checkInSpaceSettings" class="public-settings space-settings">',
+          '<summary class="public-settings-summary">',
+            '<span class="public-settings-icon" aria-hidden="true">👥</span>',
+            '<span><span class="public-settings-heading"><strong>打卡空間</strong><em class="public-settings-badge">私人共享</em></span><small class="public-settings-status">不用建立 LINE 群組，也能一起記錄</small></span>',
+            '<span class="public-settings-chevron" aria-hidden="true">⌄</span>',
+          '</summary>',
+          '<div id="checkInSpaceContent" class="public-settings-body">' + renderCheckInSpaceContent_() + '</div>',
+        '</details>',
+      ].join('');
+    }
+
+    function renderCheckInSpaceContent_() {
+      const spaces = Array.isArray(CHECK_IN_SPACES) ? CHECK_IN_SPACES : [];
+      const cards = spaces.map(space => {
+        const ownerInfo = space.isOwner
+          ? [
+              '<div class="space-invite"><span>邀請碼</span><code>' + escapeHtml(space.inviteCode || '—') + '</code></div>',
+              '<p>有效到 ' + escapeHtml(space.inviteExpiresAt || '—') + '。好友加入官方帳號後，直接私訊這組邀請碼即可加入。</p>',
+              '<div class="space-actions">',
+                '<button class="secondary" type="button" data-space-copy="' + escapeAttr(space.inviteCode || '') + '">複製邀請碼</button>',
+                '<button class="danger-small" type="button" data-space-renew="' + escapeAttr(space.groupId || '') + '">重設邀請碼</button>',
+              '</div>',
+            ].join('')
+          : '<p>你已加入這個空間；可在紀錄牆的分頁查看大家主動分享的紀錄。</p><div class="space-actions"><button class="danger-small" type="button" data-space-leave="' + escapeAttr(space.groupId || '') + '">離開空間</button></div>';
+        return [
+          '<article class="space-card' + (space.isOwner ? ' space-card-owner' : '') + '">',
+            '<div class="space-card-heading"><strong>' + escapeHtml(space.name || '未命名打卡空間') + '</strong><span class="space-member-count">' + Math.max(0, Number(space.memberCount || 0)) + ' 人</span></div>',
+            ownerInfo,
+          '</article>',
+        ].join('');
+      }).join('');
+      return [
+        '<p class="hint">建立空間後，把邀請碼傳給朋友即可；朋友不需要先建立 LINE 群組。加入後，大家會在「紀錄牆」看到同一個空間分頁。</p>',
+        '<div class="space-create-row"><label>新增打卡空間<input id="checkInSpaceName" maxlength="40" placeholder="例如：晚餐不爆卡小隊"></label><button id="createCheckInSpaceButton" class="secondary" type="button">建立空間</button></div>',
+        '<div id="checkInSpaceStatus" class="space-status" aria-live="polite"></div>',
+        (cards ? '<div class="space-list">' + cards + '</div>' : '<p class="hint">尚未加入任何打卡空間。</p>'),
+      ].join('');
+    }
+
+    function bindCheckInSpaceEvents_() {
+      const root = document.getElementById('checkInSpaceContent');
+      if (!root) return;
+      const status = () => document.getElementById('checkInSpaceStatus');
+      const refresh = spaces => {
+        CHECK_IN_SPACES = Array.isArray(spaces) ? spaces : CHECK_IN_SPACES;
+        syncCheckInSpaceWallTabs_();
+        root.innerHTML = renderCheckInSpaceContent_();
+        bindCheckInSpaceEvents_();
+      };
+      const showSpaceError = error => {
+        const node = status();
+        const message = error && error.message ? error.message : '操作失敗，請稍後再試。';
+        if (node) node.textContent = message;
+        showToast(message);
+      };
+
+      const createButton = document.getElementById('createCheckInSpaceButton');
+      if (createButton) createButton.addEventListener('click', () => {
+        const input = document.getElementById('checkInSpaceName');
+        const name = String(input && input.value || '').trim();
+        if (!name) {
+          showToast('請先輸入打卡空間名稱。');
+          if (input) input.focus();
+          return;
+        }
+        const node = status();
+        if (node) node.textContent = '正在建立…';
+        createButton.disabled = true;
+        google.script.run
+          .withSuccessHandler(result => {
+            refresh(result && result.spaces);
+            showToast('✅ 已建立打卡空間，邀請碼已顯示在這裡。');
+          })
+          .withFailureHandler(error => {
+            createButton.disabled = false;
+            showSpaceError(error);
+          })
+          .createCheckInSpaceForClient({ uid: BOOTSTRAP.uid, sig: BOOTSTRAP.sig, name });
+      });
+
+      root.querySelectorAll('[data-space-copy]').forEach(button => {
+        button.addEventListener('click', () => copyCheckInSpaceInvite_(button.dataset.spaceCopy || ''));
+      });
+      root.querySelectorAll('[data-space-renew]').forEach(button => {
+        button.addEventListener('click', () => {
+          if (!window.confirm('重設後，舊邀請碼會立刻失效。要繼續嗎？')) return;
+          const node = status();
+          if (node) node.textContent = '正在更新邀請碼…';
+          button.disabled = true;
+          google.script.run
+            .withSuccessHandler(result => {
+              refresh(result && result.spaces);
+              showToast('✅ 已更新邀請碼。');
+            })
+            .withFailureHandler(error => {
+              button.disabled = false;
+              showSpaceError(error);
+            })
+            .regenerateCheckInSpaceInviteForClient({ uid: BOOTSTRAP.uid, sig: BOOTSTRAP.sig, groupId: button.dataset.spaceRenew || '' });
+        });
+      });
+      root.querySelectorAll('[data-space-leave]').forEach(button => {
+        button.addEventListener('click', () => {
+          if (!window.confirm('離開後將看不到這個空間的紀錄牆。確定要離開嗎？')) return;
+          const node = status();
+          if (node) node.textContent = '正在離開空間…';
+          button.disabled = true;
+          google.script.run
+            .withSuccessHandler(result => {
+              refresh(result && result.spaces);
+              showToast('已離開打卡空間。');
+            })
+            .withFailureHandler(error => {
+              button.disabled = false;
+              showSpaceError(error);
+            })
+            .leaveCheckInSpaceForClient({ uid: BOOTSTRAP.uid, sig: BOOTSTRAP.sig, groupId: button.dataset.spaceLeave || '' });
+        });
+      });
+    }
+
+    function syncCheckInSpaceWallTabs_() {
+      if (!BOOTSTRAP) return;
+      const spaces = Array.isArray(CHECK_IN_SPACES) ? CHECK_IN_SPACES : [];
+      const spaceIds = new Set(spaces.map(space => String(space.groupId || '')));
+      const existing = Array.isArray(BOOTSTRAP.groupWalls) ? BOOTSTRAP.groupWalls : [];
+      const preserved = existing.filter(group => !CHECK_IN_SPACE_IDS.has(String(group.groupId || '')) && !spaceIds.has(String(group.groupId || '')));
+      BOOTSTRAP.groupWalls = preserved.concat(spaces.map(space => ({ groupId: space.groupId, name: space.name })));
+      CHECK_IN_SPACE_IDS = spaceIds;
+
+      // 新建第一個空間時，直接把分享開關補到目前畫面，不需要重新載入或遺失正在填寫的餐點。
+      const existingInput = document.getElementById('publishToGroup');
+      if (!BOOTSTRAP.groupWalls.length) {
+        const existingLabel = existingInput && existingInput.closest('.privacy-toggle');
+        if (existingLabel) existingLabel.remove();
+        updatePublicSettingsSummary();
+        return;
+      }
+      if (existingInput) return;
+      const body = document.querySelector('#publicSettings .public-settings-body');
+      if (!body) return;
+      const label = document.createElement('label');
+      label.className = 'privacy-toggle';
+      label.innerHTML = '<input id="publishToGroup" type="checkbox"><span><strong>顯示在我的打卡空間／群組紀錄牆</strong><br>切換後會套用到所有日期紀錄與之後的新紀錄；空間成員可看到食物細項，但不會出現在公開紀錄牆。</span>';
+      const input = label.querySelector('input');
+      input.checked = Boolean(MEMBER.defaultPublishToGroup);
+      input.addEventListener('change', () => {
+        updatePublicSettingsSummary();
+        markPublicSettingsChanged(false);
+      });
+      body.append(label);
+      updatePublicSettingsSummary();
+    }
+
+    function copyCheckInSpaceInvite_(inviteCode) {
+      const text = String(inviteCode || '').trim();
+      if (!text) return;
+      const copied = () => showToast('已複製邀請碼：' + text);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(copied).catch(() => fallbackCopyCheckInSpaceInvite_(text, copied));
+      } else {
+        fallbackCopyCheckInSpaceInvite_(text, copied);
+      }
+    }
+
+    function fallbackCopyCheckInSpaceInvite_(text, done) {
+      const area = document.createElement('textarea');
+      area.value = text;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.append(area);
+      area.select();
+      try { document.execCommand('copy'); done(); } catch (error) { showToast('請長按邀請碼自行複製：' + text); }
+      area.remove();
     }
 
     function bindStaticEvents() {
@@ -2061,6 +2325,25 @@
         reminderSummary.addEventListener('click', event => {
           event.preventDefault();
           reminderSettings.open = !reminderSettings.open;
+        });
+      }
+
+      const dismissFeatureNotice = document.getElementById('dismissNewFeatureNotice');
+      if (dismissFeatureNotice) {
+        dismissFeatureNotice.addEventListener('click', () => {
+          dismissFeatureNotice.disabled = true;
+          google.script.run
+            .withSuccessHandler(() => {
+              NEW_FEATURE_NOTICE.show = false;
+              const notice = document.getElementById('newFeatureNotice');
+              if (notice) notice.remove();
+              showToast('已收好新功能說明，需要時可在「說明」查看。');
+            })
+            .withFailureHandler(error => {
+              dismissFeatureNotice.disabled = false;
+              showToast(error && error.message ? error.message : '目前無法儲存公告設定，請稍後再試。');
+            })
+            .dismissNewFeatureNotice({ uid: BOOTSTRAP.uid, sig: BOOTSTRAP.sig });
         });
       }
       document.querySelectorAll('[data-record-date]').forEach(button => {
@@ -2254,6 +2537,15 @@
           updatePublicSettingsSummary();
           markPublicSettingsChanged(false);
         });
+
+      const publishToGroup = document.getElementById('publishToGroup');
+      if (publishToGroup) {
+        publishToGroup.addEventListener('change', () => {
+          updatePublicSettingsSummary();
+          // 分享設定不改變餐點內容，已完成打卡也要維持完成狀態。
+          markPublicSettingsChanged(false);
+        });
+      }
 
       ['reminderMorning', 'reminderNoon', 'reminderEvening']
         .forEach(id => {
@@ -2526,7 +2818,9 @@
         ? (publishFoodDetails.checked ? '紀錄與餐點細項預設公開' : '紀錄預設公開（不含餐點細項）')
         : '紀錄預設不公開';
       const rankingText = joinPublicRanking.checked ? '已參加連續排行' : '未參加連續排行';
-      status.textContent = `目前：${recordText}・${rankingText}`;
+      const groupInput = document.getElementById('publishToGroup');
+      const groupText = groupInput ? (groupInput.checked ? '已分享到群組牆' : '未分享到群組牆') : '';
+      status.textContent = `目前：${[recordText, rankingText, groupText].filter(Boolean).join('・')}`;
     }
 
     let reminderSaveTimer = null;
@@ -3495,7 +3789,7 @@
         900
       );
       if (!silent) {
-        showToast('🌏 公開設定將自動儲存；群組排行不受影響。');
+        showToast('🌏 分享設定將自動儲存；群組排行不受影響。');
       }
     }
 
@@ -3626,6 +3920,7 @@
         publishToday: document.getElementById('publishToday').checked,
         publishFoodDetails: document.getElementById('publishFoodDetails').checked,
         joinPublicRanking: document.getElementById('joinPublicRanking').checked,
+        publishToGroup: Boolean(document.getElementById('publishToGroup') && document.getElementById('publishToGroup').checked),
       };
 
       const requestRevision = state.mealRevision;
@@ -3662,6 +3957,7 @@
             isComplete: todayIsComplete,
             isPublic: Boolean(payload.publishToday),
             publishFoodDetails: Boolean(payload.publishFoodDetails),
+            isGroupPublic: Boolean(payload.publishToGroup),
           };
           DAILY_LOGS[state.recordDate] = savedSnapshot;
           activeSavedLog = savedSnapshot;
@@ -3670,6 +3966,7 @@
           MEMBER.publicAlias = payload.publicAlias;
           MEMBER.defaultPublishToday = payload.publishToday;
           MEMBER.defaultPublishFoodDetails = payload.publishFoodDetails;
+          MEMBER.defaultPublishToGroup = Boolean(result.defaultPublishToGroup);
           MEMBER.joinPublicRanking = payload.joinPublicRanking;
           WATER_SETTINGS.enabled = Boolean(payload.waterEnabled);
           WATER_SETTINGS.goalMl = Number(payload.waterGoalMl || 2000);
