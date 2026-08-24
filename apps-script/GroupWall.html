@@ -108,7 +108,7 @@
     function renderRecord(record) {
       const allowance = record.allowance === null || record.allowance === undefined ? null : Number(record.allowance);
       const proteinG = Math.max(0, Number(record.proteinG || 0));
-      const protein = proteinG > 0 ? '<span class="protein-badge" title="蛋白質估算">🥩 ' + proteinNumber(proteinG) + 'g</span>' : '';
+      const protein = proteinG > 0 ? '<span class="protein-badge" title="蛋白質估算">🍖 ' + proteinNumber(proteinG) + 'g</span>' : '';
       const remaining = allowance === null ? '尚未設定今日額度' : (allowance - Number(record.intake || 0) >= 0 ? '還可 ' + number(allowance - Number(record.intake || 0)) + ' kcal' : '超出 ' + number(Number(record.intake || 0) - allowance) + ' kcal');
       const mealText = Array.isArray(record.mealTotals) && record.mealTotals.length ? record.mealTotals.map(meal => '<span class="meal">' + escapeHtml(meal.label) + ' ' + number(meal.kcal) + '</span>').join('') : '<span class="meal">尚未記錄餐別</span>';
       const foodDetails = Array.isArray(record.mealDetails) && record.mealDetails.length
@@ -120,7 +120,7 @@
       const items = Array.isArray(meal && meal.items) ? meal.items : [];
       const mealKcal = Math.round(items.reduce((sum, item) => sum + Math.max(0, Number(item && item.calories || 0)), 0));
       const mealProteinG = Math.max(0, items.reduce((sum, item) => sum + Math.max(0, Number(item && item.proteinG || 0)), 0));
-      return '<div class="food-meal"><div class="food-meal-head"><strong>' + escapeHtml(meal && meal.label || '餐點') + '</strong><span class="food-meal-total">本餐共 ' + number(mealKcal) + ' kcal' + (mealProteinG > 0 ? ' ・🥩 ' + proteinNumber(mealProteinG) + ' g' : '') + '</span></div>'
+      return '<div class="food-meal"><div class="food-meal-head"><strong>' + escapeHtml(meal && meal.label || '餐點') + '</strong><span class="food-meal-total">本餐共 ' + number(mealKcal) + ' kcal' + (mealProteinG > 0 ? ' ・🍖 ' + proteinNumber(mealProteinG) + ' g' : '') + '</span></div>'
         + items.map(item => '<div class="food-item">' + escapeHtml(item.name || '食物') + (item.portion ? '・' + escapeHtml(item.portion) : '') + (Number(item.quantity || 0) > 1 ? ' × ' + escapeHtml(item.quantity) : '') + '・' + number(item.calories) + ' kcal</div>').join('')
         + '</div>';
     }
