@@ -8,7 +8,7 @@
     * { box-sizing:border-box; }
     body { margin:0; background:var(--cream); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif; }
     button, select { font:inherit; touch-action:manipulation; }
-    .app { max-width:760px; margin:0 auto; padding:16px 14px 48px; }
+    .app { max-width:760px; margin:0 auto; padding:16px 14px 100px; }
     .hero { padding:19px 20px; border-radius:22px; background:linear-gradient(135deg,#dff4ff,#aee2f6); box-shadow:0 10px 30px rgba(36,95,125,.11); }
     .eyebrow { color:#245f7d; font-size:11px; font-weight:900; letter-spacing:.12em; }
     h1 { margin:6px 0 4px; font-size:24px; line-height:1.25; }
@@ -17,8 +17,13 @@
     .summary-card { padding:10px 6px; border-radius:13px; background:rgba(255,255,255,.78); text-align:center; }
     .summary-card strong { display:block; font-size:19px; }
     .summary-card span { color:#245f7d; font-size:11px; font-weight:800; }
-    .nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
-    .nav a { min-height:43px; display:flex; align-items:center; justify-content:center; padding:8px; border:1px solid var(--blue-line); border-radius:12px; background:var(--blue); color:#245f7d; font-size:13px; font-weight:900; text-decoration:none; }
+    .bottom-nav { position:fixed; right:0; bottom:0; left:0; z-index:10; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:3px; padding:7px 9px calc(7px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:rgba(255,250,240,.96); backdrop-filter:blur(14px); }
+    .bottom-nav a { display:flex; min-height:49px; flex-direction:column; align-items:center; justify-content:center; gap:2px; border-radius:11px; color:#786f62; font-size:10px; font-weight:900; text-decoration:none; }
+    .bottom-nav a span { font-size:17px; line-height:1; }
+    .bottom-nav a.active { background:#fff1ba; color:#76500c; }
+    .bottom-nav a.is-loading { background:#fff3c9; color:#76500c; }
+    .bottom-nav a.is-loading span { animation:nav-pulse .65s ease-in-out infinite; }
+    @keyframes nav-pulse { 50% { transform:scale(.84); opacity:.55; } }
     .toolbar { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:8px; align-items:center; margin-top:16px; padding:10px 2px; border-bottom:1px solid var(--line); }
     .toolbar label { color:var(--muted); font-size:12px; font-weight:900; white-space:nowrap; }
     select, .today { min-height:38px; border:1px solid var(--line); border-radius:10px; background:var(--white); color:var(--ink); font-weight:800; }
@@ -38,6 +43,7 @@
     .status.complete { background:#e8f5ed; color:#397653; }
     .energy { padding:0 14px 11px; font-size:22px; font-weight:900; }
     .energy small { color:var(--muted); font-size:12px; font-weight:800; }
+    .protein-badge { display:inline-flex; align-items:center; justify-content:center; margin-left:7px; padding:4px 7px; border:1px solid #b8d9c4; border-radius:999px; background:#eef8f1; color:#35684b; font-size:11px; font-weight:900; vertical-align:middle; white-space:nowrap; }
     .remaining { color:var(--green); font-size:13px; font-weight:900; }
     .meal-list { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 12px; }
     .meal { padding:5px 8px; border-radius:9px; background:#fff7e6; color:#745c2b; font-size:12px; font-weight:800; }
@@ -45,11 +51,13 @@
     .food-heading { margin-bottom:6px; color:#356a83; font-size:12px; font-weight:900; }
     .food-meal { margin-top:7px; color:#5f584d; font-size:12px; line-height:1.5; }
     .food-meal:first-of-type { margin-top:0; }
+    .food-meal-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
     .food-meal strong { color:#356a83; }
+    .food-meal-total { padding:3px 7px; border-radius:999px; background:#eef8f1; color:#35684b; font-size:10px; font-weight:900; white-space:nowrap; }
     .food-item { margin-top:2px; color:#6f675b; }
     .record-foot { padding:9px 14px; border-top:1px solid #f0e8db; color:var(--muted); font-size:11px; }
     .loading { opacity:.58; pointer-events:none; }
-    @media (max-width:430px) { .app { padding:12px 10px 36px; } .toolbar { grid-template-columns:1fr auto; } .toolbar label { grid-column:1 / -1; } }
+    @media (max-width:430px) { .app { padding:12px 10px 96px; } .toolbar { grid-template-columns:1fr auto; } .toolbar label { grid-column:1 / -1; } }
   </style>
 </head>
 <body>
@@ -58,12 +66,13 @@
   <script>
     let DATA = {};
     try { DATA = JSON.parse(document.getElementById('groupData').textContent || '{}'); }
-    catch (error) { DATA = { error: '群組紀錄牆資料無法讀取，請回 LINE 重新開啟。' }; }
+    catch (error) { DATA = { error: '群組猛猛紀錄牆資料無法讀取，請回 LINE 重新開啟。' }; }
     const app = document.getElementById('app');
 
     function escapeHtml(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[char]); }
     function escapeAttr(value) { return escapeHtml(value).replace(/`/g, '&#96;'); }
     function number(value) { return Math.max(0, Math.round(Number(value || 0))).toLocaleString('zh-TW'); }
+    function proteinNumber(value) { const grams = Math.max(0, Number(value || 0)); return Number.isInteger(grams) ? String(grams) : grams.toFixed(1).replace(/\.0$/, ''); }
     function dateOptions() {
       const today = String(DATA.today || ''); const min = String(DATA.minDate || ''); const selected = String(DATA.date || today);
       const out = [];
@@ -74,12 +83,12 @@
     }
     function subtractOneDay(date) { const value = new Date(date + 'T12:00:00'); value.setDate(value.getDate() - 1); return value.getFullYear() + '-' + String(value.getMonth() + 1).padStart(2, '0') + '-' + String(value.getDate()).padStart(2, '0'); }
     function render() {
-      if (DATA.error) { app.innerHTML = '<div class="error"><strong>無法開啟群組紀錄牆</strong><br>' + escapeHtml(DATA.error) + '</div>'; return; }
+      if (DATA.error) { app.innerHTML = '<div class="error"><strong>無法開啟群組猛猛紀錄牆</strong><br>' + escapeHtml(DATA.error) + '</div>'; return; }
       const group = DATA.group || {}; const summary = DATA.summary || {}; const records = Array.isArray(DATA.records) ? DATA.records : [];
       app.innerHTML = [
         '<section class="hero">',
           '<div class="eyebrow">GROUP HEALTH LOG</div>',
-          '<h1>👥 ' + escapeHtml(group.name || '群組紀錄牆') + '</h1>',
+          '<h1>👥 ' + escapeHtml(group.name || '群組猛猛紀錄牆') + '</h1>',
           '<p>' + escapeHtml(DATA.date || '') + '・只顯示成員主動分享到這個群組的紀錄</p>',
           '<div class="summary">',
             '<div class="summary-card"><strong>' + number(summary.sharedCount) + '</strong><span>今日分享</span></div>',
@@ -87,22 +96,47 @@
             '<div class="summary-card"><strong>' + number(summary.memberCount) + '</strong><span>群組成員</span></div>',
           '</div>',
         '</section>',
-        '<nav class="nav"><a href="' + escapeAttr(DATA.nav && DATA.nav.formUrl || '') + '">✍️ 我要打卡</a><a href="' + escapeAttr(DATA.nav && DATA.nav.historyUrl || '') + '">📈 我的歷史</a></nav>',
         '<div class="toolbar"><label for="dateSelect">查看日期</label><select id="dateSelect">' + dateOptions() + '</select><button id="todayButton" class="today" type="button">今天</button></div>',
         '<details class="privacy"><summary>🔒 這個群組牆怎麼保護隱私？</summary><p>只有目前仍在本群組的成員，且從自己的專屬連結開啟，才能查看。你可隨時選擇顯示或不顯示在群組牆；內容會顯示食物細項，但不會顯示照片、體重、BMR 或備註。連結會到期，請不要轉傳。</p></details>',
-        records.length ? records.map(renderRecord).join('') : '<div class="empty">今天還沒有人分享到群組牆。<br>完成或儲存打卡時，開啟「分享到我的群組紀錄牆」就會顯示在這裡。</div>',
+        records.length ? records.map(renderRecord).join('') : '<div class="empty">今天還沒有人分享到群組牆。<br>完成或儲存打卡時，開啟「分享到我的群組猛猛紀錄牆」就會顯示在這裡。</div>',
+        bottomNav_((DATA && DATA.nav) || {}),
       ].join('');
+      bindBottomNavLoading_(app);
       document.getElementById('dateSelect').addEventListener('change', event => loadDate(event.target.value));
       document.getElementById('todayButton').addEventListener('click', () => loadDate(DATA.today));
     }
     function renderRecord(record) {
       const allowance = record.allowance === null || record.allowance === undefined ? null : Number(record.allowance);
+      const proteinG = Math.max(0, Number(record.proteinG || 0));
+      const protein = proteinG > 0 ? '<span class="protein-badge" title="蛋白質估算">🥩 ' + proteinNumber(proteinG) + 'g</span>' : '';
       const remaining = allowance === null ? '尚未設定今日額度' : (allowance - Number(record.intake || 0) >= 0 ? '還可 ' + number(allowance - Number(record.intake || 0)) + ' kcal' : '超出 ' + number(Number(record.intake || 0) - allowance) + ' kcal');
       const mealText = Array.isArray(record.mealTotals) && record.mealTotals.length ? record.mealTotals.map(meal => '<span class="meal">' + escapeHtml(meal.label) + ' ' + number(meal.kcal) + '</span>').join('') : '<span class="meal">尚未記錄餐別</span>';
       const foodDetails = Array.isArray(record.mealDetails) && record.mealDetails.length
-        ? '<div class="food-details"><div class="food-heading">🍽️ 食物細項</div>' + record.mealDetails.map(meal => '<div class="food-meal"><strong>' + escapeHtml(meal.label) + '</strong>' + (Array.isArray(meal.items) ? meal.items.map(item => '<div class="food-item">' + escapeHtml(item.name || '食物') + (item.portion ? '・' + escapeHtml(item.portion) : '') + (Number(item.quantity || 0) > 1 ? ' × ' + escapeHtml(item.quantity) : '') + '・' + number(item.calories) + ' kcal</div>').join('') : '') + '</div>').join('') + '</div>'
+        ? '<div class="food-details"><div class="food-heading">🍽️ 食物細項</div>' + record.mealDetails.map(renderFoodMeal).join('') + '</div>'
         : '<div class="food-details"><div class="food-heading">🍽️ 食物細項</div><div class="food-item">這筆紀錄沒有可顯示的食物細項。</div></div>';
-      return '<article class="record' + (record.isSelf ? ' mine' : '') + '"><div class="record-head"><div class="name">' + escapeHtml(record.alias || '群組夥伴') + (record.isSelf ? '<span class="mine-label">我</span>' : '') + '</div><span class="status' + (record.isComplete ? ' complete' : '') + '">' + (record.isComplete ? '✅ 已完成' : '📝 打卡中') + '</span></div><div class="energy">' + number(record.intake) + (allowance === null ? '' : ' <small>/ ' + number(allowance) + ' kcal</small>') + '<div class="remaining">' + remaining + '</div></div><div class="meal-list">' + mealText + '</div>' + foodDetails + '<div class="record-foot">最後更新：' + escapeHtml(record.updatedAt || '—') + '</div></article>';
+      return '<article class="record' + (record.isSelf ? ' mine' : '') + '"><div class="record-head"><div class="name">' + escapeHtml(record.alias || '群組夥伴') + (record.isSelf ? '<span class="mine-label">我</span>' : '') + '</div><span class="status' + (record.isComplete ? ' complete' : '') + '">' + (record.isComplete ? '✅ 已完成' : '📝 打卡中') + '</span></div><div class="energy">' + number(record.intake) + (allowance === null ? '' : ' <small>/ ' + number(allowance) + ' kcal</small>') + protein + '<div class="remaining">' + remaining + '</div></div><div class="meal-list">' + mealText + '</div>' + foodDetails + '<div class="record-foot">最後更新：' + escapeHtml(record.updatedAt || '—') + '</div></article>';
+    }
+    function renderFoodMeal(meal) {
+      const items = Array.isArray(meal && meal.items) ? meal.items : [];
+      const mealKcal = Math.round(items.reduce((sum, item) => sum + Math.max(0, Number(item && item.calories || 0)), 0));
+      const mealProteinG = Math.max(0, items.reduce((sum, item) => sum + Math.max(0, Number(item && item.proteinG || 0)), 0));
+      return '<div class="food-meal"><div class="food-meal-head"><strong>' + escapeHtml(meal && meal.label || '餐點') + '</strong><span class="food-meal-total">本餐共 ' + number(mealKcal) + ' kcal' + (mealProteinG > 0 ? ' ・🥩 ' + proteinNumber(mealProteinG) + ' g' : '') + '</span></div>'
+        + items.map(item => '<div class="food-item">' + escapeHtml(item.name || '食物') + (item.portion ? '・' + escapeHtml(item.portion) : '') + (Number(item.quantity || 0) > 1 ? ' × ' + escapeHtml(item.quantity) : '') + '・' + number(item.calories) + ' kcal</div>').join('')
+        + '</div>';
+    }
+    function bottomNav_(nav) {
+      return '<nav class="bottom-nav" aria-label="主要導覽">'
+        + '<a href="' + escapeAttr(nav.formUrl || '#') + '" target="_top"><span>📝</span>打卡</a>'
+        + '<a class="active" href="' + escapeAttr(nav.publicWallUrl || '#') + '" target="_top"><span>🌐</span>紀錄牆</a>'
+        + '<a href="' + escapeAttr(nav.historyUrl || '#') + '" target="_top"><span>📈</span>歷史</a>'
+        + '<a href="' + escapeAttr(nav.personalSettingsUrl || '#') + '" target="_top"><span>⚙️</span>設定</a>'
+        + '</nav>';
+    }
+    function bindBottomNavLoading_(root) {
+      root.querySelectorAll('.bottom-nav a[href]').forEach(link => {
+        if (!link.getAttribute('href') || link.getAttribute('href') === '#') return;
+        link.addEventListener('click', () => { link.classList.add('is-loading'); link.setAttribute('aria-busy', 'true'); }, { once:true });
+      });
     }
     function loadDate(date) {
       if (!date || !DATA.viewer || !DATA.group) return;

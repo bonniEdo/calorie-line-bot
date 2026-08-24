@@ -26,7 +26,7 @@
     body.bmr-modal-open { overflow: hidden; }
     button, input, select, textarea { font: inherit; }
     button { touch-action: manipulation; }
-    .app { max-width: 760px; margin: 0 auto; padding: 18px 14px 120px; }
+    .app { max-width: 760px; margin: 0 auto; padding: 18px 14px 174px; }
     .hero {
       padding: 20px;
       border-radius: 24px;
@@ -48,6 +48,7 @@
     .energy-card {
       min-width: 0;
       padding: 14px 15px 13px;
+      position: relative;
       border-radius: 18px;
       background: rgba(255,255,255,.78);
     }
@@ -67,6 +68,7 @@
       line-height: 1;
     }
     .energy-main strong { font-size: 25px; }
+    .energy-main-icon { font-size: 18px; line-height: 1; }
     .energy-main .energy-divider {
       color: #8b806f;
       font-size: 21px;
@@ -141,6 +143,54 @@
       font-weight: 700;
       line-height: 1.35;
     }
+    /* 蛋白質只在個人打卡頁顯示為進度條；紀錄牆與歷史頁仍保留輕量標籤。 */
+    .protein-card {
+      margin-top: 11px;
+      padding: 11px 0 0;
+      border-top: 1px dashed #c8e2d0;
+    }
+    .protein-main { color: #35684b; }
+    .protein-main small { color: #765c17; }
+    .protein-remaining { color: #4e8b69; }
+    .protein-progress-caption { padding-right: 29px; color: #765c17; }
+    .protein-card-title { color: #765c17; font-size: 10px; font-weight: 900; white-space: nowrap; }
+    .protein-edit-link {
+      position: absolute;
+      right: 11px;
+      bottom: 9px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      border: 0;
+      border-radius: 9px;
+      color: #35684b;
+      font-size: 17px;
+      font-weight: 900;
+      line-height: 1;
+      text-decoration: none;
+    }
+    .protein-edit-link:active { background: #e5f2e8; transform: scale(.96); }
+    .protein-progress {
+      height: 9px;
+      margin-top: 10px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(78,139,105,.14);
+    }
+    .protein-progress > span {
+      display: block;
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #8ec09b, #4e8b69);
+      transition: width .25s ease;
+    }
+    .protein-card.is-over .protein-main,
+    .protein-card.is-over .protein-remaining { color: #d97706; }
+    .protein-card.is-over .protein-progress { background: rgba(217,119,6,.16); }
+    .protein-card.is-over .protein-progress > span { background: linear-gradient(90deg, #f2ad43, #d97706); }
     .hero-header {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -311,7 +361,7 @@
     .exercise-weight-note p { margin: 0; color: #547164; font-size: 11px; font-weight: 700; line-height: 1.45; }
     .exercise-weight-note label { min-width: 0; color: #416351; font-size: 11px; }
     .exercise-weight-note input { margin-top: 4px; padding: 9px 10px; }
-    .custom-food-grid { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 10px; }
+    .custom-food-grid { display: grid; grid-template-columns: minmax(0, 1fr) 88px 96px; gap: 10px; }
     .custom-food-grid .secondary { grid-column: 1 / -1; width: 100%; }
     label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); }
     input, select, textarea {
@@ -502,6 +552,25 @@
     .personal-settings[open] > summary { border-bottom: 1px solid var(--line); background: #fffdf8; }
     .personal-settings[open] > summary::after { transform: rotate(180deg); }
     .personal-settings-body { padding: 14px 16px 16px; }
+    .exercise-section { padding: 0; overflow: hidden; }
+    .exercise-section > summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 54px;
+      padding: 14px 16px;
+      color: var(--ink);
+      font-size: 17px;
+      font-weight: 900;
+      list-style: none;
+      cursor: pointer;
+    }
+    .exercise-section > summary::-webkit-details-marker { display: none; }
+    .exercise-section > summary::after { content: '⌄'; color: var(--muted); font-size: 20px; transition: transform .18s ease; }
+    .exercise-section[open] > summary { border-bottom: 1px solid var(--line); background: #fffdf8; }
+    .exercise-section[open] > summary::after { transform: rotate(180deg); }
+    .exercise-section-body { padding: 14px 16px 16px; }
     .exercise-record-grid select { appearance: none; -webkit-appearance: none; }
     .public-settings {
       margin-top: 14px;
@@ -1054,6 +1123,19 @@
     .food-name { display: block; font-weight: 900; font-size: 15px; }
     .food-meta { display: block; margin-top: 3px; font-size: 12px; color: var(--muted); }
     .food-kcal { display: block; margin-top: 5px; color: #8b6513; font-weight: 900; }
+    .food-protein {
+      display: inline-flex;
+      align-items: center;
+      margin-top: 5px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #edf8f0;
+      color: #2f6b47;
+      font-size: 10px;
+      font-weight: 900;
+    }
+    .food-card.high-protein { border-color: #a7cfb4; background: #fbfffc; }
+    .food-card.high-protein.selected { border-color: #58a270; background: #eef8f0; }
     .badge {
       position: absolute;
       top: 8px;
@@ -1089,6 +1171,18 @@
     .selected-ai-details .ai-meta { margin: 7px 0 2px; }
     .selected-name { font-size: 13px; font-weight: 800; }
     .selected-name small { display: block; color: var(--muted); font-weight: 500; margin-top: 2px; }
+    .protein-chip {
+      display: inline-flex;
+      align-items: center;
+      margin: 5px 0 0;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #edf8f0;
+      color: #2f6b47;
+      font-size: 10px;
+      font-weight: 900;
+    }
+    .protein-chip.high { background: #d9f0df; color: #21613c; }
     .portion-editor { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
     .portion-editor span { color: var(--muted); font-size: 11px; font-weight: 800; }
     .portion-editor input { width: 72px; margin: 0; padding: 7px 6px; text-align: right; }
@@ -1105,6 +1199,7 @@
     }
     .meal-total { margin-top: 8px; text-align: right; font-size: 13px; color: var(--muted); }
     .meal-total strong { color: var(--ink); font-size: 18px; }
+    .meal-protein-total { color: #35684b; font-weight: 900; }
     .camera-box {
       margin-top: 12px;
       padding: 14px;
@@ -1182,6 +1277,7 @@
     .ai-total-card span { display: block; color: var(--muted); font-size: 12px; font-weight: 800; }
     .ai-total-card strong { display: block; margin-top: 3px; font-size: 30px; color: var(--ink); }
     .ai-total-card small { display: block; margin-top: 4px; color: var(--muted); line-height: 1.4; }
+    .ai-total-card .ai-protein { color: #2f6b47; font-weight: 900; }
     .ai-details { margin-top: 10px; padding: 0 11px 11px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
     .ai-details summary { padding: 12px 0 2px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 800; }
     .ai-review-row {
@@ -1254,37 +1350,37 @@
     .food-library-done:active { transform: scale(.99); }
     .submit-bar {
       position: fixed;
-      left: 0;
-      right: 0;
-      bottom: var(--keyboard-offset, 0px);
-      z-index: 10;
-      padding: 12px 14px calc(12px + env(safe-area-inset-bottom));
+      left: 50%;
+      width: min(732px, calc(100vw - 28px));
+      bottom: calc(78px + var(--keyboard-offset, 0px));
+      z-index: 13;
+      transform: translateX(-50%);
+      padding: 9px;
       background: rgba(255,250,240,.94);
-      border-top: 1px solid var(--line);
-      backdrop-filter: blur(12px);
+      border: 1px solid #dfc979;
+      border-radius: 15px;
+      backdrop-filter: blur(10px);
     }
     /* 鍵盤開啟時仍保留送出列，並由 JS 將它抬到鍵盤上方，避免輸入運動時按鈕消失。 */
-    body.keyboard-open .submit-bar { display: block !important; visibility: visible; opacity: 1; }
-    .submit-inner { max-width: 732px; margin: 0 auto; display: flex; gap: 8px; align-items: center; }
-    .submit-summary { flex: 0 0 104px; min-width: 0; font-size: 11px; color: var(--muted); }
-    .submit-summary strong { display: block; color: var(--ink); font-size: 18px; }
+    body.keyboard-open .submit-bar { bottom: calc(8px + var(--keyboard-offset, 0px)); display: block !important; visibility: visible; opacity: 1; }
+    .submit-inner { max-width: none; margin: 0; display: flex; gap: 10px; align-items: center; }
+    .submit-summary { flex: 1; min-width: 0; font-size: 11px; color: var(--muted); font-weight: 800; line-height: 1.35; }
+    .submit-summary strong { display: block; color: var(--ink); font-size: 18px; line-height: 1.1; }
     .save-status { display: block; margin-top: 3px; color: var(--green); font-size: 10px; font-weight: 800; line-height: 1.25; }
-    .submit-actions { min-width: 0; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); }
-    .primary {
-      flex: 1;
-      min-height: 50px;
+    .submit-actions { min-width: 0; flex: 0 0 auto; display: block; }
+    .submit-actions .primary {
+      min-height: 43px;
       min-width: 0;
-      padding: 0 7px;
+      padding: 8px 13px;
       border: 0;
-      border-radius: 16px;
+      border-radius: 12px;
       background: var(--ink);
-      color: white;
-      font-size: 15px;
-      line-height: 1.2;
+      color: #fff;
       font-weight: 900;
       white-space: nowrap;
       cursor: pointer;
     }
+    @media (max-width: 430px) { .submit-bar { width: calc(100vw - 20px); bottom: calc(73px + var(--keyboard-offset, 0px)); } }
     .primary:disabled { opacity: .55; cursor: wait; }
     .notice {
       padding: 20px;
@@ -1294,10 +1390,45 @@
       line-height: 1.65;
       text-align: center;
     }
+    .bottom-nav {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 12;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 3px;
+      padding: 7px 9px calc(7px + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--line);
+      background: rgba(255,250,240,.96);
+      backdrop-filter: blur(14px);
+    }
+    .bottom-nav[hidden] { display: none; }
+    .bottom-nav a {
+      display: flex;
+      min-height: 49px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      border-radius: 11px;
+      color: #786f62;
+      font-size: 10px;
+      font-weight: 900;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .bottom-nav a span { font-size: 17px; line-height: 1; }
+    .bottom-nav a.active { background: #fff1ba; color: #76500c; }
+    .bottom-nav a.is-loading { background: #fff3c9; color: #76500c; }
+    .bottom-nav a.is-loading span { animation: nav-pulse .65s ease-in-out infinite; }
+    @keyframes nav-pulse { 50% { transform: scale(.84); opacity: .55; } }
+    body.keyboard-open .bottom-nav { display: none; }
     .toast {
       position: fixed;
       left: 50%;
-      bottom: 92px;
+      bottom: 145px;
       z-index: 20;
       max-width: calc(100vw - 28px);
       transform: translate(-50%, 20px);
@@ -1351,11 +1482,12 @@
       </div>
     </div>
   </div>
+  <nav id="bottomNav" class="bottom-nav" aria-label="主要導覽" hidden></nav>
   <div id="toast" class="toast"></div>
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.24-94';
+    window.__dietAppBuild = '2026.08.25-111';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1470,8 +1602,8 @@
       meals: { breakfast: {}, lunch: {}, dinner: {}, lateNight: {}, snack: {} },
       aiMeals: { breakfast: [], lunch: [], dinner: [], lateNight: [], snack: [] },
       exerciseRecords: [],
-      // 體重只留在本機，用來估算運動熱量；不從 Google Sheet 讀取。
-      exerciseWeightKg: loadLocalWeightKg_(),
+      // 體重優先使用個人私密設定；不會寫進 Google Sheet 或紀錄牆。
+      exerciseWeightKg: Number((BOOTSTRAP.personalProfile || {}).weightKg || loadLocalWeightKg_() || 0),
       pendingAiItems: [],
       pendingAiMeal: '',
       // 拍照分析或手輸後必須由使用者明確選一次餐別，避免預設早餐造成誤記。
@@ -1922,7 +2054,7 @@
           '<div class="energy-cards">',
             '<div id="energyCard" class="energy-card">',
               '<div class="energy-combined-top">',
-                '<div class="energy-main"><strong id="heroTotal">0</strong><span class="energy-divider">/</span><strong id="heroTdee">—</strong><small>kcal</small></div>',
+                '<div class="energy-main"><span class="energy-main-icon" aria-hidden="true">🍽️</span><strong id="heroTotal">0</strong><span class="energy-divider">/</span><strong id="heroTdee">—</strong><small>kcal</small></div>',
                 '<div id="intakeRemainingText" class="energy-remaining">—</div>',
               '</div>',
               '<div class="energy-progress"><span id="intakeProgressBar"></span></div>',
@@ -1931,9 +2063,18 @@
                 '<span id="exerciseProgressText" class="muted">運動 +0</span>',
               '</div>',
               '<span id="energyHelp" class="energy-help">未填運動：BMR × 1.2 · 有運動：再加活動熱量</span>',
+              '<section id="proteinCard" class="protein-card" aria-label="今日蛋白質進度">',
+                '<div class="energy-combined-top protein-combined-top">',
+                  '<div class="energy-main protein-main"><span class="energy-main-icon" aria-hidden="true">🥩</span><strong id="heroProtein">0</strong><span class="energy-divider">/</span><strong id="heroProteinTarget">—</strong><small>g</small></div>',
+                  '<div id="proteinProgressText" class="energy-remaining protein-remaining">設定目標</div>',
+                '</div>',
+                '<div class="protein-progress"><span id="proteinProgressBar"></span></div>',
+                '<div class="energy-progress-caption protein-progress-caption"><span><strong class="protein-card-title">已吃蛋白質 / 建議蛋白質</strong></span></div>',
+              '</section>',
+              (BOOTSTRAP.personalSettingsUrl ? '<a class="protein-edit-link" href="' + escapeAttr(BOOTSTRAP.personalSettingsUrl) + '" target="_top" title="前往個人設定" aria-label="編輯消耗與蛋白質設定">✎</a>' : ''),
             '</div>',
           '</div>',
-          '<details id="reminderSettings" class="reminder-settings">',
+          '<details id="reminderSettings" class="reminder-settings" hidden>',
             '<summary>🔔 LINE提醒設定</summary>',
             '<div class="reminder-settings-body">',
               '<p>每個時段可以單獨開關；晚間提醒會在晚餐後提醒你補充今天的紀錄</p>',
@@ -1947,11 +2088,7 @@
           '</details>',
           renderNewFeatureNotice_(),
         '</section>',
-        '<nav class="page-nav" aria-label="頁面導覽">',
-          (BOOTSTRAP.publicWallUrl ? '<a class="page-nav-primary" href="' + escapeAttr(BOOTSTRAP.publicWallUrl) + '" target="_top">🌐 紀錄牆</a>' : ''),
-          (BOOTSTRAP.historyUrl ? '<a href="' + escapeAttr(BOOTSTRAP.historyUrl) + '" target="_top">📈 猛猛卡路里歷史</a>' : ''),
-        '</nav>',
-        '<details id="personalSettings" class="section personal-settings">',
+        '<details id="personalSettings" class="section personal-settings" hidden>',
           '<summary>👤 個人設定</summary>',
           '<div class="personal-settings-body">',
           '<div class="form-grid personal-form-grid">',
@@ -1994,7 +2131,7 @@
               '<label class="privacy-toggle"><input id="publishToday" type="checkbox" ' + (defaultPublishToday ? 'checked' : '') + '><span><strong>公開我的飲控紀錄</strong><br>開啟後每天沿用，只公開暱稱、已攝取／今日額度、餐別與完成狀態。</span></label>',
               '<label class="privacy-toggle"><input id="publishFoodDetails" type="checkbox" ' + (defaultPublishFoodDetails ? 'checked' : '') + '><span><strong>同時公開我吃了什麼</strong><br>開啟後每天沿用，顯示食物名稱、份量與估算熱量；不會顯示照片。</span></label>',
               '<label class="privacy-toggle"><input id="joinPublicRanking" type="checkbox" ' + (MEMBER.joinPublicRanking ? 'checked' : '') + '><span><strong>參加公開連續打卡排行</strong><br>只比較完成打卡的連續天數，不比較誰吃得最少。</span></label>',
-              (groupWalls.length ? '<label class="privacy-toggle"><input id="publishToGroup" type="checkbox" ' + (publishToGroup ? 'checked' : '') + '><span><strong>顯示在我的打卡空間／群組紀錄牆</strong><br>切換後會套用到所有日期紀錄與之後的新紀錄，分享給 ' + escapeHtml(groupWallNames) + ' 的現有成員；會顯示食物細項，但不會出現在公開紀錄牆。</span></label>' : ''),
+              (groupWalls.length ? '<label class="privacy-toggle"><input id="publishToGroup" type="checkbox" ' + (publishToGroup ? 'checked' : '') + '><span><strong>顯示在我的打卡空間／群組猛猛紀錄牆</strong><br>切換後會套用到所有日期紀錄與之後的新紀錄，分享給 ' + escapeHtml(groupWallNames) + ' 的現有成員；會顯示食物細項，但不會出現在公開猛猛紀錄牆。</span></label>' : ''),
             '</div>',
           '</details>',
           renderCheckInSpaceSettings_(),
@@ -2017,6 +2154,7 @@
               '<div class="custom-food-grid">',
                 '<label>食物名稱（可不填）<input id="customFoodName" maxlength="60" placeholder="例如：自煮便當"></label>',
                 '<label>熱量<input id="customFoodKcal" type="number" inputmode="numeric" min="1" max="5000" placeholder="kcal"></label>',
+                '<label>蛋白質（選填）<input id="customFoodProtein" type="number" inputmode="decimal" min="0" max="500" step="0.1" placeholder="g"></label>',
               '</div>',
             '</div>',
           '</div>',
@@ -2052,12 +2190,13 @@
           '<div class="selected-wrap">',
             '<strong id="selectedTitle">請先選擇餐別</strong>',
             '<div id="selectedList"></div>',
-            '<div class="meal-total">本餐共 <strong id="mealTotal">0</strong> kcal</div>',
+            '<div class="meal-total">本餐共 <strong id="mealTotal">0</strong> kcal<span id="mealProteinTotal" class="meal-protein-total" hidden></span></div>',
           '</div>',
         '</section>',
-        '<section class="section">',
-          '<h2 class="section-title">🏋️ 運動</h2>',
-          '<div class="exercise-weight-note">',
+        '<details class="section exercise-section">',
+          '<summary>🏋️ 運動</summary>',
+          '<div class="exercise-section-body">',
+          '<div class="exercise-weight-note" hidden>',
             '<p>填寫體重可讓運動熱量估算更準確；未填時將以 60 kg 估算。</p>',
             '<label>體重 kg（不會有人知道）<input id="exerciseWeightKg" type="number" min="20" max="500" step="0.1" inputmode="decimal" placeholder="例如 60" value="' + (state.exerciseWeightKg ? state.exerciseWeightKg : '') + '"></label>',
           '</div>',
@@ -2066,7 +2205,8 @@
             '<button id="addExerciseButton" class="secondary" type="button">＋ 新增運動</button>',
             '<button id="clearExerciseButton" class="danger-small" type="button">全部清除</button>',
           '</div>',
-        '</section>',
+          '</div>',
+        '</details>',
         '<section class="section water-section">',
           '<div class="water-heading-row"><div class="water-title-group"><h2 class="section-title">💧 喝水紀錄</h2><span class="optional-badge">選填</span></div><label class="water-enable-toggle"><span>啟用</span><input id="waterTrackingEnabled" type="checkbox" ' + (state.waterEnabled ? 'checked' : '') + ' aria-label="啟用喝水紀錄"></label></div>',
           '<div id="waterTrackingPanel" class="water-panel"' + (state.waterEnabled ? '' : ' hidden') + '>',
@@ -2095,6 +2235,7 @@
         '<p class="hint" style="padding:0 8px">食物熱量與每日赤字皆為估算。排行榜用於一起『養成紀錄習慣』，不代表赤字越大越好。</p>',
       ].join('');
 
+      renderBottomNav_();
       submitBar.hidden = false;
       updateSubmitButtons();
       bindStaticEvents();
@@ -2114,19 +2255,43 @@
       if (!NEW_FEATURE_NOTICE || !NEW_FEATURE_NOTICE.show) return '';
       return [
         '<details id="newFeatureNotice" class="feature-notice" open>',
-          '<summary>✨ 新功能與提醒設定</summary>',
+          '<summary>✨ 最新功能與提醒</summary>',
           '<div class="feature-notice-body">',
-            '<p>這些功能現在都可以自己決定要不要使用：</p>',
+            '<p>這次更新重點如下：</p>',
             '<div class="feature-notice-list">',
-              '<div class="feature-notice-item">👥 <strong>打卡空間</strong>：不用建立 LINE 群組，也能邀請朋友一起看紀錄牆。<br><small>入口：展開「個人設定」→「打卡空間」</small></div>',
-              '<div class="feature-notice-item">🫶 <strong>空間／群組分享紀錄</strong>：可選擇分享給同一個打卡空間或 LINE 群組的成員。<br><small>入口：個人設定 → 公開／空間分享設定</small></div>',
-              '<div class="feature-notice-item">🔔 <strong>LINE 提醒可自行開關</strong>：早上 09:00、中午 12:00、晚上 19:30 可分別設定。<br><small>入口：打卡頁最上方的「LINE提醒設定」</small></div>',
-              '<div class="feature-notice-item">🌙 <strong>晚間改為最後通知</strong>：19:30 提醒你補充今天還沒記完的餐點。<br><small>開關也在「LINE提醒設定」內</small></div>',
+              '<div class="feature-notice-item">✨ <strong>介面使用優化</strong>：打卡流程更順暢，運動與週／月總覽改為需要時再展開。</div>',
+              '<div class="feature-notice-item">🥩 <strong>新增蛋白質紀錄</strong>：可在打卡頁追蹤已吃／建議蛋白質。<br><small>入口：上方蛋白質進度條旁的 ✎，可設定體重或自訂每日目標</small></div>',
+              '<div class="feature-notice-item">👥 <strong>打卡空間</strong>：不用建立 LINE 群組，也能邀請朋友一起看猛猛紀錄牆。<br><small>入口：底部「設定」→「打卡空間」</small></div>',
+              '<div class="feature-notice-item">🫶 <strong>空間／群組分享紀錄</strong>：可選擇分享給同一個打卡空間或 LINE 群組的成員。<br><small>入口：底部「設定」→「公開／空間分享」</small></div>',
+              '<div class="feature-notice-item">🔔 <strong>LINE 提醒可自行開關</strong>：早上 09:00、中午 12:00、晚上 19:30 可分別設定。<br><small>入口：底部「設定」→「LINE 提醒」</small></div>',
             '</div>',
             '<button id="dismissNewFeatureNotice" class="feature-notice-dismiss" type="button">我知道了，不再顯示</button>',
           '</div>',
         '</details>',
       ].join('');
+    }
+
+    function renderBottomNav_() {
+      const nav = document.getElementById('bottomNav');
+      if (!nav) return;
+      nav.innerHTML = [
+        '<a class="active" href="' + escapeAttr(BOOTSTRAP.formUrl || '#') + '" target="_top"><span>📝</span>打卡</a>',
+        '<a href="' + escapeAttr(BOOTSTRAP.publicWallUrl || '#') + '" target="_top"><span>🌐</span>紀錄牆</a>',
+        '<a href="' + escapeAttr(BOOTSTRAP.historyUrl || '#') + '" target="_top"><span>📈</span>歷史</a>',
+        '<a href="' + escapeAttr(BOOTSTRAP.personalSettingsUrl || '#') + '" target="_top"><span>⚙️</span>設定</a>',
+      ].join('');
+      nav.hidden = false;
+      bindBottomNavLoading_(nav);
+    }
+
+    function bindBottomNavLoading_(root) {
+      root.querySelectorAll('a[href]').forEach(link => {
+        if (!link.getAttribute('href') || link.getAttribute('href') === '#') return;
+        link.addEventListener('click', () => {
+          link.classList.add('is-loading');
+          link.setAttribute('aria-busy', 'true');
+        }, { once: true });
+      });
     }
 
     function renderCheckInSpaceSettings_() {
@@ -2154,7 +2319,7 @@
                 '<button class="danger-small" type="button" data-space-renew="' + escapeAttr(space.groupId || '') + '">重設邀請碼</button>',
               '</div>',
             ].join('')
-          : '<p>你已加入這個空間；可在紀錄牆的分頁查看大家主動分享的紀錄。</p><div class="space-actions"><button class="danger-small" type="button" data-space-leave="' + escapeAttr(space.groupId || '') + '">離開空間</button></div>';
+          : '<p>你已加入這個空間；可在猛猛紀錄牆的分頁查看大家主動分享的紀錄。</p><div class="space-actions"><button class="danger-small" type="button" data-space-leave="' + escapeAttr(space.groupId || '') + '">離開空間</button></div>';
         return [
           '<article class="space-card' + (space.isOwner ? ' space-card-owner' : '') + '">',
             '<div class="space-card-heading"><strong>' + escapeHtml(space.name || '未命名打卡空間') + '</strong><span class="space-member-count">' + Math.max(0, Number(space.memberCount || 0)) + ' 人</span></div>',
@@ -2163,7 +2328,7 @@
         ].join('');
       }).join('');
       return [
-        '<p class="hint">建立空間後，把邀請碼傳給朋友即可；朋友不需要先建立 LINE 群組。加入後，大家會在「紀錄牆」看到同一個空間分頁。</p>',
+        '<p class="hint">建立空間後，把邀請碼傳給朋友即可；朋友不需要先建立 LINE 群組。加入後，大家會在「猛猛紀錄牆」看到同一個空間分頁。</p>',
         '<div class="space-create-row"><label>新增打卡空間<input id="checkInSpaceName" maxlength="40" placeholder="例如：晚餐不爆卡小隊"></label><button id="createCheckInSpaceButton" class="secondary" type="button">建立空間</button></div>',
         '<div id="checkInSpaceStatus" class="space-status" aria-live="polite"></div>',
         (cards ? '<div class="space-list">' + cards + '</div>' : '<p class="hint">尚未加入任何打卡空間。</p>'),
@@ -2234,7 +2399,7 @@
       });
       root.querySelectorAll('[data-space-leave]').forEach(button => {
         button.addEventListener('click', () => {
-          if (!window.confirm('離開後將看不到這個空間的紀錄牆。確定要離開嗎？')) return;
+          if (!window.confirm('離開後將看不到這個空間的猛猛紀錄牆。確定要離開嗎？')) return;
           const node = status();
           if (node) node.textContent = '正在離開空間…';
           button.disabled = true;
@@ -2274,7 +2439,7 @@
       if (!body) return;
       const label = document.createElement('label');
       label.className = 'privacy-toggle';
-      label.innerHTML = '<input id="publishToGroup" type="checkbox"><span><strong>顯示在我的打卡空間／群組紀錄牆</strong><br>切換後會套用到所有日期紀錄與之後的新紀錄；空間成員可看到食物細項，但不會出現在公開紀錄牆。</span>';
+      label.innerHTML = '<input id="publishToGroup" type="checkbox"><span><strong>顯示在我的打卡空間／群組猛猛紀錄牆</strong><br>切換後會套用到所有日期紀錄與之後的新紀錄；空間成員可看到食物細項，但不會出現在公開猛猛紀錄牆。</span>';
       const input = label.querySelector('input');
       input.checked = Boolean(MEMBER.defaultPublishToGroup);
       input.addEventListener('change', () => {
@@ -2980,8 +3145,10 @@
     function addCustomFood() {
       const nameInput = document.getElementById('customFoodName');
       const kcalInput = document.getElementById('customFoodKcal');
+      const proteinInput = document.getElementById('customFoodProtein');
       if (!requireEntryMeal_()) return;
       const calories = Math.round(Number(kcalInput.value || 0));
+      const proteinG = proteinGrams(Number(proteinInput && proteinInput.value || 0));
       if (!Number.isFinite(calories) || calories <= 0 || calories > 5000) {
         showToast('請輸入 1～5000 kcal 的熱量。');
         kcalInput.focus();
@@ -3001,6 +3168,8 @@
         baseCalories: calories,
         baseLow: calories,
         baseHigh: calories,
+        baseProteinG: proteinG,
+        proteinG,
         grams: 0,
         calories,
         low: calories,
@@ -3010,6 +3179,7 @@
       });
       nameInput.value = '';
       kcalInput.value = '';
+      if (proteinInput) proteinInput.value = '';
       renderMealTabs();
       renderSelected();
       updateTotals();
@@ -3027,12 +3197,16 @@
       const baseCalories = Math.max(0, Number(item.baseCalories || item.originalCalories || item.calories || 0));
       const baseLow = Math.max(0, Number(item.baseLow || item.low || baseCalories));
       const baseHigh = Math.max(0, Number(item.baseHigh || item.high || baseCalories));
+      const baseProteinG = proteinGrams(item.baseProteinG !== undefined ? item.baseProteinG : item.proteinG);
+      const proteinG = proteinGrams(item.proteinG !== undefined ? item.proteinG : baseProteinG);
       item.unit = unit;
       item.baseAmount = baseAmount;
       item.amount = amount;
       item.baseCalories = baseCalories;
       item.baseLow = baseLow;
       item.baseHigh = baseHigh;
+      item.baseProteinG = baseProteinG;
+      item.proteinG = proteinG;
       if (unit === 'g') item.grams = amount;
       return item;
     }
@@ -3043,6 +3217,9 @@
         item.calories = Math.round(item.baseCalories * item.amount / item.baseAmount);
         item.low = Math.round(item.baseLow * item.amount / item.baseAmount);
         item.high = Math.round(item.baseHigh * item.amount / item.baseAmount);
+      }
+      if (item.baseAmount > 0 && item.baseProteinG > 0) {
+        item.proteinG = proteinGrams(item.baseProteinG * item.amount / item.baseAmount);
       }
       const shownAmount = item.amount > 0 ? `${item.amount} ${item.unit}` : '';
       if (shownAmount) item.portion = shownAmount;
@@ -3120,6 +3297,8 @@
               baseCalories: Number(item.estimatedCalories || 0),
               baseLow: Number(item.caloriesLow || item.estimatedCalories || 0),
               baseHigh: Number(item.caloriesHigh || item.estimatedCalories || 0),
+              baseProteinG: proteinGrams(item.estimatedProteinG),
+              proteinG: proteinGrams(item.estimatedProteinG),
               grams: Number(item.estimatedGrams || item.estimatedAmount || 0),
               calories: Number(item.estimatedCalories || 0),
               low: Number(item.caloriesLow || 0),
@@ -3200,6 +3379,9 @@
       const rangeValue = el('small', '');
       rangeValue.id = 'aiEstimatedRange';
       totalCard.append(rangeValue);
+      const proteinValue = el('small', 'ai-protein');
+      proteinValue.id = 'aiEstimatedProtein';
+      totalCard.append(proteinValue);
       root.append(totalCard);
 
       const details = document.createElement('details');
@@ -3243,7 +3425,7 @@
         portionInput.addEventListener('input', e => { item.portion = e.target.value; });
         portionLabel.append(portionInput);
         const meta = el('div', 'ai-meta',
-          `估計 ${item.amount || '?'} ${item.unit || 'g'} · 範圍 ${item.low}～${item.high} kcal · 信心 ${item.confidence}${item.notes ? `\n${item.notes}` : ''}`
+          `估計 ${item.amount || '?'} ${item.unit || 'g'} · ${proteinText(item.proteinG)} · 範圍 ${item.low}～${item.high} kcal · 信心 ${item.confidence}${item.notes ? `\n${item.notes}` : ''}`
         );
         const remove = el('button', 'danger-small', '移除這項');
         remove.type = 'button';
@@ -3273,10 +3455,16 @@
         (sum, item) => sum + Math.max(0, Number(item.high || 0)),
         0
       ));
+      const protein = proteinGrams(state.pendingAiItems.reduce(
+        (sum, item) => sum + proteinGrams(item.proteinG),
+        0
+      ));
       const totalRoot = document.getElementById('aiEstimatedTotal');
       if (totalRoot) totalRoot.textContent = `${total} kcal`;
       const rangeRoot = document.getElementById('aiEstimatedRange');
       if (rangeRoot) rangeRoot.textContent = `合理範圍約 ${low}～${high} kcal，細項可展開調整`;
+      const proteinRoot = document.getElementById('aiEstimatedProtein');
+      if (proteinRoot) proteinRoot.textContent = protein > 0 ? `🥩 蛋白質約 ${formatProteinG(protein)} g` : '🥩 蛋白質暫無法估算';
       const confirm = document.getElementById('confirmAiButton');
       if (confirm) {
         confirm.disabled = !state.entryMealChosen;
@@ -3369,7 +3557,7 @@
       }
       foods.forEach(food => {
         const quantity = Number(selected[food.id] || 0);
-        const card = el('button', `food-card${quantity ? ' selected' : ''}`);
+        const card = el('button', `food-card${quantity ? ' selected' : ''}${proteinGrams(food.proteinG) >= 10 ? ' high-protein' : ''}`);
         card.type = 'button';
         const image = el('div', 'food-image');
         if (food.imageUrl) {
@@ -3384,6 +3572,7 @@
         card.append(el('span', 'food-name', food.name));
         card.append(el('span', 'food-meta', food.portion));
         card.append(el('span', 'food-kcal', `${food.kcal} kcal`));
+        if (proteinGrams(food.proteinG) > 0) card.append(el('span', 'food-protein', proteinText(food.proteinG)));
         card.append(el('span', 'badge', `×${quantity}`));
         card.addEventListener('click', () => {
           if (food.isManualFrequent) addManualFrequentFoodToActiveMeal(food);
@@ -3398,6 +3587,7 @@
       if (!requireEntryMeal_()) return;
       const mealKey = state.activeMeal;
       const fallbackIndex = (state.aiMeals[mealKey] || []).filter(item => item.source === 'manual').length + 1;
+      const proteinG = proteinGrams(food.proteinG);
       state.aiMeals[mealKey].push({
         id: `manual_frequent_${Date.now()}_${fallbackIndex}`,
         source: 'manual',
@@ -3409,6 +3599,8 @@
         baseCalories: Math.round(Number(food.kcal)),
         baseLow: Math.round(Number(food.kcal)),
         baseHigh: Math.round(Number(food.kcal)),
+        baseProteinG: proteinG,
+        proteinG,
         grams: 0,
         calories: Math.round(Number(food.kcal)),
         low: Math.round(Number(food.kcal)),
@@ -3491,7 +3683,7 @@
 
       foods.forEach(food => {
         const quantity = selected[food.id] || 0;
-        const card = el('button', `food-card${quantity ? ' selected' : ''}`);
+        const card = el('button', `food-card${quantity ? ' selected' : ''}${proteinGrams(food.proteinG) >= 10 ? ' high-protein' : ''}`);
         card.type = 'button';
         const image = el('div', 'food-image');
         if (food.imageUrl) {
@@ -3507,6 +3699,7 @@
         card.append(el('span', 'food-name', food.name));
         card.append(el('span', 'food-meta', food.portion));
         card.append(el('span', 'food-kcal', `${food.kcal} kcal`));
+        if (proteinGrams(food.proteinG) > 0) card.append(el('span', 'food-protein', proteinText(food.proteinG)));
         card.append(el('span', 'badge', `×${quantity}`));
         card.addEventListener('click', () => addFoodToActiveMeal(food));
         foodCardNodes[food.id] = card;
@@ -3530,7 +3723,7 @@
       root.innerHTML = '';
       if (!state.entryMealChosen) {
         document.getElementById('selectedTitle').textContent = '請先選擇餐別';
-        document.getElementById('mealTotal').textContent = '0';
+        updateActiveMealSummary();
         root.append(el('div', 'selected-empty', '請先選擇餐別，再加入食物。'));
         return;
       }
@@ -3549,6 +3742,7 @@
           const name = el('div', 'selected-name', `${isManual ? '✍️' : '🤖'} ${item.name}`);
           if (isManual) name.append(el('small', '', `${item.portion || '自行輸入'} · 可直接修改熱量`));
           else name.append(el('small', '', 'AI 辨識 · 點開可調整份量'));
+          if (proteinGrams(item.proteinG) > 0) name.append(proteinChip(item.proteinG));
           row.append(name);
           const kcal = document.createElement('input');
           kcal.className = 'ai-kcal';
@@ -3561,7 +3755,7 @@
           kcal.addEventListener('input', event => {
             item.calories = Math.max(0, Number(event.target.value || 0));
             item.baseCalories = item.baseAmount > 0 ? item.baseCalories : item.calories;
-            document.getElementById('mealTotal').textContent = mealTotal(state.activeMeal);
+            updateActiveMealSummary();
             renderMealTabs();
             updateTotals();
             markRecordChanged();
@@ -3582,12 +3776,12 @@
             details.append(el('summary', '', '查看／調整份量與辨識細節'));
             const detailBody = el('div', 'selected-ai-detail-body');
             const detailMeta = el('div', 'ai-meta',
-              `估計 ${item.amount || '?'} ${item.unit || 'g'} · 範圍 ${item.low || 0}～${item.high || 0} kcal · 信心 ${item.confidence || '低'}${item.notes ? `\n${item.notes}` : ''}`
+              `估計 ${item.amount || '?'} ${item.unit || 'g'} · ${proteinText(item.proteinG)} · 範圍 ${item.low || 0}～${item.high || 0} kcal · 信心 ${item.confidence || '低'}${item.notes ? `\n${item.notes}` : ''}`
             );
             appendPortionEditor(detailBody, item, () => {
               kcal.value = item.calories;
-              detailMeta.textContent = `估計 ${item.amount || '?'} ${item.unit || 'g'} · 範圍 ${item.low || 0}～${item.high || 0} kcal · 信心 ${item.confidence || '低'}${item.notes ? `\n${item.notes}` : ''}`;
-              document.getElementById('mealTotal').textContent = mealTotal(state.activeMeal);
+              detailMeta.textContent = `估計 ${item.amount || '?'} ${item.unit || 'g'} · ${proteinText(item.proteinG)} · 範圍 ${item.low || 0}～${item.high || 0} kcal · 信心 ${item.confidence || '低'}${item.notes ? `\n${item.notes}` : ''}`;
+              updateActiveMealSummary();
               renderMealTabs();
               updateTotals();
               markRecordChanged();
@@ -3605,6 +3799,9 @@
           const row = el('div', 'selected-row');
           const name = el('div', 'selected-name', `${food.emoji || '🍽️'} ${food.name}`);
           name.append(el('small', '', `${food.portion} · ${food.kcal * quantity} kcal`));
+          if (proteinGrams(Number(food.proteinG || 0) * quantity) > 0) {
+            name.append(proteinChip(Number(food.proteinG || 0) * quantity));
+          }
           const counter = el('div', 'counter');
           const minus = el('button', '', '−');
           minus.type = 'button';
@@ -3618,7 +3815,7 @@
           root.append(row);
         });
       }
-      document.getElementById('mealTotal').textContent = mealTotal(state.activeMeal);
+      updateActiveMealSummary();
     }
 
     function changeQuantity(foodId, delta) {
@@ -3645,6 +3842,55 @@
       return Math.round(libraryTotal + aiTotal);
     }
 
+    function updateActiveMealSummary() {
+      const totalRoot = document.getElementById('mealTotal');
+      const proteinRoot = document.getElementById('mealProteinTotal');
+      const mealKey = state.entryMealChosen ? state.activeMeal : '';
+      const total = mealKey ? mealTotal(mealKey) : 0;
+      const protein = mealKey ? mealProteinTotal(mealKey) : 0;
+      if (totalRoot) totalRoot.textContent = total;
+      if (proteinRoot) {
+        proteinRoot.hidden = protein <= 0;
+        proteinRoot.textContent = protein > 0 ? `・🥩 ${formatProteinG(protein)} g` : '';
+      }
+    }
+
+    function proteinGrams(value) {
+      const grams = Number(value || 0);
+      return Number.isFinite(grams) ? Math.round(Math.max(0, Math.min(500, grams)) * 10) / 10 : 0;
+    }
+
+    function formatProteinG(value) {
+      const grams = proteinGrams(value);
+      return Number.isInteger(grams) ? String(grams) : grams.toFixed(1);
+    }
+
+    function proteinText(value) {
+      const grams = proteinGrams(value);
+      return grams > 0 ? `🥩 蛋白質 ${formatProteinG(grams)} g` : '🥩 蛋白質未估算';
+    }
+
+    function proteinChip(value) {
+      const grams = proteinGrams(value);
+      return el('span', `protein-chip${grams >= 10 ? ' high' : ''}`, proteinText(grams));
+    }
+
+    function mealProteinTotal(mealKey) {
+      const libraryTotal = Object.entries(state.meals[mealKey] || {}).reduce((sum, [foodId, quantity]) => {
+        const food = FOOD_BY_ID[foodId];
+        return sum + (food ? proteinGrams(Number(food.proteinG || 0) * Number(quantity || 0)) : 0);
+      }, 0);
+      const aiTotal = (state.aiMeals[mealKey] || []).reduce(
+        (sum, item) => sum + proteinGrams(item.proteinG),
+        0
+      );
+      return proteinGrams(libraryTotal + aiTotal);
+    }
+
+    function totalProteinG() {
+      return proteinGrams(Object.keys(mealLabels).reduce((sum, key) => sum + mealProteinTotal(key), 0));
+    }
+
     function grandTotal() {
       const foodTotal = Object.keys(mealLabels).reduce((sum, key) => sum + mealTotal(key), 0);
       return Math.max(0, Math.round(foodTotal));
@@ -3652,6 +3898,7 @@
 
     function updateTotals() {
       const total = grandTotal();
+      const protein = totalProteinG();
       const bmr = Math.max(0, Number(document.getElementById('bmr').value || 0));
       const exerciseKcal = exerciseSummary().kcal;
       const baseTdee = bmr ? Math.round(bmr * 1.2) : 0;
@@ -3659,7 +3906,23 @@
       document.getElementById('heroTotal').textContent = total;
       document.getElementById('heroTdee').textContent = estimatedTdee || '—';
       bottomTotal.textContent = total;
-
+      const proteinRoot = document.getElementById('heroProtein');
+      if (proteinRoot) proteinRoot.textContent = formatProteinG(protein);
+      const proteinTarget = Math.max(0, Number((BOOTSTRAP.proteinTarget || {}).targetG || 0));
+      const proteinTargetRoot = document.getElementById('heroProteinTarget');
+      const proteinProgress = document.getElementById('proteinProgressBar');
+      const proteinProgressText = document.getElementById('proteinProgressText');
+      const proteinCard = document.getElementById('proteinCard');
+      const proteinDifference = proteinTarget - protein;
+      const proteinOver = proteinTarget > 0 && proteinDifference < 0;
+      if (proteinTargetRoot) proteinTargetRoot.textContent = proteinTarget ? formatProteinG(proteinTarget) : '—';
+      if (proteinProgress) proteinProgress.style.width = proteinTarget ? `${Math.min(100, Math.max(0, protein / proteinTarget * 100))}%` : '0%';
+      if (proteinCard) proteinCard.classList.toggle('is-over', proteinOver);
+      if (proteinProgressText) {
+        proteinProgressText.textContent = proteinTarget
+          ? `${proteinOver ? '++' : '--'} ${formatProteinG(Math.abs(proteinDifference))} g`
+          : '設定目標';
+      }
       const intakeBar = document.getElementById('intakeProgressBar');
       const intakeText = document.getElementById('intakeProgressText');
       const remainingText = document.getElementById('intakeRemainingText');
@@ -3708,6 +3971,8 @@
             baseCalories: Math.round(Number(item.baseCalories || item.calories || 0)),
             baseLow: Math.round(Number(item.baseLow || item.low || item.calories || 0)),
             baseHigh: Math.round(Number(item.baseHigh || item.high || item.calories || 0)),
+            baseProteinG: proteinGrams(item.baseProteinG),
+            proteinG: proteinGrams(item.proteinG),
             calories: Math.round(Number(item.calories)),
             confidence: item.confidence,
             notes: item.notes,
