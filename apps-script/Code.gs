@@ -1,8 +1,8 @@
-// 應用程式版本：2026.08.24-100（蛋白質主數字列）
+// 應用程式版本：2026.08.25-111（更新介面與蛋白質功能公告）
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.24-100';
+const APP_BUILD = '2026.08.25-111';
 // 每位使用者只會看到一次的打卡頁公告版本；未來有真正的新一波功能時再換這個值。
-const NEW_FEATURE_NOTICE_ID = '2026_08_check_in_space_reminders_and_protein_testing';
+const NEW_FEATURE_NOTICE_ID = '2026_08_ui_optimization_and_protein_tracking';
 
 // 食物庫尚未手動填寫蛋白質時，內建食物仍可提供每份的保守估算值。
 // 使用者自建食物可直接在「食物庫」的「蛋白質g」欄位填寫，優先權高於這份預設資料。
@@ -61,6 +61,7 @@ const APP = Object.freeze({
   },
 });
 let runtimeSpreadsheet_ = null;
+let runtimeWebAppExecUrl_ = null;
 
 /**
  * 取得正式 Web App 網址。
@@ -70,6 +71,7 @@ let runtimeSpreadsheet_ = null;
  * 因此所有對外連結一律正規化成同一個部署的 /exec 網址。
  */
 function getWebAppExecUrl_() {
+  if (runtimeWebAppExecUrl_) return runtimeWebAppExecUrl_;
   const props = PropertiesService.getScriptProperties();
   const configured = String(
     // 優先沿用既有正式網址設定；WEB_APP_EXEC_URL 保留給舊版相容。
@@ -81,7 +83,8 @@ function getWebAppExecUrl_() {
   if (!/\/exec$/i.test(execUrl)) {
     throw new Error('找不到正式 Web App /exec 網址，請確認已部署網頁應用程式。');
   }
-  return execUrl;
+  runtimeWebAppExecUrl_ = execUrl;
+  return runtimeWebAppExecUrl_;
 }
 
 /**
@@ -211,11 +214,31 @@ function doGet(e) {
       historyData.nav = {
         formUrl: getSignedFormUrl_(historyUid),
         publicWallUrl: getPublicWallUrl_(historyUid),
+        historyUrl: getHistoryUrl_(historyUid),
+        personalSettingsUrl: getPersonalSettingsUrl_(historyUid),
       };
     }
     historyTemplate.historyJson = JSON.stringify(historyData);
     return historyTemplate.evaluate()
       .setTitle('卡路里歷史紀錄')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+  }
+  if (view === 'personal') {
+    const testAccess = getTestWebAccess_(e);
+    const personalUid = testAccess
+      ? testAccess.uid
+      : String((e && e.parameter && e.parameter.uid) || '');
+    const personalSig = testAccess
+      ? testAccess.sig
+      : String((e && e.parameter && e.parameter.sig) || '');
+    const tokenState = inspectAccessToken_(personalUid, personalSig, APP.tokenScopes.form);
+    const personalTemplate = HtmlService.createTemplateFromFile('Personal');
+    personalTemplate.personalJson = JSON.stringify(tokenState === 'ok'
+      ? getPersonalSettingsData_(personalUid)
+      : { valid: false, invalidReason: tokenState });
+    return personalTemplate.evaluate()
+      .setTitle('個人設定')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
   }
@@ -268,6 +291,9 @@ function doGet(e) {
     formUrl: valid ? getSignedFormUrl_(uid) : '',
     publicWallUrl: getPublicWallUrl_(valid ? uid : ''),
     historyUrl: getHistoryUrl_(valid ? uid : ''),
+    personalSettingsUrl: valid ? getPersonalSettingsUrl_(uid) : '',
+    personalProfile: valid ? getPersonalProfile_(uid) : { weightKg: 0, proteinTargetG: 0 },
+    proteinTarget: valid ? getProteinTargetInfo_(uid) : { targetG: 0, source: 'none', label: '' },
     // 打卡頁只需要群組名稱來顯示分享設定；群組入口統一由「紀錄牆」處理。
     groupWalls: valid ? getWallTabsForUser_(uid) : [],
     // 打卡空間可在本頁建立與管理；加入則保留在 LINE 私訊，讓新朋友不需要先拿到個人連結。
@@ -319,6 +345,55 @@ function leaveCheckInSpaceForClient(payload) {
   const userId = requireFormAccessUserId_(payload);
   leaveCheckInSpace_(userId, payload && payload.groupId);
   return { ok: true, spaces: getCheckInSpacesForUser_(userId) };
+}
+
+/** 個人設定頁儲存入口；體重與蛋白質目標只存私密指令碼屬性，不寫入 Google Sheet。 */
+function savePersonalSettingsForClient(payload) {
+  payload = payload || {};
+  const userId = requireFormAccessUserId_(payload);
+  const current = getMemberById_(userId);
+  if (!current) throw new Error('尚未綁定成員，請先回 LINE 輸入「綁定」。');
+
+  const memberInput = payload.member || {};
+  const profile = normalizePersonalProfile_(payload.profile || {});
+  const requestedGroupSharing = memberInput.defaultPublishToGroup === undefined
+    ? Boolean(current.defaultPublishToGroup)
+    : Boolean(memberInput.defaultPublishToGroup);
+  const groupSharingChanged = requestedGroupSharing !== Boolean(current.defaultPublishToGroup);
+  const requestedPublic = memberInput.defaultPublishToday === undefined
+    ? Boolean(current.defaultPublishToday)
+    : Boolean(memberInput.defaultPublishToday);
+  const requestedFoodDetails = requestedPublic && (memberInput.defaultPublishFoodDetails === undefined
+    ? Boolean(current.defaultPublishFoodDetails)
+    : Boolean(memberInput.defaultPublishFoodDetails));
+  const requestedReminders = memberInput.reminders || getPersonalReminderSettings_(current);
+  const rawBmr = memberInput.bmr;
+  const bmr = rawBmr === '' || rawBmr === null || rawBmr === undefined
+    ? ''
+    : Math.round(numberInRange_(rawBmr, 500, 5000));
+
+  upsertMember_({
+    userId,
+    name: cleanText_(memberInput.name, 40) || current.name,
+    bmr,
+    publicAlias: memberInput.publicAlias === undefined
+      ? String(current.publicAlias || '')
+      : cleanText_(memberInput.publicAlias, 40),
+    joinPublicRanking: memberInput.joinPublicRanking === undefined
+      ? Boolean(current.joinPublicRanking)
+      : Boolean(memberInput.joinPublicRanking),
+    defaultPublishToday: requestedPublic,
+    defaultPublishFoodDetails: requestedFoodDetails,
+    defaultPublishToGroup: requestedGroupSharing,
+    personalReminder: Boolean(requestedReminders.morning || requestedReminders.noon || requestedReminders.evening),
+    reminderMorning: Boolean(requestedReminders.morning),
+    reminderNoon: Boolean(requestedReminders.noon),
+    reminderEvening: Boolean(requestedReminders.evening),
+    reminderLate: false,
+  });
+  if (groupSharingChanged) setGroupWallVisibilityForUser_(userId, requestedGroupSharing);
+  savePersonalProfile_(userId, profile);
+  return getPersonalSettingsData_(userId);
 }
 
 /** 使用者在打卡頁按下「知道了」後，這一版公告不再顯示。 */
@@ -1840,7 +1915,9 @@ function getPublicWallData_(viewerId, viewerSignature, selectedDate) {
     // 沒有有效觀看者憑證時不輸出私人連結，避免公開頁被直接猜網址時洩漏資料。
     nav: viewerValid && viewerMember ? {
       formUrl: getSignedFormUrl_(viewerId),
+      publicWallUrl: getPublicWallUrl_(viewerId),
       historyUrl: getHistoryUrl_(viewerId),
+      personalSettingsUrl: getPersonalSettingsUrl_(viewerId),
     } : {},
     // 群組標籤只提供給已驗證的本人；不在前端輸出成員名單或群組 URL。
     groupTabs: viewerCanViewGroups && viewerMember ? getWallTabsForUser_(viewerId) : [],
@@ -1867,7 +1944,7 @@ function getPublicWallData_(viewerId, viewerSignature, selectedDate) {
  */
 function getPublicWallBaseData_(selectedDate, members) {
   const date = validatePublicWallDate_(selectedDate || today_());
-  const cacheKey = `public-wall-base:v8:${date}`;
+  const cacheKey = `public-wall-base:v9:${date}`;
   const cached = readJsonCache_(cacheKey);
   if (cached && Array.isArray(cached.records) && Array.isArray(cached.streaks)) {
     return cached;
@@ -1969,7 +2046,8 @@ function getPublicWallBaseData_(selectedDate, members) {
   cachePublicLikeTargets_(visibleTargets);
 
   const result = { records, streaks };
-  writeJsonCache_(cacheKey, result, 180);
+  // 每次打卡／公開設定變動都會清除這個快取；未變動時讓切換回紀錄牆更快。
+  writeJsonCache_(cacheKey, result, 600);
   return result;
 }
 
@@ -2018,6 +2096,8 @@ function getGroupWallData_(viewerId, viewerSignature, groupId, selectedDate) {
     nav: {
       formUrl: getSignedFormUrl_(viewerId),
       historyUrl: getHistoryUrl_(viewerId),
+      publicWallUrl: getPublicWallUrl_(viewerId),
+      personalSettingsUrl: getPersonalSettingsUrl_(viewerId),
     },
     viewer: { uid: viewerId, sig: String(viewerSignature || '') },
   };
@@ -2027,7 +2107,7 @@ function getGroupWallData_(viewerId, viewerSignature, groupId, selectedDate) {
 function getGroupWallBaseData_(groupId, selectedDate) {
   groupId = String(groupId || '');
   const date = validatePublicWallDate_(selectedDate || today_());
-  const cacheKey = `group-wall-base:v3:${groupId}:${date}`;
+  const cacheKey = `group-wall-base:v4:${groupId}:${date}`;
   const cached = readJsonCache_(cacheKey);
   if (cached && Array.isArray(cached.records)) return cached;
 
@@ -2081,7 +2161,8 @@ function getGroupWallBaseData_(groupId, selectedDate) {
   });
 
   const result = { memberCount: activeIds.size, records };
-  writeJsonCache_(cacheKey, result, 120);
+  // 群組成員或分享狀態改變時會立即失效，平常可直接重用共同資料。
+  writeJsonCache_(cacheKey, result, 600);
   return result;
 }
 
@@ -2137,7 +2218,8 @@ function buildPublicMealDetails_(detailsJson) {
       const portion = cleanText_(item && item.portion, 80);
       const quantity = numberInRange_(item && item.quantity, 0, 20) || 1;
       const calories = Math.round(numberInRange_(item && item.calories, 0, 5000));
-      return { name, portion, quantity, calories };
+      const proteinG = proteinGrams_(item && item.proteinG);
+      return { name, portion, quantity, calories, proteinG };
     }).filter(item => item.name && item.calories > 0);
 
     return { mealKey, label, items };
@@ -2399,15 +2481,26 @@ function getRecentDailyFormData_(userId, foods, recordDates) {
   const dates = (Array.isArray(recordDates) ? recordDates : allowedRecordDates_())
     .map(validateRecordDate_);
   const result = {};
-  dates.forEach(date => { result[date] = null; });
+  const missingDates = new Set();
+  dates.forEach(date => {
+    const cached = readJsonCache_(`daily-form:v1:${String(userId)}:${date}`);
+    if (cached && cached.cached === true) {
+      result[date] = cached.log || null;
+    } else {
+      result[date] = null;
+      missingDates.add(date);
+    }
+  });
   if (!dates.length) return result;
+  // 回到剛看過的打卡頁時，不必再為四天補登資料掃一次每日紀錄表。
+  if (!missingDates.size) return result;
 
   const sheet = getSheet_(APP.sheets.logs);
   ensureLogStatusHeader_(sheet);
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return result;
 
-  const wantedDates = new Set(dates);
+  const wantedDates = missingDates;
   const foundDates = new Set();
   // 四天補登範圍一次最多讀 500 列，比分別讀四次更快。
   const rowCount = Math.min(lastRow - 1, 500);
@@ -2419,14 +2512,22 @@ function getRecentDailyFormData_(userId, foods, recordDates) {
     const date = getLogRowDateKey_(row, null);
     if (!wantedDates.has(date) || foundDates.has(date)) continue;
     result[date] = dailyFormDataFromRow_(row, foods, date);
+    writeJsonCache_(`daily-form:v1:${String(userId)}:${date}`, { cached: true, log: result[date] }, 300);
     foundDates.add(date);
     if (foundDates.size === wantedDates.size) break;
   }
+  // 沒有該日紀錄也快取短時間，避免新使用者每次切回打卡頁都重掃同一批列。
+  missingDates.forEach(date => {
+    if (!foundDates.has(date)) writeJsonCache_(`daily-form:v1:${String(userId)}:${date}`, { cached: true, log: null }, 300);
+  });
   return result;
 }
 
 function getDailyFormData_(userId, foods, recordDate) {
   recordDate = validateRecordDate_(recordDate);
+  const cacheKey = `daily-form:v1:${String(userId)}:${recordDate}`;
+  const cached = readJsonCache_(cacheKey);
+  if (cached && cached.cached === true) return cached.log || null;
   const sheet = getSheet_(APP.sheets.logs);
   ensureLogStatusHeader_(sheet);
   const lastRow = sheet.getLastRow();
@@ -2445,9 +2546,14 @@ function getDailyFormData_(userId, foods, recordDate) {
     savedRow = row;
     break;
   }
-  if (!savedRow) return null;
+  if (!savedRow) {
+    writeJsonCache_(cacheKey, { cached: true, log: null }, 300);
+    return null;
+  }
 
-  return dailyFormDataFromRow_(savedRow, foods, recordDate);
+  const result = dailyFormDataFromRow_(savedRow, foods, recordDate);
+  writeJsonCache_(cacheKey, { cached: true, log: result }, 300);
+  return result;
 }
 
 function dailyFormDataFromRow_(savedRow, foods, recordDate) {
@@ -2574,7 +2680,7 @@ function parseExerciseRecords_(json, legacyName, legacyMinutes, legacyKcal) {
 function getHistoryData_(userId, dayCount) {
   userId = String(userId || '');
   const days = Math.min(365, Math.max(7, Number(dayCount) || 30));
-  const cacheKey = `history:v3:${userId}:${days}:${today_()}`;
+  const cacheKey = `history:v4:${userId}:${days}:${today_()}`;
   const cached = readJsonCache_(cacheKey);
   if (cached) return cached;
 
@@ -2643,7 +2749,8 @@ function getHistoryData_(userId, dayCount) {
       averageBasis: '完成日',
     },
   };
-  writeJsonCache_(cacheKey, result, 60);
+  // 儲存任何一筆紀錄時會立即清掉這位使用者的歷史快取，可安心保留較久。
+  writeJsonCache_(cacheKey, result, 300);
   return result;
 }
 
@@ -2657,9 +2764,10 @@ function historyMealTotals_(detailsJson, fallbackTotals) {
   return definitions.map((definition, index) => {
     const items = Array.isArray(details[definition[0]]) ? details[definition[0]] : [];
     const detailKcal = items.reduce((sum, item) => sum + numberInRange_(item && item.calories, 0, 10000), 0);
+    const proteinG = proteinGrams_(items.reduce((sum, item) => sum + proteinGrams_(item && item.proteinG), 0));
     const kcal = Math.round(detailKcal || numberInRange_(fallbackTotals[index], 0, 10000));
     const names = items.map(item => cleanText_(item && item.name, 60)).filter(Boolean).slice(0, 5);
-    return { key: definition[0], label: definition[1], kcal, names };
+    return { key: definition[0], label: definition[1], kcal, proteinG, names };
   }).filter(meal => meal.kcal > 0 || meal.names.length > 0);
 }
 
@@ -3481,6 +3589,96 @@ function saveWaterSettings_(userId, enabled, goalMl) {
   );
 }
 
+/** 體重與蛋白質目標是個人私密資料，不寫入 Google Sheet。 */
+function personalProfilePropertyKey_(userId) {
+  return `PERSONAL_PROFILE_${String(userId || '')}`;
+}
+
+function normalizePersonalProfile_(raw) {
+  raw = raw || {};
+  const rawWeight = Number(raw.weightKg || 0);
+  const rawTarget = Number(raw.proteinTargetG || 0);
+  return {
+    weightKg: rawWeight >= 20 && rawWeight <= 500 ? Math.round(rawWeight * 10) / 10 : 0,
+    proteinTargetG: rawTarget > 0 && rawTarget <= 500 ? Math.round(rawTarget * 10) / 10 : 0,
+  };
+}
+
+function getPersonalProfile_(userId) {
+  userId = String(userId || '');
+  if (!userId) return { weightKg: 0, proteinTargetG: 0 };
+  const raw = PropertiesService.getScriptProperties().getProperty(personalProfilePropertyKey_(userId));
+  if (!raw) return { weightKg: 0, proteinTargetG: 0 };
+  try {
+    return normalizePersonalProfile_(JSON.parse(raw));
+  } catch (error) {
+    return { weightKg: 0, proteinTargetG: 0 };
+  }
+}
+
+function savePersonalProfile_(userId, profile) {
+  userId = String(userId || '');
+  if (!userId) return;
+  PropertiesService.getScriptProperties().setProperty(
+    personalProfilePropertyKey_(userId),
+    JSON.stringify(normalizePersonalProfile_(profile)),
+  );
+}
+
+/** 自訂每日克數優先；未自訂時使用體重 × 1.2 g 的一般日常建議。 */
+function getProteinTargetInfo_(userId) {
+  const profile = getPersonalProfile_(userId);
+  if (profile.proteinTargetG > 0) {
+    return {
+      targetG: profile.proteinTargetG,
+      source: 'custom',
+      label: `自訂目標 ${profile.proteinTargetG} g`,
+    };
+  }
+  if (profile.weightKg > 0) {
+    const targetG = Math.round(profile.weightKg * 1.2 * 10) / 10;
+    return {
+      targetG,
+      source: 'weight',
+      label: `體重 ${profile.weightKg} kg × 1.2 g`,
+    };
+  }
+  return { targetG: 0, source: 'none', label: '設定體重或自訂目標後即可追蹤' };
+}
+
+function getPersonalSettingsData_(userId) {
+  userId = String(userId || '');
+  const member = getMemberById_(userId);
+  if (!member) return { valid: false, invalidReason: 'invalid' };
+  // Apps Script 的前端實際跑在內嵌框架中，不能可靠地從 location.search 取外層網址的簽章。
+  // 因此和打卡頁一樣，把僅限本人表單權限的短期憑證放在頁面資料中，供儲存設定時使用。
+  const formSig = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
+  return {
+    valid: true,
+    auth: { uid: userId, sig: formSig },
+    member: {
+      name: member.name,
+      bmr: member.bmr,
+      publicAlias: member.publicAlias,
+      joinPublicRanking: Boolean(member.joinPublicRanking),
+      defaultPublishToday: Boolean(member.defaultPublishToday),
+      defaultPublishFoodDetails: Boolean(member.defaultPublishFoodDetails),
+      defaultPublishToGroup: Boolean(member.defaultPublishToGroup),
+    },
+    profile: getPersonalProfile_(userId),
+    proteinTarget: getProteinTargetInfo_(userId),
+    reminders: getPersonalReminderSettings_(member),
+    groupWalls: getWallTabsForUser_(userId),
+    checkInSpaces: getCheckInSpacesForUser_(userId),
+    nav: {
+      formUrl: getSignedFormUrl_(userId),
+      publicWallUrl: getPublicWallUrl_(userId),
+      historyUrl: getHistoryUrl_(userId),
+      personalSettingsUrl: getPersonalSettingsUrl_(userId),
+    },
+  };
+}
+
 function upsertMember_(data) {
   const sheet = getSheet_(APP.sheets.members);
   ensureMemberGroupHeader_(sheet);
@@ -3500,7 +3698,7 @@ function upsertMember_(data) {
   const row = existing || [data.userId, '', '', '', '', '', '', false, now, now, false, '', false, false, false, true, true, true, true, true, false];
   row[0] = data.userId || row[0];
   if (data.name !== undefined && data.name !== '') row[1] = cleanText_(data.name, 40);
-  if (data.bmr !== undefined && data.bmr !== '') row[2] = Number(data.bmr);
+  if (data.bmr !== undefined) row[2] = data.bmr === '' || data.bmr === null ? '' : Number(data.bmr);
   // 不儲存體重。舊版傳入的 weightKg 也刻意忽略。
   if (data.heightCm !== undefined && data.heightCm !== '') row[4] = Number(data.heightCm);
   if (data.age !== undefined && data.age !== '') row[5] = Number(data.age);
@@ -3874,6 +4072,14 @@ function getHistoryUrl_(userId) {
   if (!userId) return `${baseUrl}?view=history`;
   const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
   return `${baseUrl}?view=history&uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(token)}`;
+}
+
+function getPersonalSettingsUrl_(userId) {
+  const baseUrl = getWebAppExecUrl_();
+  userId = String(userId || '');
+  if (!userId) return `${baseUrl}?view=personal`;
+  const token = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
+  return `${baseUrl}?view=personal&uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(token)}`;
 }
 
 /**
@@ -4585,6 +4791,7 @@ function writeJsonCache_(key, value, seconds) {
 function invalidateLogCache_(date, userId) {
   date = String(date || '');
   const cache = CacheService.getScriptCache();
+  if (date && userId) cache.remove(`daily-form:v1:${String(userId)}:${date}`);
   cache.remove(`logs-for-date:v4:${date}`);
   cache.remove(`public-wall-base:v2:${date}`);
   cache.remove(`public-wall-base:v3:${date}`);
@@ -4593,6 +4800,7 @@ function invalidateLogCache_(date, userId) {
   cache.remove(`public-wall-base:v6:${date}`);
   cache.remove(`public-wall-base:v7:${date}`);
   cache.remove(`public-wall-base:v8:${date}`);
+  cache.remove(`public-wall-base:v9:${date}`);
   invalidateGroupWallCachesForUser_(date, userId);
   // 補登過去日期可能改變「公開連續打卡」，因此也要清掉今日公開頁快取。
   if (date && date !== today_()) {
@@ -4603,6 +4811,12 @@ function invalidateLogCache_(date, userId) {
     cache.remove(`public-wall-base:v6:${today_()}`);
     cache.remove(`public-wall-base:v7:${today_()}`);
     cache.remove(`public-wall-base:v8:${today_()}`);
+    cache.remove(`public-wall-base:v9:${today_()}`);
+    // 公開牆的連續紀錄會受補登日影響；新版快取保留較久，因此一併清除可查的 30 天。
+    for (let daysAgo = 0; daysAgo < 30; daysAgo += 1) {
+      cache.remove(`public-wall-base:v8:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+      cache.remove(`public-wall-base:v9:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+    }
   }
   if (userId) {
     cache.remove(`history:v1:${userId}:30:${today_()}`);
@@ -4610,6 +4824,8 @@ function invalidateLogCache_(date, userId) {
     cache.remove(`history:v2:${userId}:365:${today_()}`);
     cache.remove(`history:v3:${userId}:30:${today_()}`);
     cache.remove(`history:v3:${userId}:365:${today_()}`);
+    cache.remove(`history:v4:${userId}:30:${today_()}`);
+    cache.remove(`history:v4:${userId}:365:${today_()}`);
     try {
       cache.remove(`public-like-target:v2:${publicLikeTargetKey_(userId)}`);
     } catch (error) {
@@ -4624,6 +4840,7 @@ function invalidateGroupWallCachesForUser_(date, userId) {
   getActiveGroupIdsForUser_(userId).forEach(groupId => {
     cache.remove(`group-wall-base:v2:${groupId}:${date}`);
     cache.remove(`group-wall-base:v3:${groupId}:${date}`);
+    cache.remove(`group-wall-base:v4:${groupId}:${date}`);
   });
 }
 
@@ -4661,6 +4878,7 @@ function invalidateAllGroupWallCachesForUser_(userId) {
     for (let daysAgo = 0; daysAgo < 30; daysAgo += 1) {
       cache.remove(`group-wall-base:v2:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
       cache.remove(`group-wall-base:v3:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+      cache.remove(`group-wall-base:v4:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
     }
   });
 }
@@ -4672,6 +4890,7 @@ function invalidateGroupWallCachesForGroup_(groupId) {
   for (let daysAgo = 0; daysAgo < 30; daysAgo += 1) {
     cache.remove(`group-wall-base:v2:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
     cache.remove(`group-wall-base:v3:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+    cache.remove(`group-wall-base:v4:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
   }
 }
 
