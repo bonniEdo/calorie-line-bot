@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root { --cream:#fffaf0; --ink:#332f29; --muted:#776f64; --yellow:#f5d77a; --blue:#e8f6ff; --blue-line:#8bc9e8; --green:#4e8b69; --line:#eadfca; --white:#fff; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--cream); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif; }
+    button, select { font:inherit; touch-action:manipulation; }
+    .app { max-width:760px; margin:0 auto; padding:16px 14px 48px; }
+    .hero { padding:19px 20px; border-radius:22px; background:linear-gradient(135deg,#dff4ff,#aee2f6); box-shadow:0 10px 30px rgba(36,95,125,.11); }
+    .eyebrow { color:#245f7d; font-size:11px; font-weight:900; letter-spacing:.12em; }
+    h1 { margin:6px 0 4px; font-size:24px; line-height:1.25; }
+    .hero p { margin:0; color:#245f7d; font-size:13px; line-height:1.55; }
+    .summary { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:14px; }
+    .summary-card { padding:10px 6px; border-radius:13px; background:rgba(255,255,255,.78); text-align:center; }
+    .summary-card strong { display:block; font-size:19px; }
+    .summary-card span { color:#245f7d; font-size:11px; font-weight:800; }
+    .nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .nav a { min-height:43px; display:flex; align-items:center; justify-content:center; padding:8px; border:1px solid var(--blue-line); border-radius:12px; background:var(--blue); color:#245f7d; font-size:13px; font-weight:900; text-decoration:none; }
+    .toolbar { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:8px; align-items:center; margin-top:16px; padding:10px 2px; border-bottom:1px solid var(--line); }
+    .toolbar label { color:var(--muted); font-size:12px; font-weight:900; white-space:nowrap; }
+    select, .today { min-height:38px; border:1px solid var(--line); border-radius:10px; background:var(--white); color:var(--ink); font-weight:800; }
+    select { width:100%; padding:0 8px; }
+    .today { padding:0 11px; cursor:pointer; }
+    .privacy { margin-top:13px; padding:11px 13px; border:1px solid #b8ddee; border-radius:14px; background:#f3fbff; color:#356a83; font-size:12px; line-height:1.6; }
+    .privacy summary { cursor:pointer; font-weight:900; }
+    .privacy p { margin:8px 0 0; }
+    .empty, .error { margin-top:16px; padding:22px 16px; border:1px dashed var(--line); border-radius:16px; background:var(--white); color:var(--muted); text-align:center; line-height:1.65; }
+    .error { border-color:#e6aaa1; background:#fff5f2; color:#a64a42; }
+    .record { margin-top:10px; border:1px solid var(--line); border-radius:16px; background:var(--white); overflow:hidden; }
+    .record.mine { border-color:#8bc9e8; box-shadow:0 4px 15px rgba(36,95,125,.09); }
+    .record-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; padding:14px 14px 10px; }
+    .name { font-size:16px; font-weight:900; }
+    .mine-label { display:inline-block; margin-left:5px; padding:2px 6px; border-radius:7px; background:#e8f6ff; color:#245f7d; font-size:11px; }
+    .status { flex:0 0 auto; padding:4px 8px; border-radius:99px; background:#fff3d1; color:#8d651a; font-size:11px; font-weight:900; }
+    .status.complete { background:#e8f5ed; color:#397653; }
+    .energy { padding:0 14px 11px; font-size:22px; font-weight:900; }
+    .energy small { color:var(--muted); font-size:12px; font-weight:800; }
+    .remaining { color:var(--green); font-size:13px; font-weight:900; }
+    .meal-list { display:flex; flex-wrap:wrap; gap:6px; padding:0 14px 12px; }
+    .meal { padding:5px 8px; border-radius:9px; background:#fff7e6; color:#745c2b; font-size:12px; font-weight:800; }
+    .food-details { margin:0 14px 12px; padding:10px; border-radius:11px; background:#f8fbfc; }
+    .food-heading { margin-bottom:6px; color:#356a83; font-size:12px; font-weight:900; }
+    .food-meal { margin-top:7px; color:#5f584d; font-size:12px; line-height:1.5; }
+    .food-meal:first-of-type { margin-top:0; }
+    .food-meal strong { color:#356a83; }
+    .food-item { margin-top:2px; color:#6f675b; }
+    .record-foot { padding:9px 14px; border-top:1px solid #f0e8db; color:var(--muted); font-size:11px; }
+    .loading { opacity:.58; pointer-events:none; }
+    @media (max-width:430px) { .app { padding:12px 10px 36px; } .toolbar { grid-template-columns:1fr auto; } .toolbar label { grid-column:1 / -1; } }
+  </style>
+</head>
+<body>
+  <main id="app" class="app" aria-live="polite"></main>
+  <div id="groupData" hidden><?= groupJson ?></div>
+  <script>
+    let DATA = {};
+    try { DATA = JSON.parse(document.getElementById('groupData').textContent || '{}'); }
+    catch (error) { DATA = { error: '群組紀錄牆資料無法讀取，請回 LINE 重新開啟。' }; }
+    const app = document.getElementById('app');
+
+    function escapeHtml(value) { return String(value == null ? '' : value).replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[char]); }
+    function escapeAttr(value) { return escapeHtml(value).replace(/`/g, '&#96;'); }
+    function number(value) { return Math.max(0, Math.round(Number(value || 0))).toLocaleString('zh-TW'); }
+    function dateOptions() {
+      const today = String(DATA.today || ''); const min = String(DATA.minDate || ''); const selected = String(DATA.date || today);
+      const out = [];
+      for (let value = today; value && value >= min; value = subtractOneDay(value)) {
+        out.push('<option value="' + escapeAttr(value) + '"' + (value === selected ? ' selected' : '') + '>' + escapeHtml(value === today ? '今天・' + value : value) + '</option>');
+      }
+      return out.join('');
+    }
+    function subtractOneDay(date) { const value = new Date(date + 'T12:00:00'); value.setDate(value.getDate() - 1); return value.getFullYear() + '-' + String(value.getMonth() + 1).padStart(2, '0') + '-' + String(value.getDate()).padStart(2, '0'); }
+    function render() {
+      if (DATA.error) { app.innerHTML = '<div class="error"><strong>無法開啟群組紀錄牆</strong><br>' + escapeHtml(DATA.error) + '</div>'; return; }
+      const group = DATA.group || {}; const summary = DATA.summary || {}; const records = Array.isArray(DATA.records) ? DATA.records : [];
+      app.innerHTML = [
+        '<section class="hero">',
+          '<div class="eyebrow">GROUP HEALTH LOG</div>',
+          '<h1>👥 ' + escapeHtml(group.name || '群組紀錄牆') + '</h1>',
+          '<p>' + escapeHtml(DATA.date || '') + '・只顯示成員主動分享到這個群組的紀錄</p>',
+          '<div class="summary">',
+            '<div class="summary-card"><strong>' + number(summary.sharedCount) + '</strong><span>今日分享</span></div>',
+            '<div class="summary-card"><strong>' + number(summary.completedCount) + '</strong><span>完成打卡</span></div>',
+            '<div class="summary-card"><strong>' + number(summary.memberCount) + '</strong><span>群組成員</span></div>',
+          '</div>',
+        '</section>',
+        '<nav class="nav"><a href="' + escapeAttr(DATA.nav && DATA.nav.formUrl || '') + '">✍️ 我要打卡</a><a href="' + escapeAttr(DATA.nav && DATA.nav.historyUrl || '') + '">📈 我的歷史</a></nav>',
+        '<div class="toolbar"><label for="dateSelect">查看日期</label><select id="dateSelect">' + dateOptions() + '</select><button id="todayButton" class="today" type="button">今天</button></div>',
+        '<details class="privacy"><summary>🔒 這個群組牆怎麼保護隱私？</summary><p>只有目前仍在本群組的成員，且從自己的專屬連結開啟，才能查看。你可隨時選擇顯示或不顯示在群組牆；內容會顯示食物細項，但不會顯示照片、體重、BMR 或備註。連結會到期，請不要轉傳。</p></details>',
+        records.length ? records.map(renderRecord).join('') : '<div class="empty">今天還沒有人分享到群組牆。<br>完成或儲存打卡時，開啟「分享到我的群組紀錄牆」就會顯示在這裡。</div>',
+      ].join('');
+      document.getElementById('dateSelect').addEventListener('change', event => loadDate(event.target.value));
+      document.getElementById('todayButton').addEventListener('click', () => loadDate(DATA.today));
+    }
+    function renderRecord(record) {
+      const allowance = record.allowance === null || record.allowance === undefined ? null : Number(record.allowance);
+      const remaining = allowance === null ? '尚未設定今日額度' : (allowance - Number(record.intake || 0) >= 0 ? '還可 ' + number(allowance - Number(record.intake || 0)) + ' kcal' : '超出 ' + number(Number(record.intake || 0) - allowance) + ' kcal');
+      const mealText = Array.isArray(record.mealTotals) && record.mealTotals.length ? record.mealTotals.map(meal => '<span class="meal">' + escapeHtml(meal.label) + ' ' + number(meal.kcal) + '</span>').join('') : '<span class="meal">尚未記錄餐別</span>';
+      const foodDetails = Array.isArray(record.mealDetails) && record.mealDetails.length
+        ? '<div class="food-details"><div class="food-heading">🍽️ 食物細項</div>' + record.mealDetails.map(meal => '<div class="food-meal"><strong>' + escapeHtml(meal.label) + '</strong>' + (Array.isArray(meal.items) ? meal.items.map(item => '<div class="food-item">' + escapeHtml(item.name || '食物') + (item.portion ? '・' + escapeHtml(item.portion) : '') + (Number(item.quantity || 0) > 1 ? ' × ' + escapeHtml(item.quantity) : '') + '・' + number(item.calories) + ' kcal</div>').join('') : '') + '</div>').join('') + '</div>'
+        : '<div class="food-details"><div class="food-heading">🍽️ 食物細項</div><div class="food-item">這筆紀錄沒有可顯示的食物細項。</div></div>';
+      return '<article class="record' + (record.isSelf ? ' mine' : '') + '"><div class="record-head"><div class="name">' + escapeHtml(record.alias || '群組夥伴') + (record.isSelf ? '<span class="mine-label">我</span>' : '') + '</div><span class="status' + (record.isComplete ? ' complete' : '') + '">' + (record.isComplete ? '✅ 已完成' : '📝 打卡中') + '</span></div><div class="energy">' + number(record.intake) + (allowance === null ? '' : ' <small>/ ' + number(allowance) + ' kcal</small>') + '<div class="remaining">' + remaining + '</div></div><div class="meal-list">' + mealText + '</div>' + foodDetails + '<div class="record-foot">最後更新：' + escapeHtml(record.updatedAt || '—') + '</div></article>';
+    }
+    function loadDate(date) {
+      if (!date || !DATA.viewer || !DATA.group) return;
+      app.classList.add('loading');
+      google.script.run.withSuccessHandler(result => { DATA = result || { error:'讀取群組牆失敗。' }; app.classList.remove('loading'); render(); }).withFailureHandler(error => { DATA.error = error && error.message ? error.message : '讀取群組牆失敗。'; app.classList.remove('loading'); render(); }).getGroupWallDataForClient(DATA.viewer.uid, DATA.viewer.sig, DATA.group.groupId, date);
+    }
+    render();
+  </script>
+</body>
+</html>

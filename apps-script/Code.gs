@@ -1,13 +1,15 @@
-// 應用程式版本：2026.08.23-79（19:30 最後通知）
+// 應用程式版本：2026.08.24-94（新功能公告）
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.23-79';
+const APP_BUILD = '2026.08.24-94';
+// 每位使用者只會看到一次的打卡頁公告版本；未來有真正的新一波功能時再換這個值。
+const NEW_FEATURE_NOTICE_ID = '2026_08_check_in_space_and_reminders';
 
 const APP = Object.freeze({
   timezone: 'Asia/Taipei',
-  // 連結憑證的用途範圍。form 可讀寫今天的紀錄；wall 只能看公開頁與按讚。
-  tokenScopes: { form: 'form', wall: 'wall' },
+  // 連結憑證的用途範圍。form 可讀寫紀錄；wall 是舊版純公開頁；hub 是本人紀錄牆。
+  tokenScopes: { form: 'form', wall: 'wall', hub: 'hub' },
   // 連結的有效時間。過期後成員回 LINE 輸入「打卡」即可取得新連結。
-  tokenTtlSeconds: { form: 72 * 60 * 60, wall: 24 * 60 * 60 },
+  tokenTtlSeconds: { form: 72 * 60 * 60, wall: 24 * 60 * 60, hub: 72 * 60 * 60 },
   // 照片辨識共用同一組 Gemini 免費額度，需要上限避免單一連結外流後被無限呼叫。
   photoQuota: { perUserPerDay: 40, totalPerDay: 300 },
   sheets: {
@@ -25,9 +27,10 @@ const APP = Object.freeze({
       'UserId', '姓名', '基礎代謝BMR', '體重kg', '身高cm', '年齡',
       '生理性別', '已加好友', '建立時間', '更新時間', '群組中',
       '公開暱稱', '參與公開排行', '預設公開紀錄', '預設公開食物細項', '個人提醒',
-      '個人提醒早上', '個人提醒中午', '個人提醒晚間', '舊23點提醒（已停用）',
+      '個人提醒早上', '個人提醒中午', '個人提醒晚間', '舊23點提醒（已停用）', '預設顯示在群組紀錄牆',
     ],
-    groups: ['GroupId', '群組名稱', '啟用排行', '建立時間', '更新時間'],
+    // 前五欄維持舊版位置，後面欄位讓既有 LINE 群組與新版「打卡空間」共用同一張表。
+    groups: ['GroupId', '群組名稱', '啟用排行', '建立時間', '更新時間', '類型', '建立者UserId', '邀請碼', '邀請碼到期'],
     groupMembers: ['GroupId', 'UserId', '群組中', '加入時間', '更新時間'],
     foods: [
       'FoodId', '分類', '名稱', '標準份量', '熱量kcal', 'Emoji',
@@ -38,7 +41,7 @@ const APP = Object.freeze({
       '晚餐kcal', '點心kcal', '宵夜kcal', '總攝取kcal', '飲水ml',
       '運動項目', '運動分鐘', '活動熱量kcal', '基礎代謝BMR',
       '估算總消耗kcal', '估算赤字kcal', '食物明細JSON', '備註', '更新時間',
-      '打卡狀態', '公開紀錄', '公開時間', '公開食物細項', '運動明細JSON', '飲水目標ml',
+      '打卡狀態', '公開紀錄', '公開時間', '公開食物細項', '運動明細JSON', '飲水目標ml', '群組紀錄牆公開',
     ],
     publicLikes: ['日期', '按讚者UserId', '被按讚者UserId', '建立時間', '更新時間'],
   },
@@ -144,7 +147,30 @@ function doGet(e) {
       });
     }
     return publicTemplate.evaluate()
-      .setTitle('公開飲控紀錄')
+      .setTitle('飲控紀錄牆')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+  }
+  if (view === 'group') {
+    const groupUid = String((e && e.parameter && e.parameter.uid) || '');
+    const groupSig = String((e && e.parameter && e.parameter.sig) || '');
+    const groupId = String((e && e.parameter && e.parameter.group) || '');
+    const groupDate = validatePublicWallDate_((e && e.parameter && e.parameter.date) || today_());
+    const groupTemplate = HtmlService.createTemplateFromFile('GroupWall');
+    try {
+      groupTemplate.groupJson = JSON.stringify(getGroupWallData_(groupUid, groupSig, groupId, groupDate));
+    } catch (error) {
+      console.error(`群組紀錄牆載入失敗（${groupId} / ${groupDate}）：${error && error.stack ? error.stack : error}`);
+      groupTemplate.groupJson = JSON.stringify({
+        error: `群組紀錄牆載入失敗：${cleanText_(error && error.message ? error.message : error, 180)}`,
+        date: groupDate,
+        today: today_(),
+        minDate: dateKeyDaysAgo_(today_(), 29),
+        maxDate: today_(),
+      });
+    }
+    return groupTemplate.evaluate()
+      .setTitle('群組飲控紀錄牆')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
       .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
   }
@@ -228,6 +254,11 @@ function doGet(e) {
     formUrl: valid ? getSignedFormUrl_(uid) : '',
     publicWallUrl: getPublicWallUrl_(valid ? uid : ''),
     historyUrl: getHistoryUrl_(valid ? uid : ''),
+    // 打卡頁只需要群組名稱來顯示分享設定；群組入口統一由「紀錄牆」處理。
+    groupWalls: valid ? getWallTabsForUser_(uid) : [],
+    // 打卡空間可在本頁建立與管理；加入則保留在 LINE 私訊，讓新朋友不需要先拿到個人連結。
+    checkInSpaces: valid ? getCheckInSpacesForUser_(uid) : [],
+    newFeatureNotice: valid ? getNewFeatureNotice_(uid) : { show: false },
   };
   // 新版頁面從隱藏的 HTML 文字節點讀取。
   template.bootstrapJson = JSON.stringify(bootstrap);
@@ -246,6 +277,64 @@ function doGet(e) {
  */
 function getPublicWallDataForClient(viewerId, viewerSignature, selectedDate) {
   return getPublicWallData_(viewerId, viewerSignature, selectedDate);
+}
+
+/** 群組牆日期切換的前端入口；每次都重新確認觀看者仍是群組成員。 */
+function getGroupWallDataForClient(viewerId, viewerSignature, groupId, selectedDate) {
+  return getGroupWallData_(viewerId, viewerSignature, groupId, selectedDate);
+}
+
+/** 打卡頁的空間管理入口；所有操作都需要本人有效的打卡連結。 */
+function getCheckInSpacesForClient(payload) {
+  return getCheckInSpacesForUser_(requireFormAccessUserId_(payload));
+}
+
+function createCheckInSpaceForClient(payload) {
+  const userId = requireFormAccessUserId_(payload);
+  const result = createCheckInSpace_(userId, payload && payload.name);
+  return { ok: true, created: result, spaces: getCheckInSpacesForUser_(userId) };
+}
+
+function regenerateCheckInSpaceInviteForClient(payload) {
+  const userId = requireFormAccessUserId_(payload);
+  const result = regenerateCheckInSpaceInvite_(userId, payload && payload.groupId);
+  return { ok: true, updated: result, spaces: getCheckInSpacesForUser_(userId) };
+}
+
+function leaveCheckInSpaceForClient(payload) {
+  const userId = requireFormAccessUserId_(payload);
+  leaveCheckInSpace_(userId, payload && payload.groupId);
+  return { ok: true, spaces: getCheckInSpacesForUser_(userId) };
+}
+
+/** 使用者在打卡頁按下「知道了」後，這一版公告不再顯示。 */
+function dismissNewFeatureNotice(payload) {
+  const userId = requireFormAccessUserId_(payload);
+  PropertiesService.getScriptProperties().setProperty(
+    newFeatureNoticePropertyKey_(userId),
+    String(Date.now())
+  );
+  return { ok: true };
+}
+
+function requireFormAccessUserId_(payload) {
+  payload = payload || {};
+  const userId = String(payload.uid || '');
+  const sig = String(payload.sig || '');
+  const tokenState = inspectAccessToken_(userId, sig, APP.tokenScopes.form);
+  if (tokenState !== 'ok') throw new Error(accessTokenErrorMessage_(tokenState));
+  return userId;
+}
+
+function getNewFeatureNotice_(userId) {
+  userId = String(userId || '');
+  if (!userId) return { show: false };
+  const dismissedAt = PropertiesService.getScriptProperties().getProperty(newFeatureNoticePropertyKey_(userId));
+  return { show: !dismissedAt, id: NEW_FEATURE_NOTICE_ID };
+}
+
+function newFeatureNoticePropertyKey_(userId) {
+  return `NEW_FEATURE_NOTICE_${NEW_FEATURE_NOTICE_ID}_${String(userId || '')}`;
 }
 
 /**
@@ -325,6 +414,84 @@ function seedTestHistoryData() {
     ]);
   });
   return { ok: true, user: member.name, days: samples.length, message: '已建立最近 7 天測試歷史資料。' };
+}
+
+/**
+ * 不需 LINE 的打卡空間整合測試。
+ * 先執行 enableTestWebAccess()，再執行本函式；它會建立（或重用）一個測試空間，
+ * 加入一位假測試夥伴並寫入一筆今天的「分享至空間」紀錄。
+ */
+function testCheckInSpaceFlow() {
+  const props = PropertiesService.getScriptProperties();
+  if (String(props.getProperty('TEST_MODE') || '').toLowerCase() !== 'true') {
+    throw new Error('請先執行 enableTestWebAccess()，避免測試資料寫到非測試專案。');
+  }
+  const ownerUserId = String(props.getProperty('TEST_USER_ID') || '');
+  const owner = getMemberById_(ownerUserId) || getMembers_()[0];
+  if (!owner || !owner.userId) throw new Error('測試表中找不到測試帳號。');
+
+  const guestUserId = `test_space_guest_${String(owner.userId).slice(-12)}`;
+  upsertMember_({
+    userId: guestUserId,
+    name: '🧪 空間測試夥伴',
+    isFriend: false,
+    bmr: 1360,
+    defaultPublishToGroup: true,
+  });
+
+  const testName = '🧪 打卡空間測試';
+  let space = getGroups_().find(group => (
+    isCheckInSpace_(group)
+    && group.ownerUserId === String(owner.userId)
+    && group.name === testName
+  ));
+  if (space) {
+    regenerateCheckInSpaceInvite_(owner.userId, space.groupId);
+  } else {
+    createCheckInSpace_(owner.userId, testName);
+  }
+  space = getGroups_().find(group => (
+    isCheckInSpace_(group)
+    && group.ownerUserId === String(owner.userId)
+    && group.name === testName
+  ));
+  const joined = joinCheckInSpaceByInvite_(guestUserId, space.inviteCode);
+  const now = new Date();
+  const intake = 1380;
+  const bmr = 1360;
+  const exercise = 260;
+  upsertDailyRow_(today_(), guestUserId, [
+    now, today_(), guestUserId, '🧪 空間測試夥伴',
+    360, 520, 400, 100, 0, intake,
+    0, '打籃球', 40, exercise, bmr,
+    Math.round(bmr * 1.2 + exercise), Math.round(bmr * 1.2 + exercise - intake),
+    JSON.stringify({
+      breakfast: [{ name: '測試早餐', portion: '1 份', calories: 360, source: 'manual' }],
+      lunch: [{ name: '測試午餐', portion: '1 份', calories: 520, source: 'manual' }],
+      dinner: [{ name: '測試晚餐', portion: '1 份', calories: 400, source: 'manual' }],
+      snack: [{ name: '測試點心', portion: '1 份', calories: 100, source: 'manual' }],
+      lateNight: [],
+    }),
+    '測試打卡空間用資料', now,
+    '完成', false, '', false, JSON.stringify([{ type: 'basketball', name: '打籃球', minutes: 40, kcal: exercise, kcalMode: 'auto' }]), '', true,
+  ]);
+
+  const ownerSpace = formatCheckInSpace_(getGroupById_(space.groupId), owner.userId);
+  const wallUrl = getPublicWallUrl_(owner.userId);
+  console.log('=== 打卡空間測試 ===');
+  console.log(`空間：${ownerSpace.name}`);
+  console.log(`邀請碼：${ownerSpace.inviteCode}`);
+  console.log(`測試夥伴已加入：${joined.alreadyJoined ? '原本已在空間，已重新確認' : '是'}`);
+  console.log(`紀錄牆：${wallUrl}`);
+  return {
+    ok: true,
+    owner: owner.name || owner.userId,
+    guest: '🧪 空間測試夥伴',
+    space: ownerSpace,
+    wallUrl,
+    testPageUrl: `${getWebAppExecUrl_()}?test=1`,
+    message: '已建立測試空間與測試夥伴紀錄；開啟 testPageUrl 後，在個人設定可看到空間，在紀錄牆可看到空間分頁與測試紀錄。',
+  };
 }
 
 function getTestWebAccess_(e) {
@@ -441,6 +608,79 @@ function handleLineEvent_(event) {
         isFriend: true,
       });
     }
+  }
+
+  // 打卡空間完全不依賴 LINE 群組：空間擁有者建立後，把邀請碼傳給好友；
+  // 好友先加入官方帳號，再私訊「加入空間 邀請碼」即可進入。
+  const createSpaceMatch = text.match(/^(?:建立|新增)(?:打卡)?空間\s+(.+)$/);
+  if (createSpaceMatch) {
+    if (source.type !== 'user' || !userId) {
+      replyMessage_(event.replyToken, [{ type: 'text', text: '請先私訊我，再輸入「建立打卡空間 空間名稱」。' }]);
+      return;
+    }
+    try {
+      const result = createCheckInSpace_(userId, createSpaceMatch[1]);
+      replyMessage_(event.replyToken, checkInSpaceCreatedMessages_(result));
+    } catch (error) {
+      replyMessage_(event.replyToken, [{ type: 'text', text: `建立打卡空間失敗：${cleanText_(error && error.message ? error.message : error, 100)}` }]);
+    }
+    return;
+  }
+
+  if (/^(?:建立|新增)(?:打卡)?空間$/.test(compact)) {
+    replyMessage_(event.replyToken, [{ type: 'text', text: '請在後面加上名稱，例如：\n「建立打卡空間 晚餐不爆卡小隊」\n\n建立後我會給你一組 7 天有效的邀請碼。' }]);
+    return;
+  }
+
+  // 邀請碼本身（MM + 6 碼）就是最短加入指令：好友加官方帳號後直接貼上即可。
+  // 完整的「加入空間 邀請碼」仍保留，方便文字閱讀與舊教學相容。
+  const directInviteCodeMatch = compact.match(/^(MM[A-HJ-NP-Z2-9]{6})$/i);
+  const joinSpaceMatch = text.match(/^加入(?:打卡)?空間\s*([A-Za-z0-9\-]+)?$/i);
+  if (joinSpaceMatch || directInviteCodeMatch) {
+    if (source.type !== 'user' || !userId) {
+      replyMessage_(event.replyToken, [{ type: 'text', text: '請先私訊我，再直接傳送邀請碼。' }]);
+      return;
+    }
+    const inviteCode = (joinSpaceMatch && joinSpaceMatch[1]) || (directInviteCodeMatch && directInviteCodeMatch[1]) || '';
+    if (!inviteCode) {
+      replyMessage_(event.replyToken, [{ type: 'text', text: '請直接傳送邀請碼，例如：\nMMABC234' }]);
+      return;
+    }
+    try {
+      const result = joinCheckInSpaceByInvite_(userId, inviteCode);
+      replyMessage_(event.replyToken, checkInSpaceJoinedMessages_(userId, result));
+    } catch (error) {
+      replyMessage_(event.replyToken, [{ type: 'text', text: `無法加入打卡空間：${cleanText_(error && error.message ? error.message : error, 120)}` }]);
+    }
+    return;
+  }
+
+  if (/^(打卡空間|我的打卡空間|空間管理)$/.test(compact)) {
+    if (source.type !== 'user' || !userId) {
+      replyMessage_(event.replyToken, [{ type: 'text', text: '打卡空間要由個人私訊管理。請私訊我輸入「打卡空間」。' }]);
+      return;
+    }
+    replyMessage_(event.replyToken, checkInSpaceManagementMessages_(userId));
+    return;
+  }
+
+  const renewSpaceMatch = text.match(/^(?:重設|更新)(?:打卡)?空間邀請碼\s*([A-Za-z0-9\-]+)?$/i);
+  if (renewSpaceMatch) {
+    if (source.type !== 'user' || !userId) {
+      replyMessage_(event.replyToken, [{ type: 'text', text: '請私訊我重設邀請碼。' }]);
+      return;
+    }
+    if (!renewSpaceMatch[1]) {
+      replyMessage_(event.replyToken, [{ type: 'text', text: '請在後面填目前邀請碼，例如：\n「重設空間邀請碼 MMABC234」' }]);
+      return;
+    }
+    try {
+      const result = regenerateCheckInSpaceInvite_(userId, renewSpaceMatch[1]);
+      replyMessage_(event.replyToken, [{ type: 'text', text: `已更新「${result.name}」的邀請碼 ✅\n新邀請碼：${result.inviteCode}\n有效到：${result.inviteExpiresAt}\n\n舊邀請碼已立即失效。` }]);
+    } catch (error) {
+      replyMessage_(event.replyToken, [{ type: 'text', text: `無法重設邀請碼：${cleanText_(error && error.message ? error.message : error, 120)}` }]);
+    }
+    return;
   }
 
   if (/^(綁定|加入|開始)$/.test(compact)) {
@@ -568,7 +808,7 @@ function handleLineEvent_(event) {
     return;
   }
 
-  if (/^(公開紀錄|公開紀錄牆|公開排行)$/.test(compact)) {
+  if (/^(公開紀錄|公開紀錄牆|公開排行|紀錄牆|飲控紀錄牆)$/.test(compact)) {
     replyMessage_(event.replyToken, publicWallButtonMessages_(userId));
     return;
   }
@@ -576,7 +816,7 @@ function handleLineEvent_(event) {
   if (/^(說明|help|幫助)$/i.test(compact)) {
     replyMessage_(event.replyToken, [{
       type: 'text',
-      text: '可用指令：\n・打卡：拍照或從相簿上傳，記錄今天飲食\n・啟用排行：在群組第一次設定排行榜\n・今日排行：只查看該群組成員的完成狀況\n・公開紀錄：查看自願公開的今日紀錄與連續打卡排行\n・個人提醒：查看 09:00／12:00／19:30 提醒狀態\n・開啟唧唧唧／關閉咕咕咕：全部開啟或關閉個人提醒\n・綁定：身分異常時重新綁定\n\n個人提醒預設開啟；群組排行與公開功能彼此獨立。',
+      text: '可用指令：\n・打卡：拍照或從相簿上傳，記錄今天飲食\n・建立打卡空間 名稱：建立不用 LINE 群組的私人打卡空間\n・直接傳邀請碼：加入朋友建立的打卡空間\n・打卡空間：查看自己的空間與邀請碼\n・紀錄牆／公開紀錄：查看公開紀錄、連續打卡排行與你的空間牆\n・個人提醒：查看 09:00／12:00／19:30 提醒狀態\n・開啟唧唧唧／關閉咕咕咕：全部開啟或關閉個人提醒\n・綁定：身分異常時重新綁定\n\n打卡空間不會發早上群組總結；大家可在紀錄牆自行選日期查看。',
     }]);
   }
 }
@@ -585,7 +825,7 @@ function welcomeMessages_(userId, name) {
   return [
     {
       type: 'text',
-      text: `${name}，歡迎加入飲控打卡緊迫盯人 🐥\n好友身分已自動建立完成 ✅\n個人提醒預設開啟 🔔（09:00／12:00／19:30）\n\n使用方式：\n1️⃣ 選早餐、午餐、晚餐、宵夜或點心\n2️⃣ 直接拍照或從相簿上傳\n3️⃣ 確認 AI 估算總熱量，細項可展開修改\n4️⃣ 內容會自動儲存為「打卡中」\n5️⃣ 今天確定不再補充時，按「送出打卡完成」\n\n同一天可以隨時再開啟補充；新增、刪除或修改內容後會自動切回打卡中。午夜結算，隔天早上 9 點：有群組就在群組公布，沒有群組則私訊個人結算。\n\n可在打卡頁個人設定調整三個提醒；全部關閉輸入「關閉咕咕咕」，全部恢復輸入「開啟唧唧唧」。`,
+      text: `${name}，歡迎加入飲控打卡緊迫盯人 🐥\n好友身分已自動建立完成 ✅\n個人提醒預設開啟 🔔（09:00／12:00／19:30）\n\n使用方式：\n1️⃣ 選早餐、午餐、晚餐、宵夜或點心\n2️⃣ 直接拍照或從相簿上傳\n3️⃣ 確認 AI 估算總熱量，細項可展開修改\n4️⃣ 內容會自動儲存為「打卡中」\n5️⃣ 今天確定不再補充時，按「送出打卡完成」\n\n同一天可以隨時再開啟補充；新增、刪除或修改內容後會自動切回打卡中。\n\n想和朋友一起看紀錄，不用建立 LINE 群組：輸入「建立打卡空間 名稱」取得邀請碼；好友加入官方帳號後，直接把邀請碼傳給我即可。\n\n可在打卡頁個人設定調整三個提醒；全部關閉輸入「關閉咕咕咕」，全部恢復輸入「開啟唧唧唧」。`,
     },
     {
       type: 'template',
@@ -596,7 +836,7 @@ function welcomeMessages_(userId, name) {
         actions: [
           { type: 'uri', label: '開始今天打卡', uri: getSignedFormUrl_(userId) },
           { type: 'uri', label: '查看歷史紀錄', uri: getHistoryUrl_(userId) },
-          { type: 'uri', label: '查看公開紀錄', uri: getPublicWallUrl_(userId) },
+          { type: 'uri', label: '查看紀錄牆', uri: getPublicWallUrl_(userId) },
         ],
       },
     },
@@ -613,7 +853,7 @@ function bindSuccessMessages_(userId, name) {
       actions: [
         { type: 'uri', label: '開啟今日打卡', uri: getSignedFormUrl_(userId) },
         { type: 'uri', label: '查看歷史紀錄', uri: getHistoryUrl_(userId) },
-        { type: 'uri', label: '查看公開紀錄', uri: getPublicWallUrl_(userId) },
+        { type: 'uri', label: '查看紀錄牆', uri: getPublicWallUrl_(userId) },
       ],
     },
   }];
@@ -625,11 +865,11 @@ function formButtonMessages_(userId) {
     altText: '開啟今日飲控打卡',
     template: {
       type: 'buttons',
-      text: `今天是 ${today_()}。可拍照或從相簿上傳；同一天可多次開啟、補充並更新紀錄。`,
+      text: `今天是 ${today_()}。可拍照或從相簿上傳；同一天可多次開啟、補充並更新紀錄。\n\n✨ 想和朋友一起記錄？請展開打卡頁的「個人設定」→「打卡空間」建立。`,
       actions: [
         { type: 'uri', label: '填寫今日紀錄', uri: getSignedFormUrl_(userId) },
         { type: 'uri', label: '查看歷史紀錄', uri: getHistoryUrl_(userId) },
-        { type: 'uri', label: '查看公開紀錄', uri: getPublicWallUrl_(userId) },
+        { type: 'uri', label: '查看紀錄牆', uri: getPublicWallUrl_(userId) },
       ],
     },
   }];
@@ -638,11 +878,11 @@ function formButtonMessages_(userId) {
 function publicWallButtonMessages_(userId) {
   return [{
     type: 'template',
-    altText: '查看公開飲控紀錄',
+    altText: '查看飲控紀錄牆',
     template: {
       type: 'buttons',
-      text: '這裡只顯示本人主動公開的今日進度，以及願意參加者的連續打卡排行。在 LINE 開啟後還可以幫別人按每日鼓勵讚 👍',
-      actions: [{ type: 'uri', label: '開啟公開紀錄牆', uri: getPublicWallUrl_(userId) }],
+      text: '公開紀錄、連續打卡排行與你加入打卡空間的分享紀錄都集中在這裡。在公開頁還可以幫別人按每日鼓勵讚 👍',
+      actions: [{ type: 'uri', label: '開啟紀錄牆', uri: getPublicWallUrl_(userId) }],
     },
   }];
 }
@@ -680,6 +920,10 @@ function saveDailyLog(payload) {
       ? Boolean(member.defaultPublishFoodDetails)
       : Boolean(payload.publishFoodDetails)
   );
+  // 群組分享是唯一的長期開關；切換後會套用到所有既有與往後的每日紀錄。
+  const requestedDefaultPublishToGroup = payload.publishToGroup === undefined
+    ? Boolean(member.defaultPublishToGroup)
+    : Boolean(payload.publishToGroup);
   const storedWaterSettings = getWaterSettings_(userId);
   const waterEnabled = payload.waterEnabled === undefined
     ? Boolean(storedWaterSettings.enabled)
@@ -694,7 +938,9 @@ function saveDailyLog(payload) {
     || requestedPublicAlias !== String(member.publicAlias || '')
     || requestedPublicRanking !== Boolean(member.joinPublicRanking)
     || requestedDefaultPublishToday !== Boolean(member.defaultPublishToday)
-    || requestedDefaultPublishFoodDetails !== Boolean(member.defaultPublishFoodDetails);
+    || requestedDefaultPublishFoodDetails !== Boolean(member.defaultPublishFoodDetails)
+    || requestedDefaultPublishToGroup !== Boolean(member.defaultPublishToGroup);
+  const groupPreferenceChanged = requestedDefaultPublishToGroup !== Boolean(member.defaultPublishToGroup);
   const pendingMemberUpdate = memberChanged
     ? {
       userId,
@@ -704,6 +950,7 @@ function saveDailyLog(payload) {
       joinPublicRanking: requestedPublicRanking,
       defaultPublishToday: requestedDefaultPublishToday,
       defaultPublishFoodDetails: requestedDefaultPublishFoodDetails,
+      defaultPublishToGroup: requestedDefaultPublishToGroup,
     }
     : null;
 
@@ -812,6 +1059,9 @@ function saveDailyLog(payload) {
   const isPublic = requestedDefaultPublishToday;
   // 食物細項是比熱量摘要更高一層的公開權限；只有今日紀錄本身公開時才允許開啟。
   const publishFoodDetails = requestedDefaultPublishFoodDetails;
+  // 群組牆不依賴「啟用排行」；只要目前仍是群組成員即可選擇分享。
+  const hasGroup = getActiveGroupIdsForUser_(userId).length > 0;
+  const publishToGroup = hasGroup && requestedDefaultPublishToGroup;
 
   const row = [
     now,
@@ -840,6 +1090,7 @@ function saveDailyLog(payload) {
     publishFoodDetails,
     JSON.stringify(exerciseRecords),
     waterEnabled ? waterGoalMl : '',
+    publishToGroup,
   ];
 
   // 只在真正寫入工作表時持有全域鎖，避免自動儲存長時間卡住公開頁按讚。
@@ -847,6 +1098,8 @@ function saveDailyLog(payload) {
   lock.waitLock(5000);
   try {
     if (pendingMemberUpdate) upsertMember_(pendingMemberUpdate);
+    // 開關改變時，所有既有日期立即統一成同一個群組分享狀態。
+    if (groupPreferenceChanged) setGroupWallVisibilityForUser_(userId, requestedDefaultPublishToGroup);
     saveWaterSettings_(userId, waterEnabled, waterGoalMl);
     upsertDailyRow_(recordDate, userId, row);
     // 今日紀錄會影響「常吃的食物」統計，儲存後立即清除快捷區快取，
@@ -869,6 +1122,8 @@ function saveDailyLog(payload) {
     isComplete,
     isPublic,
     publishFoodDetails,
+    publishToGroup,
+    defaultPublishToGroup: requestedDefaultPublishToGroup,
   };
 }
 
@@ -908,26 +1163,17 @@ function sendReminderAt1930() { return sendReminderForSlot_('19:30'); }
 function sendReminderAt1800() { return { ok: true, skipped: 'retired_replaced_by_19_30' }; }
 function sendReminderAt2300() { return { ok: true, skipped: 'retired_replaced_by_19_30' }; }
 
-/** 09:00 結算與早晨提醒共用一個觸發器，避免兩個任務同時搶 ScriptLock。 */
+/** 09:00 僅發個人早晨提醒；打卡空間改由成員自行在紀錄牆查看歷史。 */
 function sendMorningJobsAt0900() {
   const result = { ok: true };
   // 清掉已過期的排程啟動碼，避免 Script Properties 長期累積。
   try { cleanupExpiredScheduledLaunches_(); } catch (error) { console.warn(error); }
   try {
-    result.ranking = sendPreviousDayRankingAt0900();
-    // 群組推送失敗時仍要繼續執行個人通知；不要讓單一群組卡住整個早晨流程。
-    if (result.ranking && result.ranking.ok === false) {
-      result.rankingError = result.ranking.error || '群組結算部分推送失敗';
-    }
-  } catch (error) {
-    result.rankingError = error && error.message ? error.message : String(error);
-  }
-  try {
     result.reminder = sendReminderAt0900();
   } catch (error) {
     result.reminderError = error && error.message ? error.message : String(error);
   }
-  result.ok = !result.rankingError && !result.reminderError;
+  result.ok = !result.reminderError;
   return result;
 }
 
@@ -947,17 +1193,8 @@ function sendReminderForSlot_(slot) {
   const inProgressIds = new Set(
     todayLogs.filter(item => !item.isComplete).map(item => item.userId)
   );
-  // 09:00 的無群組好友會收到「昨天個人結算」，因此不再重複推送一則早晨打卡提醒；
-  // 有群組的成員仍可收到自己的早晨提醒，四個時段開關才會完整生效。
-  const enabledGroupIds = new Set(getEnabledGroups_().map(group => group.groupId));
-  const activeGroupUserIds = new Set(
-    getGroupMemberships_()
-      .filter(item => item.inGroup && enabledGroupIds.has(item.groupId))
-      .map(item => item.userId)
-  );
   // 即使今天已按「打卡完成」，後續時段仍可提醒補充下一餐。
-  const members = getReminderMembers_(slot)
-    .filter(member => slot !== '09:00' || activeGroupUserIds.has(member.userId));
+  const members = getReminderMembers_(slot);
   let sent = 0;
 
   members.forEach(member => {
@@ -1008,15 +1245,15 @@ function runScheduledJobs() {
   };
 }
 
-/** 每小時觸發器的路由：午夜結算前一天，早上 09:00 發送已保存的結果。 */
+/** 舊的每小時觸發器相容入口：群組總結已退役，不再主動推播。 */
 function sendRankingIfDue() {
-  const hour = Number(Utilities.formatDate(new Date(), APP.timezone, 'HH'));
-  if (hour === 0) return finalizePreviousDayAtMidnight();
-  if (hour === 9) return sendPreviousDayRankingAt0900();
-  return { ok: true, skipped: 'not_due' };
+  return { ok: true, skipped: 'group_summaries_retired_use_check_in_space_wall' };
 }
 
 function finalizePreviousDayAtMidnight() {
+  // 舊午夜結算觸發器即使尚未被重新安裝清掉，也不再寫入或準備群組推播資料。
+  return { ok: true, skipped: 'group_summaries_retired_use_check_in_space_wall' };
+
   const now = new Date();
   const hour = Number(Utilities.formatDate(now, APP.timezone, 'HH'));
   const date = hour === 23 ? today_() : dateDaysAgo_(1, now);
@@ -1050,6 +1287,11 @@ function finalizePreviousDayAtMidnight() {
 }
 
 function sendPreviousDayRankingAt0900() {
+  // 打卡空間的紀錄可自行選日期查看，不再於 09:00 逐一推送群組總結，
+  // 也避免每個空間都消耗 LINE 訊息額度。
+  return { ok: true, skipped: 'group_summaries_retired_use_check_in_space_wall' };
+
+  // 舊版保留在下方，讓既有歷史程式碼容易比對；此 return 後不會執行。
   const expectedDate = dateDaysAgo_(1, new Date());
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return { ok: true, skipped: 'another_run_active' };
@@ -1260,9 +1502,7 @@ function installReminderTrigger() {
     .timeBased().atHour(12).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
   ScriptApp.newTrigger('sendReminderAt1930')
     .timeBased().atHour(19).nearMinute(30).everyDays(1).inTimezone(APP.timezone).create();
-  ScriptApp.newTrigger('finalizePreviousDayAtMidnight')
-    .timeBased().atHour(0).nearMinute(0).everyDays(1).inTimezone(APP.timezone).create();
-  return { ok: true, message: '已建立排程：09:00 單一總控（先群組結算、再個人通知）、12:00、19:30 最後通知，00:00 結算。' };
+  return { ok: true, message: '已建立個人提醒排程：09:00、12:00、19:30。打卡空間不再發早上群組總結，請在紀錄牆選日期查看。' };
 }
 
 function buildTodayRanking_(groupId) {
@@ -1514,8 +1754,11 @@ function getLogsForDate_(date) {
 function getPublicWallData_(viewerId, viewerSignature, selectedDate) {
   viewerId = String(viewerId || '');
   viewerSignature = String(viewerSignature || '');
-  // 公開頁只接受 wall 範圍的 token；打卡用的 form token 不能在這裡使用，反之亦然。
-  const viewerValid = validateFormSignature_(viewerId, viewerSignature, APP.tokenScopes.wall);
+  // 新版紀錄牆用 hub token；舊的 wall 連結仍可看公開區，但不會得到群組卡夾。
+  const hubState = inspectAccessToken_(viewerId, viewerSignature, APP.tokenScopes.hub);
+  const wallState = inspectAccessToken_(viewerId, viewerSignature, APP.tokenScopes.wall);
+  const viewerValid = hubState === 'ok' || wallState === 'ok';
+  const viewerCanViewGroups = hubState === 'ok';
   const today = today_();
   const date = validatePublicWallDate_(selectedDate || today);
   const base = getPublicWallBaseData_(date);
@@ -1575,6 +1818,8 @@ function getPublicWallData_(viewerId, viewerSignature, selectedDate) {
       formUrl: getSignedFormUrl_(viewerId),
       historyUrl: getHistoryUrl_(viewerId),
     } : {},
+    // 群組標籤只提供給已驗證的本人；不在前端輸出成員名單或群組 URL。
+    groupTabs: viewerCanViewGroups && viewerMember ? getWallTabsForUser_(viewerId) : [],
     viewer: {
       canLike: viewerValid && Boolean(viewerMember),
       uid: viewerValid ? viewerId : '',
@@ -1703,6 +1948,148 @@ function getPublicWallBaseData_(selectedDate, members) {
 }
 
 /**
+ * 群組紀錄牆：只有仍在指定群組內的成員，才能用自己的 form 簽章進入。
+ * 這裡不沿用公開牆的按讚、排行或公開權限，避免把群組分享誤當成全體公開。
+ */
+function getGroupWallData_(viewerId, viewerSignature, groupId, selectedDate) {
+  viewerId = String(viewerId || '');
+  groupId = String(groupId || '');
+  // 整合式紀錄牆使用 hub token；舊的群組專屬連結則是 form token，兩者都相容。
+  const tokenState = inspectGroupWallAccessToken_(viewerId, String(viewerSignature || ''));
+  if (tokenState !== 'ok') {
+    return {
+      error: tokenState === 'expired'
+        ? '這個紀錄牆連結已過期，請回 LINE 重新開啟。'
+        : '紀錄牆連結驗證失敗，請回 LINE 重新開啟。',
+      invalidReason: tokenState,
+      date: validatePublicWallDate_(selectedDate || today_()),
+      today: today_(),
+      minDate: dateKeyDaysAgo_(today_(), 29),
+      maxDate: today_(),
+    };
+  }
+  const group = getGroupById_(groupId);
+  if (!group) throw new Error('找不到這個群組。');
+  if (!getActiveGroupIdsForUser_(viewerId).includes(groupId)) {
+    throw new Error('你目前不是這個群組的成員，無法查看群組紀錄牆。');
+  }
+
+  const date = validatePublicWallDate_(selectedDate || today_());
+  const base = getGroupWallBaseData_(groupId, date);
+  return {
+    date,
+    today: today_(),
+    minDate: dateKeyDaysAgo_(today_(), 29),
+    maxDate: today_(),
+    generatedAt: formatPublicTime_(new Date()),
+    group: { groupId: group.groupId, name: group.name, memberCount: base.memberCount },
+    records: base.records.map(record => Object.assign({}, record, { isSelf: record.userId === viewerId })),
+    summary: {
+      memberCount: base.memberCount,
+      sharedCount: base.records.length,
+      completedCount: base.records.filter(record => record.isComplete).length,
+    },
+    nav: {
+      formUrl: getSignedFormUrl_(viewerId),
+      historyUrl: getHistoryUrl_(viewerId),
+    },
+    viewer: { uid: viewerId, sig: String(viewerSignature || '') },
+  };
+}
+
+/** 群組共同資料短暫快取；快取中沒有觀看者身分、簽章、照片、體重、BMR 或備註。 */
+function getGroupWallBaseData_(groupId, selectedDate) {
+  groupId = String(groupId || '');
+  const date = validatePublicWallDate_(selectedDate || today_());
+  const cacheKey = `group-wall-base:v2:${groupId}:${date}`;
+  const cached = readJsonCache_(cacheKey);
+  if (cached && Array.isArray(cached.records)) return cached;
+
+  const activeIds = new Set(getActiveGroupMemberIds_(groupId));
+  const memberById = new Map(getMembers_().map(member => [member.userId, member]));
+  const latestByUser = new Map();
+  const sheet = getSheet_(APP.sheets.logs);
+  ensureLogStatusHeader_(sheet);
+  if (sheet.getLastRow() >= 2 && activeIds.size) {
+    const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, APP.headers.logs.length).getValues();
+    rows.forEach(row => {
+      const userId = String(row[2] || '');
+      const shared = row[26] === true || String(row[26]).toUpperCase() === 'TRUE';
+      const member = memberById.get(userId);
+      if (shared && activeIds.has(userId) && member && member.isFriend && getLogRowDateKey_(row, null) === date) {
+        latestByUser.set(userId, row);
+      }
+    });
+  }
+
+  const records = Array.from(latestByUser.entries()).map(([userId, row]) => {
+    const member = memberById.get(userId) || {};
+    const intake = Math.round(numberInRange_(row[9], 0, 100000));
+    const allowance = row[15] === '' ? null : Math.round(numberInRange_(row[15], 0, 100000));
+    const meals = [];
+    const mealTotals = [];
+    [[4, '早餐'], [5, '午餐'], [6, '晚餐'], [8, '宵夜'], [7, '點心']].forEach(([column, label]) => {
+      const kcal = Math.round(numberInRange_(row[column], 0, 100000));
+      if (kcal > 0) {
+        meals.push(label);
+        mealTotals.push({ label, kcal });
+      }
+    });
+    return {
+      userId,
+      alias: cleanText_(member.name, 40) || '群組夥伴',
+      intake,
+      allowance,
+      deficit: allowance === null ? null : allowance - intake,
+      meals,
+      mealTotals,
+      // 群組分享一律包含食物名稱、份量與熱量；仍不回傳照片、體重、BMR 或備註。
+      mealDetails: buildPublicMealDetails_(row[17]),
+      isComplete: isLogComplete_(row[20]),
+      updatedAt: formatPublicTime_(row[19]),
+    };
+  }).sort((a, b) => {
+    if (a.isComplete !== b.isComplete) return a.isComplete ? -1 : 1;
+    return a.alias.localeCompare(b.alias, 'zh-Hant');
+  });
+
+  const result = { memberCount: activeIds.size, records };
+  writeJsonCache_(cacheKey, result, 120);
+  return result;
+}
+
+/** 以觀看者自己的 form 簽章產生群組牆網址，不能用群組共用網址取代。 */
+function getGroupWallUrl_(userId, groupId) {
+  userId = String(userId || '');
+  groupId = String(groupId || '');
+  if (!userId || !groupId) return '';
+  const sig = issueAccessToken_(userId, APP.tokenScopes.form, APP.tokenTtlSeconds.form);
+  return `${getWebAppExecUrl_()}?view=group&group=${encodeURIComponent(groupId)}&uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(sig)}`;
+}
+
+function getGroupWallLinksForUser_(userId) {
+  const activeIds = new Set(getActiveGroupIdsForUser_(userId));
+  return getGroups_()
+    .filter(group => group.enabled && activeIds.has(group.groupId))
+    .map(group => ({
+      groupId: group.groupId,
+      name: cleanText_(group.name, 80) || '我的群組',
+      url: getGroupWallUrl_(userId, group.groupId),
+    }));
+}
+
+/** 整合式紀錄牆的群組卡夾資料：只有名稱與 ID，不暴露成員清單。 */
+function getWallTabsForUser_(userId) {
+  const activeIds = new Set(getActiveGroupIdsForUser_(userId));
+  return getGroups_()
+    .filter(group => group.enabled && activeIds.has(group.groupId))
+    .map(group => ({
+      groupId: group.groupId,
+      name: cleanText_(group.name, 80) || '我的群組',
+    }));
+}
+
+/**
  * 將每日紀錄中的食物明細整理成公開頁需要的最小資料。
  * 不回傳照片、內部 ID、AI 信心、備註或其他可能洩漏隱私的欄位。
  */
@@ -1769,7 +2156,7 @@ function likePublicParticipant(payload) {
   const viewerId = String(payload.uid || '');
   const viewerSignature = String(payload.sig || '');
   const targetKey = String(payload.targetKey || '');
-  const tokenState = inspectAccessToken_(viewerId, viewerSignature, APP.tokenScopes.wall);
+  const tokenState = inspectPublicWallAccessToken_(viewerId, viewerSignature);
   if (tokenState !== 'ok') {
     throw new Error(tokenState === 'expired'
       ? '這個公開頁連結已經過期了。請回 LINE 輸入「公開紀錄」重新開啟。'
@@ -2121,6 +2508,7 @@ function dailyFormDataFromRow_(savedRow, foods, recordDate) {
     isComplete: isLogComplete_(savedRow[20]),
     isPublic: savedRow[21] === true || String(savedRow[21]).toUpperCase() === 'TRUE',
     publishFoodDetails: savedRow[23] === true || String(savedRow[23]).toUpperCase() === 'TRUE',
+    isGroupPublic: savedRow[26] === true || String(savedRow[26]).toUpperCase() === 'TRUE',
   };
 }
 
@@ -2250,7 +2638,7 @@ function historyMealTotals_(detailsJson, fallbackTotals) {
  */
 function ensureLogStatusHeader_(sheet) {
   const cache = CacheService.getScriptCache();
-  if (cache.get('log-headers:v6') === 'ok') return;
+  if (cache.get('log-headers:v7') === 'ok') return;
   const current = sheet.getRange(1, 1, 1, APP.headers.logs.length).getValues()[0];
   let changed = false;
   APP.headers.logs.forEach((header, index) => {
@@ -2264,7 +2652,7 @@ function ensureLogStatusHeader_(sheet) {
       .setFontWeight('bold')
       .setHorizontalAlignment('center');
   }
-  cache.put('log-headers:v6', 'ok', 21600);
+  cache.put('log-headers:v7', 'ok', 21600);
 }
 
 function isLogComplete_(value) {
@@ -2322,7 +2710,7 @@ function upsertDailyRow_(date, userId, row) {
 }
 
 function getMembers_() {
-  const cached = readJsonCache_('members:v5');
+  const cached = readJsonCache_('members:v6');
   if (Array.isArray(cached)) return cached;
   const sheet = getSheet_(APP.sheets.members);
   ensureMemberGroupHeader_(sheet);
@@ -2358,8 +2746,10 @@ function getMembers_() {
       reminderEvening: row[18] === '' || row[18] === null
         ? true
         : (row[18] === true || String(row[18]).toUpperCase() === 'TRUE'),
+      // 舊資料沒有群組分享偏好時，預設不分享，避免升版後意外公開舊紀錄。
+      defaultPublishToGroup: row[20] === true || String(row[20]).toUpperCase() === 'TRUE',
     }));
-  writeJsonCache_('members:v5', members, 180);
+  writeJsonCache_('members:v6', members, 180);
   return members;
 }
 
@@ -2404,8 +2794,8 @@ function savePersonalReminderSettings(payload) {
 
 function ensureMemberGroupHeader_(sheet) {
   const cache = CacheService.getScriptCache();
-  // v5 會強制補上四個個人提醒欄位，避免舊版快取讓新欄位延後出現。
-  if (cache.get('member-headers:v5') === 'ok') return;
+  // v6 會補上群組牆長期分享偏好欄位。
+  if (cache.get('member-headers:v6') === 'ok') return;
   const current = sheet.getRange(1, 1, 1, APP.headers.members.length).getValues()[0];
   APP.headers.members.forEach((header, index) => {
     if (String(current[index] || '') !== header) sheet.getRange(1, index + 1).setValue(header);
@@ -2415,7 +2805,8 @@ function ensureMemberGroupHeader_(sheet) {
     .setFontWeight('bold')
     .setHorizontalAlignment('center');
   initializePublicDefaultsFromLogs_(sheet);
-  cache.put('member-headers:v5', 'ok', 21600);
+  initializeGroupWallDefaultsFromLogs_(sheet);
+  cache.put('member-headers:v6', 'ok', 21600);
 }
 
 /**
@@ -2431,6 +2822,7 @@ function migrateStoredWeightPrivacy_() {
   }
   CacheService.getScriptCache().remove('members:v4');
   CacheService.getScriptCache().remove('members:v5');
+  CacheService.getScriptCache().remove('members:v6');
   props.setProperty('WEIGHT_PRIVACY_MIGRATED', '1');
 }
 
@@ -2487,17 +2879,47 @@ function initializePublicDefaultsFromLogs_(memberSheet) {
   if (changed) preferenceRange.setValues(preferences);
 }
 
+/** 升版時，保留使用者最近一次群組分享選擇；沒有任何紀錄則預設不分享。 */
+function initializeGroupWallDefaultsFromLogs_(memberSheet) {
+  const memberCount = memberSheet.getLastRow() - 1;
+  if (memberCount <= 0) return;
+  const preferenceRange = memberSheet.getRange(2, 21, memberCount, 1);
+  const preferences = preferenceRange.getValues();
+  if (!preferences.some(row => row[0] === '' || row[0] === null)) return;
+
+  const latestByUser = new Map();
+  const logSheet = getSheet_(APP.sheets.logs);
+  ensureLogStatusHeader_(logSheet);
+  if (logSheet.getLastRow() >= 2) {
+    const logRows = logSheet.getRange(2, 1, logSheet.getLastRow() - 1, APP.headers.logs.length).getValues();
+    for (let index = logRows.length - 1; index >= 0; index -= 1) {
+      const row = logRows[index];
+      const userId = String(row[2] || '');
+      if (!userId || latestByUser.has(userId)) continue;
+      latestByUser.set(userId, row[26] === true || String(row[26]).toUpperCase() === 'TRUE');
+    }
+  }
+  const userIds = memberSheet.getRange(2, 1, memberCount, 1).getValues();
+  let changed = false;
+  preferences.forEach((row, index) => {
+    if (row[0] !== '' && row[0] !== null) return;
+    row[0] = Boolean(latestByUser.get(String(userIds[index][0] || '')));
+    changed = true;
+  });
+  if (changed) preferenceRange.setValues(preferences);
+}
+
 function ensureGroupSheets_() {
   const cache = CacheService.getScriptCache();
-  if (cache.get('group-sheets:v1') === 'ok') return;
+  if (cache.get('group-sheets:v2') === 'ok') return;
   ensureSheet_(APP.sheets.groups, APP.headers.groups);
   ensureSheet_(APP.sheets.groupMembers, APP.headers.groupMembers);
-  cache.put('group-sheets:v1', 'ok', 21600);
+  cache.put('group-sheets:v2', 'ok', 21600);
 }
 
 function getGroups_() {
   ensureGroupSheets_();
-  const cached = readJsonCache_('groups:v2');
+  const cached = readJsonCache_('groups:v3');
   if (Array.isArray(cached)) return cached;
   const sheet = getSheet_(APP.sheets.groups);
   if (sheet.getLastRow() < 2) return [];
@@ -2507,8 +2929,13 @@ function getGroups_() {
       groupId: String(row[0]),
       name: String(row[1] || '未命名群組'),
       enabled: row[2] === true || String(row[2]).toUpperCase() === 'TRUE',
+      // 舊資料沒有類型，一律視為 LINE 群組，確保原有群組功能不受影響。
+      type: String(row[5] || 'line_group') === 'space' ? 'space' : 'line_group',
+      ownerUserId: String(row[6] || ''),
+      inviteCode: String(row[7] || ''),
+      inviteExpiresAt: row[8] || '',
     }));
-  writeJsonCache_('groups:v2', groups, 300);
+  writeJsonCache_('groups:v3', groups, 300);
   return groups;
 }
 
@@ -2521,12 +2948,20 @@ function getGroupById_(groupId) {
   return getGroups_().find(group => group.groupId === groupId) || null;
 }
 
+function isCheckInSpace_(group) {
+  return Boolean(group && group.type === 'space');
+}
+
+function getEnabledLineGroups_() {
+  return getEnabledGroups_().filter(group => !isCheckInSpace_(group));
+}
+
 function ensureGroupExists_(groupId) {
   groupId = String(groupId || '');
   if (!groupId) return null;
   const existing = getGroupById_(groupId);
   if (existing) return existing;
-  upsertGroup_({ groupId, name: '未命名群組', enabled: false });
+  upsertGroup_({ groupId, name: '未命名群組', enabled: false, type: 'line_group' });
   return getGroupById_(groupId);
 }
 
@@ -2539,16 +2974,220 @@ function upsertGroup_(data) {
     ? sheet.getRange(2, 1, rowCount, APP.headers.groups.length).getValues()
     : [];
   const index = rows.findIndex(row => String(row[0]) === String(data.groupId || ''));
-  const row = index >= 0 ? rows[index] : [String(data.groupId || ''), '', false, now, now];
+  const row = index >= 0
+    ? rows[index]
+    : [String(data.groupId || ''), '', false, now, now, 'line_group', '', '', ''];
+  while (row.length < APP.headers.groups.length) row.push('');
   row[0] = String(data.groupId || row[0]);
   if (data.name) row[1] = cleanText_(data.name, 80);
   if (data.enabled !== undefined) row[2] = Boolean(data.enabled);
   row[3] = row[3] || now;
   row[4] = now;
+  if (data.type !== undefined) row[5] = data.type === 'space' ? 'space' : 'line_group';
+  else if (!row[5]) row[5] = 'line_group';
+  if (data.ownerUserId !== undefined) row[6] = String(data.ownerUserId || '');
+  if (data.inviteCode !== undefined) row[7] = String(data.inviteCode || '');
+  if (data.inviteExpiresAt !== undefined) row[8] = data.inviteExpiresAt || '';
   if (index >= 0) sheet.getRange(index + 2, 1, 1, row.length).setValues([row]);
   else sheet.appendRow(row);
   CacheService.getScriptCache().remove('groups:v2');
+  CacheService.getScriptCache().remove('groups:v3');
+  invalidateGroupWallCachesForGroup_(row[0]);
   return row;
+}
+
+/**
+ * 打卡空間：由官方帳號內建立的私人成員空間，不需要建立 LINE 群組或邀請機器人。
+ * 仍沿用群組牆資料格式，所以既有的分享開關、日期切換與食物細項可直接共用。
+ */
+function createCheckInSpace_(ownerUserId, name) {
+  ownerUserId = String(ownerUserId || '');
+  const safeName = cleanText_(name, 40).replace(/\s+/g, ' ').trim();
+  if (!ownerUserId) throw new Error('找不到建立者身分，請從 LINE 私訊或自己的打卡頁操作。');
+  if (!safeName) throw new Error('請輸入打卡空間名稱。');
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(3000)) throw new Error('目前正在建立其他空間，請稍後再試。');
+  try {
+    const groupId = `space_${Utilities.getUuid().replace(/-/g, '')}`;
+    const invite = buildNewCheckInSpaceInvite_();
+    upsertGroup_({
+      groupId,
+      name: safeName,
+      enabled: true,
+      type: 'space',
+      ownerUserId,
+      inviteCode: invite.code,
+      inviteExpiresAt: invite.expiresAt,
+    });
+    upsertGroupMember_(groupId, ownerUserId, true);
+    return formatCheckInSpace_(getGroupById_(groupId), ownerUserId);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function joinCheckInSpaceByInvite_(userId, inviteCode) {
+  userId = String(userId || '');
+  if (!userId) throw new Error('找不到你的 LINE 身分。');
+  const normalizedCode = normalizeCheckInSpaceInviteCode_(inviteCode);
+  if (!normalizedCode) throw new Error('請輸入有效的邀請碼。');
+
+  const space = getGroups_().find(group => (
+    isCheckInSpace_(group)
+    && group.enabled
+    && normalizeCheckInSpaceInviteCode_(group.inviteCode) === normalizedCode
+  ));
+  if (!space) throw new Error('找不到這組邀請碼，請確認是否輸入正確或請空間擁有者重發。');
+  if (!isCheckInSpaceInviteActive_(space)) throw new Error('這組邀請碼已過期，請向空間擁有者索取新的邀請碼。');
+
+  const alreadyJoined = getGroupMemberships_(space.groupId)
+    .some(item => item.userId === userId && item.inGroup);
+  upsertGroupMember_(space.groupId, userId, true);
+  return { ...formatCheckInSpace_(getGroupById_(space.groupId), userId), alreadyJoined };
+}
+
+function regenerateCheckInSpaceInvite_(ownerUserId, groupIdOrInviteCode) {
+  ownerUserId = String(ownerUserId || '');
+  const requested = String(groupIdOrInviteCode || '');
+  const normalizedCode = normalizeCheckInSpaceInviteCode_(requested);
+  const space = getGroups_().find(group => (
+    isCheckInSpace_(group)
+    && group.ownerUserId === ownerUserId
+    && (group.groupId === requested || normalizeCheckInSpaceInviteCode_(group.inviteCode) === normalizedCode)
+  ));
+  if (!space) throw new Error('找不到你建立的打卡空間，或你沒有管理權限。');
+  const invite = buildNewCheckInSpaceInvite_(space.groupId);
+  upsertGroup_({
+    groupId: space.groupId,
+    name: space.name,
+    enabled: true,
+    type: 'space',
+    ownerUserId,
+    inviteCode: invite.code,
+    inviteExpiresAt: invite.expiresAt,
+  });
+  return formatCheckInSpace_(getGroupById_(space.groupId), ownerUserId);
+}
+
+function leaveCheckInSpace_(userId, groupId) {
+  userId = String(userId || '');
+  groupId = String(groupId || '');
+  const space = getGroupById_(groupId);
+  if (!isCheckInSpace_(space)) throw new Error('找不到打卡空間。');
+  if (space.ownerUserId === userId) throw new Error('空間建立者不能離開自己的空間；若不再使用，可停止分享紀錄即可。');
+  const joined = getGroupMemberships_(groupId).some(item => item.userId === userId && item.inGroup);
+  if (!joined) throw new Error('你目前不在這個打卡空間。');
+  upsertGroupMember_(groupId, userId, false);
+}
+
+function getCheckInSpacesForUser_(userId) {
+  userId = String(userId || '');
+  if (!userId) return [];
+  const activeIds = new Set(getActiveGroupIdsForUser_(userId));
+  const memberCounts = new Map();
+  getGroupMemberships_().forEach(item => {
+    if (item.inGroup) memberCounts.set(item.groupId, (memberCounts.get(item.groupId) || 0) + 1);
+  });
+  return getGroups_()
+    .filter(group => isCheckInSpace_(group) && group.enabled && activeIds.has(group.groupId))
+    .map(group => formatCheckInSpace_(group, userId, memberCounts.get(group.groupId) || 0))
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
+}
+
+function formatCheckInSpace_(space, viewerId, knownMemberCount) {
+  if (!space) return null;
+  const isOwner = String(space.ownerUserId || '') === String(viewerId || '');
+  const memberCount = knownMemberCount === undefined
+    ? getActiveGroupMemberIds_(space.groupId).length
+    : knownMemberCount;
+  return {
+    groupId: space.groupId,
+    name: cleanText_(space.name, 40) || '未命名打卡空間',
+    isOwner,
+    memberCount,
+    // 邀請碼只傳給空間建立者，不會出現在群組牆或其他成員的頁面資料中。
+    inviteCode: isOwner ? String(space.inviteCode || '') : '',
+    inviteExpiresAt: isOwner ? formatCheckInSpaceInviteExpiry_(space.inviteExpiresAt) : '',
+  };
+}
+
+function buildNewCheckInSpaceInvite_(excludeGroupId) {
+  const existing = new Set(
+    getGroups_()
+      .filter(group => group.groupId !== excludeGroupId)
+      .map(group => normalizeCheckInSpaceInviteCode_(group.inviteCode))
+      .filter(Boolean)
+  );
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  do {
+    let suffix = '';
+    for (let index = 0; index < 6; index += 1) {
+      suffix += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+    }
+    code = `MM${suffix}`;
+  } while (existing.has(code));
+  return { code, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
+}
+
+function normalizeCheckInSpaceInviteCode_(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function isCheckInSpaceInviteActive_(space) {
+  if (!isCheckInSpace_(space) || !space.enabled || !space.inviteCode) return false;
+  const expiresAt = new Date(space.inviteExpiresAt || 0).getTime();
+  return Number.isFinite(expiresAt) && expiresAt > Date.now();
+}
+
+function formatCheckInSpaceInviteExpiry_(value) {
+  const date = new Date(value || 0);
+  if (!Number.isFinite(date.getTime())) return '—';
+  return Utilities.formatDate(date, APP.timezone, 'yyyy-MM-dd HH:mm');
+}
+
+function checkInSpaceCreatedMessages_(space) {
+  return [{
+    type: 'text',
+    text: `✅ 已建立打卡空間「${space.name}」\n\n邀請好友的方式：\n1. 請對方先加入本官方帳號\n2. 請對方直接私訊這組邀請碼：\n${space.inviteCode}\n\n邀請碼有效到：${space.inviteExpiresAt}\n建立者可在打卡頁的「個人設定 → 打卡空間」隨時重設邀請碼。`,
+  }];
+}
+
+function checkInSpaceJoinedMessages_(userId, space) {
+  const message = space.alreadyJoined
+    ? `你已經在打卡空間「${space.name}」中了 ✅`
+    : `✅ 已加入打卡空間「${space.name}」！`;
+  return [{
+    type: 'template',
+    altText: message,
+    template: {
+      type: 'buttons',
+      text: `${message}\n\n到「紀錄牆」即可看到這個空間的分頁。想讓自己的紀錄出現在空間牆，請到打卡頁開啟「顯示在我的打卡空間／群組紀錄牆」。`,
+      actions: [
+        { type: 'uri', label: '開啟紀錄牆', uri: getPublicWallUrl_(userId) },
+        { type: 'uri', label: '前往打卡設定', uri: getSignedFormUrl_(userId) },
+      ],
+    },
+  }];
+}
+
+function checkInSpaceManagementMessages_(userId) {
+  const spaces = getCheckInSpacesForUser_(userId);
+  const ownerSpaces = spaces.filter(space => space.isOwner);
+  const joinedSpaces = spaces.filter(space => !space.isOwner);
+  const lines = ['👥 打卡空間'];
+  if (ownerSpaces.length) {
+    lines.push('', '你建立的空間：');
+    ownerSpaces.forEach(space => lines.push(`・${space.name}（${space.memberCount} 人）\n  邀請碼：${space.inviteCode}，到 ${space.inviteExpiresAt}`));
+  }
+  if (joinedSpaces.length) {
+    lines.push('', '你加入的空間：');
+    joinedSpaces.forEach(space => lines.push(`・${space.name}（${space.memberCount} 人）`));
+  }
+  if (!spaces.length) lines.push('', '你還沒有打卡空間。\n輸入「建立打卡空間 名稱」就能開始，例如：\n建立打卡空間 晚餐不爆卡小隊');
+  lines.push('', '管理請開啟你的打卡頁 → 個人設定 → 打卡空間。');
+  return [{ type: 'text', text: lines.join('\n') }];
 }
 
 function fetchLineGroupName_(groupId) {
@@ -2625,6 +3264,7 @@ function upsertGroupMember_(groupId, userId, inGroup) {
   if (index >= 0) sheet.getRange(index + 2, 1, 1, row.length).setValues([row]);
   else sheet.appendRow(row);
   CacheService.getScriptCache().remove('group-memberships:v3');
+  invalidateGroupWallCachesForGroup_(groupId);
   return true;
 }
 
@@ -2658,6 +3298,7 @@ function applyGroupMembershipStatuses_(groupId, statuses) {
   });
   sheet.getRange(2, 1, rows.length, columnCount).setValues(rows);
   CacheService.getScriptCache().remove('group-memberships:v3');
+  invalidateGroupWallCachesForGroup_(groupId);
 }
 
 function markUserInGroup_(groupId, userId, inGroup) {
@@ -2696,6 +3337,10 @@ function enableGroupRanking_(groupId) {
 }
 
 function syncGroupMembershipForGroup_(groupId) {
+  const group = getGroupById_(groupId);
+  if (isCheckInSpace_(group)) {
+    return { active: getActiveGroupMemberIds_(groupId).length, inactive: 0, unchanged: 0, skipped: 'check_in_space' };
+  }
   const token = getLineToken_();
   if (!token) throw new Error('缺少 LINE_CHANNEL_ACCESS_TOKEN。');
   const members = getMembers_().filter(member => member.userId);
@@ -2729,7 +3374,8 @@ function syncGroupMembershipForGroup_(groupId) {
 }
 
 function syncGroupMembership() {
-  const groups = getEnabledGroups_();
+  // 打卡空間的成員由邀請碼管理，不能也不需要呼叫 LINE 的群組成員 API。
+  const groups = getEnabledLineGroups_();
   return {
     ok: true,
     groups: groups.map(group => ({
@@ -2741,16 +3387,10 @@ function syncGroupMembership() {
 }
 
 function getReminderMembers_(slot) {
-  const enabledGroupIds = new Set(getEnabledGroups_().map(group => group.groupId));
-  const activeUserIds = new Set(
-    getGroupMemberships_()
-      .filter(item => item.inGroup && enabledGroupIds.has(item.groupId))
-      .map(item => item.userId)
-  );
   return getMembers_().filter(member => (
     member.userId
     && member.isFriend
-    && (activeUserIds.has(member.userId) || member.personalReminder === true)
+    && member.personalReminder !== false
     && reminderSlotEnabled_(member, slot)
   ));
 }
@@ -2826,7 +3466,7 @@ function upsertMember_(data) {
     }
   }
 
-  const row = existing || [data.userId, '', '', '', '', '', '', false, now, now, false, '', false, false, false, true, true, true, true, true];
+  const row = existing || [data.userId, '', '', '', '', '', '', false, now, now, false, '', false, false, false, true, true, true, true, true, false];
   row[0] = data.userId || row[0];
   if (data.name !== undefined && data.name !== '') row[1] = cleanText_(data.name, 40);
   if (data.bmr !== undefined && data.bmr !== '') row[2] = Number(data.bmr);
@@ -2860,6 +3500,8 @@ function upsertMember_(data) {
   else if (row[18] === undefined || row[18] === '') row[18] = true;
   if (data.reminderLate !== undefined) row[19] = Boolean(data.reminderLate);
   else if (row[19] === undefined || row[19] === '') row[19] = false;
+  if (data.defaultPublishToGroup !== undefined) row[20] = Boolean(data.defaultPublishToGroup);
+  else if (row[20] === undefined || row[20] === '') row[20] = false;
 
   if (rowNumber > 0) sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
   else sheet.appendRow(row);
@@ -2868,6 +3510,7 @@ function upsertMember_(data) {
   cache.remove('members:v3');
   cache.remove('members:v4');
   cache.remove('members:v5');
+  cache.remove('members:v6');
   cache.remove(`public-wall-base:v2:${today_()}`);
   cache.remove(`public-wall-base:v3:${today_()}`);
   cache.remove(`public-wall-base:v4:${today_()}`);
@@ -3175,14 +3818,14 @@ function getHistoryUrl_(userId) {
 }
 
 /**
- * 公開頁的網址是會被分享出去的，所以這裡只發 wall 範圍的 token：
- * 拿到的人可以看公開頁、可以按讚，但不能讀寫任何人的打卡紀錄。
+ * 「紀錄牆」是本人入口，因此發 hub 範圍的 token：可看公開與本人群組卡夾，
+ * 但不能讀寫任何人的打卡紀錄。舊 wall token 仍只保留公開頁相容性。
  */
 function getPublicWallUrl_(userId) {
   const baseUrl = getWebAppExecUrl_();
   userId = String(userId || '');
   if (!userId) return `${baseUrl}?view=public`;
-  const token = issueAccessToken_(userId, APP.tokenScopes.wall, APP.tokenTtlSeconds.wall);
+  const token = issueAccessToken_(userId, APP.tokenScopes.hub, APP.tokenTtlSeconds.hub);
   return `${baseUrl}?view=public&uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(token)}`;
 }
 
@@ -3247,6 +3890,27 @@ function inspectAccessToken_(userId, token, scope) {
 
   // 先驗簽章、後看時間：到期時間是被簽章保護的內容，不能拿未驗證的值做判斷。
   return Math.floor(Date.now() / 1000) > expiresAt ? 'expired' : 'ok';
+}
+
+/**
+ * 群組牆只讀取已分享的資料，因此可接受整合式紀錄牆的 hub token；
+ * 保留 form token 相容既有的群組專屬連結。無論哪一種都還會驗證目前群組成員資格。
+ */
+function inspectGroupWallAccessToken_(userId, token) {
+  const hubState = inspectAccessToken_(userId, token, APP.tokenScopes.hub);
+  if (hubState === 'ok') return 'ok';
+  const formState = inspectAccessToken_(userId, token, APP.tokenScopes.form);
+  if (formState === 'ok') return 'ok';
+  return hubState === 'expired' || formState === 'expired' ? 'expired' : 'invalid';
+}
+
+/** 公開牆按讚相容舊 wall 連結與新版 hub 紀錄牆連結。 */
+function inspectPublicWallAccessToken_(userId, token) {
+  const hubState = inspectAccessToken_(userId, token, APP.tokenScopes.hub);
+  if (hubState === 'ok') return 'ok';
+  const wallState = inspectAccessToken_(userId, token, APP.tokenScopes.wall);
+  if (wallState === 'ok') return 'ok';
+  return hubState === 'expired' || wallState === 'expired' ? 'expired' : 'invalid';
 }
 
 function validateFormSignature_(userId, token, scope) {
@@ -3848,6 +4512,7 @@ function invalidateLogCache_(date, userId) {
   cache.remove(`public-wall-base:v5:${date}`);
   cache.remove(`public-wall-base:v6:${date}`);
   cache.remove(`public-wall-base:v7:${date}`);
+  invalidateGroupWallCachesForUser_(date, userId);
   // 補登過去日期可能改變「公開連續打卡」，因此也要清掉今日公開頁快取。
   if (date && date !== today_()) {
     cache.remove(`public-wall-base:v2:${today_()}`);
@@ -3866,6 +4531,60 @@ function invalidateLogCache_(date, userId) {
     } catch (error) {
       console.warn(`清除公開按讚對象快取失敗：${error && error.message ? error.message : error}`);
     }
+  }
+}
+
+function invalidateGroupWallCachesForUser_(date, userId) {
+  if (!date || !userId) return;
+  const cache = CacheService.getScriptCache();
+  getActiveGroupIdsForUser_(userId).forEach(groupId => {
+    cache.remove(`group-wall-base:v2:${groupId}:${date}`);
+  });
+}
+
+/** 將一位成員所有既有每日紀錄統一成相同的群組牆分享狀態。 */
+function setGroupWallVisibilityForUser_(userId, visible) {
+  userId = String(userId || '');
+  if (!userId) return 0;
+  const sheet = getSheet_(APP.sheets.logs);
+  ensureLogStatusHeader_(sheet);
+  const rowCount = sheet.getLastRow() - 1;
+  if (rowCount <= 0) return 0;
+
+  const userIds = sheet.getRange(2, 3, rowCount, 1).getValues();
+  const flagRange = sheet.getRange(2, 27, rowCount, 1);
+  const flags = flagRange.getValues();
+  const desired = Boolean(visible);
+  let changed = 0;
+  flags.forEach((row, index) => {
+    if (String(userIds[index][0] || '') !== userId) return;
+    const current = row[0] === true || String(row[0]).toUpperCase() === 'TRUE';
+    if (current === desired) return;
+    row[0] = desired;
+    changed += 1;
+  });
+  if (changed) flagRange.setValues(flags);
+  invalidateAllGroupWallCachesForUser_(userId);
+  return changed;
+}
+
+function invalidateAllGroupWallCachesForUser_(userId) {
+  userId = String(userId || '');
+  if (!userId) return;
+  const cache = CacheService.getScriptCache();
+  getActiveGroupIdsForUser_(userId).forEach(groupId => {
+    for (let daysAgo = 0; daysAgo < 30; daysAgo += 1) {
+      cache.remove(`group-wall-base:v2:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+    }
+  });
+}
+
+function invalidateGroupWallCachesForGroup_(groupId) {
+  groupId = String(groupId || '');
+  if (!groupId) return;
+  const cache = CacheService.getScriptCache();
+  for (let daysAgo = 0; daysAgo < 30; daysAgo += 1) {
+    cache.remove(`group-wall-base:v2:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
   }
 }
 
