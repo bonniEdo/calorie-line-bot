@@ -80,11 +80,11 @@
     .history-more > summary { color:#765c17; font-size:13px; font-weight:900; cursor:pointer; }
     .date { display:flex; flex-direction:column; align-items:flex-start; gap:4px; color:var(--muted); font-size:13px; font-weight:800; }
     .energy { min-width:0; }
-    .energy strong { font-size:17px; }
+    .energy strong { display:block; font-size:17px; white-space:nowrap; letter-spacing:-.025em; }
     .energy small { display:block; color:var(--muted); font-size:11px; }
     .protein-badge { display:inline-flex; align-items:center; justify-content:center; padding:5px 7px; border:1px solid #b8d9c4; border-radius:999px; background:#eef8f1; color:#35684b; font-size:11px; font-weight:900; white-space:nowrap; }
-    .status { padding:4px 8px; border-radius:999px; background:#e5f2e8; color:#35684b; font-size:11px; font-weight:900; white-space:nowrap; }
-    .status.progress { background:#fff4d4; color:#765c17; }
+    .status { padding:0; color:var(--ink); font-size:18px; line-height:1; white-space:nowrap; }
+    .status.progress { color:var(--ink); }
     .detail { margin:12px 0 0 120px; padding:11px 12px; border-radius:14px; background:#fffaf0; }
     .detail-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:7px; }
     .detail-item { color:var(--muted); font-size:12px; }
@@ -94,8 +94,31 @@
     .meal span:last-child { font-weight:900; }
     .empty, .error { padding:22px 10px; text-align:center; color:var(--muted); line-height:1.6; }
     .error { color:var(--red); }
-    @media (max-width:520px) { .period-grid { grid-template-columns:1fr; } }
-    @media (max-width:420px) { .summary-card strong { font-size:17px; } .record summary { grid-template-columns:88px minmax(0,1fr) auto auto; gap:6px; } .protein-badge { padding:4px 6px; font-size:10px; } .detail { margin-left:0; } }
+    @media (max-width:520px) {
+      .period-grid { grid-template-columns:1fr; }
+      /* 蛋白質維持在熱量右側；縮短日期欄與欄距，讓 kcal 不會被擠成兩行。 */
+      .record summary {
+        grid-template-columns:52px max-content minmax(0,1fr) auto;
+        gap:5px;
+      }
+      .energy strong { font-size:16px; }
+      .protein-badge { padding:4px 6px; font-size:10px; }
+      .record summary > .protein-badge { justify-self:end; }
+      .record summary > .status { justify-self:end; }
+    }
+    @media (max-width:360px) {
+      .record summary {
+        grid-template-columns:52px max-content minmax(0,1fr);
+        grid-template-areas:
+          "date energy status"
+          ". protein status";
+      }
+      .record summary > .date { grid-area:date; }
+      .record summary > .energy { grid-area:energy; }
+      .record summary > .protein-badge { grid-area:protein; justify-self:end; }
+      .record summary > .status { grid-area:status; justify-self:end; }
+    }
+    @media (max-width:420px) { .summary-card strong { font-size:17px; } .detail { margin-left:0; } }
   </style>
 </head>
 <body>
@@ -195,7 +218,7 @@
           + '<span class="date"><strong>' + dateLabel(record.date) + '</strong></span>'
           + '<span class="energy"><strong>' + number(record.intake) + ' / ' + number(record.tdee) + ' kcal</strong><small>差額 ' + signed(record.deficit) + ' kcal</small></span>'
           + protein
-          + '<span class="status ' + (progress ? 'progress' : '') + '">' + (progress ? '打卡中' : '已完成') + '</span>'
+          + '<span class="status ' + (progress ? 'progress' : '') + '" aria-label="' + (progress ? '打卡中' : '已確認') + '" title="' + (progress ? '打卡中' : '已確認') + '">' + (progress ? '✏️' : '✅') + '</span>'
           + '</summary><div class="detail"><div class="detail-grid">'
           + '<div class="detail-item"><strong>' + number(record.exerciseKcal) + ' kcal</strong>運動消耗</div>'
           + '<div class="detail-item"><strong>' + number(record.exerciseMinutes) + ' 分鐘</strong>運動時間</div>'
