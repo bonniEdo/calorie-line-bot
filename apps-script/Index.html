@@ -23,7 +23,8 @@
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
     }
-    body.bmr-modal-open { overflow: hidden; }
+    /* 僅在實際可見的 BMR 視窗開啟時才鎖住背景；iOS 對隱藏區塊中的 open <details> 也會套用 body 捲動鎖。 */
+    body.bmr-modal-open { overflow: hidden; overscroll-behavior: none; }
     button, input, select, textarea { font: inherit; }
     button { touch-action: manipulation; }
     .app { max-width: 760px; margin: 0 auto; padding: 18px 14px 174px; }
@@ -461,11 +462,14 @@
       z-index: 1000;
       width: min(560px, calc(100vw - 28px));
       max-height: calc(100vh - 32px);
+      max-height: calc(100dvh - 32px);
       margin: 0;
       transform: translate(-50%, -50%);
       box-shadow: 0 20px 50px rgba(48, 37, 16, .24), 0 0 0 100vmax rgba(38, 31, 19, .38);
       overflow: auto;
+      -webkit-overflow-scrolling: touch;
       overscroll-behavior: contain;
+      touch-action: pan-y;
     }
     .bmr-helper[open] summary {
       min-height: 48px;
@@ -552,6 +556,12 @@
     .personal-settings[open] > summary { border-bottom: 1px solid var(--line); background: #fffdf8; }
     .personal-settings[open] > summary::after { transform: rotate(180deg); }
     .personal-settings-body { padding: 14px 16px 16px; }
+    /* 新使用者先在正常頁面完成 BMR；不使用遮罩，避免 iPhone 的背景捲動被鎖住。 */
+    .personal-settings.bmr-required { border-color: #e5ca70; background: #fff9e6; box-shadow: 0 8px 20px rgba(122, 86, 19, .08); }
+    .personal-settings.bmr-required > summary { color: #765c17; cursor: default; }
+    .bmr-setup-intro { margin-bottom: 14px; padding: 10px 12px; border-radius: 12px; background: #fff4cf; color: #765c17; font-size: 12px; font-weight: 700; line-height: 1.55; }
+    .bmr-setup-intro strong { display: block; color: #5d4812; font-size: 13px; }
+    .bmr-setup-continue { width:100%; min-height:46px; margin-top:12px; border:0; border-radius:13px; background:var(--ink); color:#fff; font-weight:900; cursor:pointer; }
     .exercise-section { padding: 0; overflow: hidden; }
     .exercise-section > summary {
       display: flex;
@@ -2088,16 +2098,17 @@
           '</details>',
           renderNewFeatureNotice_(),
         '</section>',
-        '<details id="personalSettings" class="section personal-settings" hidden>',
-          '<summary>👤 個人設定</summary>',
+        '<details id="personalSettings" class="section personal-settings' + (hasBmr ? '' : ' bmr-required') + '"' + (hasBmr ? ' hidden' : ' open') + '>',
+          '<summary>' + (hasBmr ? '👤 個人設定' : '⚡ 開始前先設定 BMR') + '</summary>',
           '<div class="personal-settings-body">',
+          (hasBmr ? '' : '<div class="bmr-setup-intro"><strong>完成這一步，就可以開始記錄飲食</strong>可直接輸入已知的 BMR，或點「重算」依生理性別、年齡、身高與體重估算。這些資料只會在你的手機上計算。</div>'),
           '<div class="form-grid personal-form-grid">',
             '<label>顯示名稱<input id="name" maxlength="40" value="' + escapeAttr(MEMBER.name || '') + '" placeholder="例如 Bonnie"></label>',
             '<div class="bmr-field-group">',
               '<div class="bmr-field-heading"><label for="bmr">基礎代謝 BMR</label></div>',
               '<div class="bmr-input-wrap">',
                 '<input id="bmr" type="number" inputmode="decimal" min="500" max="5000" value="' + escapeAttr(MEMBER.bmr || '') + '" placeholder="例如 1334">',
-                '<details id="bmrHelper" class="bmr-helper" ' + (hasBmr ? '' : 'open') + '>',
+                '<details id="bmrHelper" class="bmr-helper">',
                     '<summary><span class="bmr-helper-title">重算</span><span class="bmr-helper-action">展開估算</span></summary>',
                     '<button id="closeBmrHelper" class="bmr-helper-close" type="button" aria-label="取消並收合 BMR 估算">×</button>',
                     '<div class="bmr-helper-body">',
@@ -2114,6 +2125,7 @@
                 '</details>',
               '</div>',
               '<span class="bmr-inline-hint">用來估算 TDEE，不會顯示在群組排行。</span>',
+              (hasBmr ? '' : '<button id="bmrSetupContinue" class="bmr-setup-continue" type="button">完成 BMR，開始打卡</button>'),
             '</div>',
           '</div>',
           '<details id="publicSettings" class="public-settings">',
@@ -2137,6 +2149,7 @@
           renderCheckInSpaceSettings_(),
           '</div>',
         '</details>',
+        '<div id="checkInContent"' + (hasBmr ? '' : ' hidden') + '>',
         '<section class="section meal-entry-section">',
           '<h2 class="section-title">🍽️ 記錄這一餐</h2>',
           '<div class="entry-meal-step">',
@@ -2233,10 +2246,11 @@
           '</div>',
         '</section>',
         '<p class="hint" style="padding:0 8px">食物熱量與每日赤字皆為估算。排行榜用於一起『養成紀錄習慣』，不代表赤字越大越好。</p>',
+        '</div>',
       ].join('');
 
       renderBottomNav_();
-      submitBar.hidden = false;
+      submitBar.hidden = !hasBmr;
       updateSubmitButtons();
       bindStaticEvents();
       bindCheckInSpaceEvents_();
@@ -2754,13 +2768,27 @@
 
       const bmrHelper = document.getElementById('bmrHelper');
       const syncBmrModalState = () => {
-        document.body.classList.toggle('bmr-modal-open', Boolean(bmrHelper.open));
+        // 個人設定目前收起來時，裡面的 details 就算曾是 open 也不該鎖住整頁。
+        // iPhone Safari 對這個組合會讓使用者完全無法往下滑。
+        const isVisible = bmrHelper.open && bmrHelper.getClientRects().length > 0;
+        document.body.classList.toggle('bmr-modal-open', isVisible);
       };
       bmrHelper.addEventListener('toggle', syncBmrModalState);
       syncBmrModalState();
       document.addEventListener('keydown', event => {
         if (event.key === 'Escape' && bmrHelper.open) bmrHelper.open = false;
       });
+
+      const personalSettings = document.getElementById('personalSettings');
+      if (personalSettings && personalSettings.classList.contains('bmr-required')) {
+        personalSettings.addEventListener('toggle', () => {
+          if (document.getElementById('checkInContent').hidden) personalSettings.open = true;
+        });
+      }
+      const bmrSetupContinue = document.getElementById('bmrSetupContinue');
+      if (bmrSetupContinue) {
+        bmrSetupContinue.addEventListener('click', unlockBmrSetupIfReady_);
+      }
 
       submitButton.addEventListener('click', () => {
         submitLog(true);
@@ -3042,7 +3070,28 @@
       result.textContent = `估算 BMR：約 ${estimate} kcal／天`;
       result.hidden = false;
       markRecordChanged();
-      showToast(`已填入估算 BMR：${estimate} kcal／天`);
+      const bmrHelper = document.getElementById('bmrHelper');
+      if (bmrHelper) bmrHelper.open = false;
+      showToast(`已填入估算 BMR：${estimate} kcal／天，請按「完成 BMR，開始打卡」。`);
+    }
+
+    function unlockBmrSetupIfReady_() {
+      const bmrInput = document.getElementById('bmr');
+      const checkInContent = document.getElementById('checkInContent');
+      if (!bmrInput || !checkInContent || !checkInContent.hidden) return;
+      const bmr = Number(bmrInput.value || 0);
+      if (bmr < 500 || bmr > 5000) {
+        showToast('請先填入 500～5,000 kcal 的 BMR，或使用「重算」。');
+        bmrInput.focus();
+        return;
+      }
+      checkInContent.hidden = false;
+      const personalSettings = document.getElementById('personalSettings');
+      if (personalSettings) personalSettings.hidden = true;
+      submitBar.hidden = false;
+      // 若剛才由 BMR 估算器回來，確保 iPhone 不會遺留背景捲動鎖。
+      document.body.classList.remove('bmr-modal-open');
+      showToast('✅ BMR 已填入，可以開始記錄飲食。');
     }
 
     function localWeightStorageKey_() {
@@ -4152,8 +4201,7 @@
       const bmr = Number(document.getElementById('bmr').value || 0);
       if (markComplete && !bmr) {
         if (!automatic) setSavingState(false);
-        showToast('請先填寫 BMR，或使用「不知道基礎代謝？幫我估算」。');
-        document.getElementById('bmrHelper').open = true;
+        showToast('請先到下方「設定」填寫 BMR，或使用估算功能。');
         return;
       }
       if (markComplete && grandTotal() <= 0) {

@@ -108,7 +108,7 @@
     .tab.active { background: transparent; color: var(--ink); border-bottom-color: var(--amber); }
     .panel { margin-top: 12px; }
 
-    /* 收合狀態只有一行：名字、熱量、讚、展開箭頭，再加一條細進度條。 */
+    /* 收合狀態保留一眼可讀的摘要；手機版會讓名字單獨一列，避免被熱量與按讚擠掉。 */
     .person {
       margin-top: 8px;
       border: 1px solid var(--line);
@@ -137,6 +137,7 @@
     .kcal { font-size: 15px; font-weight: 900; white-space: nowrap; letter-spacing: -.01em; }
     .kcal small { margin-left: 1px; color: var(--muted); font-size: 11px; font-weight: 700; }
     .protein-badge { display:inline-flex; align-items:center; justify-content:center; min-height:25px; padding:4px 6px; border:1px solid #b8d9c4; border-radius:999px; background:#eef8f1; color:#35684b; font-size:11px; font-weight:900; white-space:nowrap; }
+    .protein-badge-placeholder, .person-spacer { width: 0; height: 0; overflow: hidden; }
     .chevron { width: 14px; color: #b7ac9c; font-size: 11px; text-align: center; transition: transform .16s ease; }
     .person[open] .chevron { transform: rotate(180deg); }
 
@@ -152,9 +153,14 @@
       font-size: 12px;
       line-height: 1.6;
     }
+    .record-status-row { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+    .record-status { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .record-updated { flex:0 0 auto; color:#928879; font-size:11px; font-weight:800; white-space:nowrap; }
+    .record-note { margin-top:2px; }
     .energy-line {
-      display: inline-flex;
+      display: flex;
       align-items: baseline;
+      justify-content: space-between;
       gap: 4px;
       margin-top: 7px;
       padding: 5px 8px;
@@ -164,7 +170,7 @@
       font-size: 12px;
       font-weight: 900;
     }
-    .energy-line small { color: #5b7865; font-size: 10px; font-weight: 700; }
+    .energy-line small { flex:0 0 auto; color: #5b7865; font-size: 10px; font-weight: 700; white-space:nowrap; }
     .meal-group { padding-top: 10px; }
     .meal-group + .meal-group { margin-top: 8px; border-top: 1px solid #f3ecde; }
     .meal-title { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:3px; color:var(--green); font-size:12px; font-weight:900; }
@@ -185,6 +191,19 @@
     .food-details summary { padding:9px 10px; color:#765c17; font-size:12px; font-weight:900; cursor:pointer; list-style-position:inside; }
     .food-details[open] summary { border-bottom:1px solid #f0e7d7; background:#fff8e8; }
     .food-details-body { padding:0 10px 10px; }
+    /* 先選餐別、再看該餐食物；一餐超過四項時也不會一次撐滿手機畫面。 */
+    .food-meal { margin:0; padding:0; border:0; }
+    .food-meal + .food-meal { margin-top:6px; border-top:1px solid #f3ecde; }
+    .food-meal > summary { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 0 7px; color:var(--green); cursor:pointer; list-style:none; }
+    .food-meal > summary::-webkit-details-marker, .food-more > summary::-webkit-details-marker { display:none; }
+    .food-meal > summary::marker, .food-more > summary::marker { content:''; }
+    .food-meal-summary { display:flex; align-items:center; min-width:0; gap:6px; font-size:12px; font-weight:900; }
+    .food-meal-count { color:var(--muted); font-size:10px; font-weight:700; white-space:nowrap; }
+    .meal-chevron { flex:0 0 auto; color:#b7ac9c; font-size:10px; transition:transform .16s ease; }
+    .food-meal[open] .meal-chevron { transform:rotate(180deg); }
+    .food-meal-items { padding:0 0 5px; }
+    .food-more { margin-top:4px; border-top:1px dashed #e8dfcf; }
+    .food-more > summary { padding:7px 0 2px; color:#765c17; font-size:11px; font-weight:900; cursor:pointer; list-style:none; }
 
     .rank-card { margin-top: 8px; padding: 4px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--white); }
     .rank-row {
@@ -280,6 +299,24 @@
     @media (max-width: 460px) {
       .date-toolbar { grid-template-columns: 1fr; gap: 6px; }
       .date-toolbar-actions { width: 100%; }
+      .person > summary { padding:10px 12px; }
+      .person-row {
+        grid-template-columns:auto minmax(0, 1fr) auto auto;
+        grid-template-areas:
+          "dot name action chevron"
+          ". protein kcal .";
+        column-gap:7px;
+        row-gap:4px;
+      }
+      .person-row > .dot { grid-area:dot; }
+      .person-row > .person-name { grid-area:name; display:-webkit-box; overflow:hidden; line-height:1.25; text-overflow:clip; white-space:normal; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+      .person-row > .protein-badge, .person-row > .protein-badge-placeholder { grid-area:protein; justify-self:start; }
+      .person-row > .kcal { grid-area:kcal; justify-self:start; }
+      .person-row > .like-button, .person-row > .person-spacer { grid-area:action; }
+      .person-row > .chevron { grid-area:chevron; }
+      .record-status-row { gap:6px; }
+      .record-status { font-size:11px; }
+      .record-updated { font-size:10px; }
     }
   </style>
 </head>
@@ -722,7 +759,7 @@
         const kcal = hasAllowance
           ? '<span class="kcal">' + number(intake) + '<small> / ' + number(allowance) + '</small></span>'
           : '<span class="kcal">' + number(intake) + '<small> kcal</small></span>';
-        return '<details class="person' + (record.isSelf ? ' group-self' : '') + '"><summary><div class="person-row"><span class="dot ' + (record.isComplete ? 'complete' : '') + '" aria-hidden="true"></span><span class="person-name">' + escapeHtml(record.alias || '群組夥伴') + (record.isSelf ? '（我）' : '') + '</span>' + proteinBadgeHtml(record) + kcal + '<span></span><span class="chevron" aria-hidden="true">▼</span></div>' + (hasAllowance ? '<div class="bar ' + (over ? 'over' : '') + '"><span style="width:' + ratio + '%"></span></div>' : '') + '</summary><div class="person-body">' + personMetaHtml(record, hasAllowance) + foodDetailsHtml(record, '這筆紀錄沒有可顯示的食物細項。') + '</div></details>';
+        return '<details class="person' + (record.isSelf ? ' group-self' : '') + '"><summary><div class="person-row"><span class="dot ' + (record.isComplete ? 'complete' : '') + '" aria-hidden="true"></span><span class="person-name">' + escapeHtml(record.alias || '群組夥伴') + (record.isSelf ? '（我）' : '') + '</span>' + proteinBadgeHtml(record) + kcal + '<span class="person-spacer" aria-hidden="true"></span><span class="chevron" aria-hidden="true">▼</span></div>' + (hasAllowance ? '<div class="bar ' + (over ? 'over' : '') + '"><span style="width:' + ratio + '%"></span></div>' : '') + '</summary><div class="person-body">' + personMetaHtml(record, hasAllowance) + foodDetailsHtml(record, '這筆紀錄沒有可顯示的食物細項。') + '</div></details>';
       }).join('');
     }
 
@@ -794,18 +831,17 @@
       const meals = Array.isArray(record.meals) && record.meals.length
         ? record.meals.join('、')
         : '尚未記錄餐點';
-      const parts = [
-        (record.isComplete ? '✅ 已完成' : '📝 打卡中') + '・已記錄：' + escapeHtml(meals),
-        hasAllowance ? '' : '今日額度待設定',
-        '最後更新 ' + escapeHtml(record.updatedAt || '—'),
-      ].filter(Boolean);
+      const status = (record.isComplete ? '✅ 已完成' : '📝 打卡中') + '・' + escapeHtml(meals);
+      const updatedAt = escapeHtml(record.updatedAt || '—');
+      const statusRow = '<div class="record-status-row"><span class="record-status">' + status + '</span><span class="record-updated" aria-label="最後更新 ' + updatedAt + '">更新 ' + updatedAt + '</span></div>';
+      const allowanceNote = hasAllowance ? '' : '<div class="record-note">今日額度待設定</div>';
       const bmr = Math.max(0, Number(record.bmr || 0));
       const exerciseKcal = Math.max(0, Number(record.exerciseKcal || 0));
       const tdeeEstimate = Math.max(0, Number(record.tdeeEstimate || 0));
       const energyLine = bmr > 0
-        ? '<div class="energy-line">⚡ BMR ' + number(bmr) + ' × 1.2 ＋運動 ' + number(exerciseKcal) + ' ＝ ' + number(tdeeEstimate || Math.round(bmr * 1.2 + exerciseKcal)) + ' kcal <small>TDEE 估算</small></div>'
+        ? '<div class="energy-line"><span>⚡ 可攝取 ' + number(tdeeEstimate || Math.round(bmr * 1.2 + exerciseKcal)) + ' kcal</span><small>' + (exerciseKcal > 0 ? '含運動 ' + number(exerciseKcal) + ' kcal' : 'TDEE 估算') + '</small></div>'
         : (exerciseKcal > 0 ? '<div class="energy-line">⚡ 運動消耗 ' + number(exerciseKcal) + ' kcal</div>' : '');
-      return '<div class="person-meta">' + parts.join('<br>') + energyLine + '</div>';
+      return '<div class="person-meta">' + statusRow + allowanceNote + energyLine + '</div>';
     }
 
     function foodDetailsHtml(record, noDetailsText) {
@@ -837,7 +873,7 @@
           ));
           const matchedTotal = mealTotals.find(item => String(item.label || '') === String(meal.label || ''));
           const mealTotal = matchedTotal ? Math.round(Number(matchedTotal.kcal || 0)) : calculatedTotal;
-          const items = meal.items.map(item => {
+          const foodItemHtml = item => {
             const quantity = Math.max(0, Number(item.quantity || 0));
             const meta = [];
             if (item.portion) meta.push(String(item.portion));
@@ -848,14 +884,20 @@
               + '</div>'
               + '<div class="food-kcal">' + number(item.calories) + ' kcal</div>'
               + '</div>';
-          }).join('');
-          return '<section class="meal-group">'
-            + '<div class="meal-title"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="meal-total-kcal">本餐共 ' + number(mealTotal) + ' kcal' + (mealProteinG > 0 ? ' ・🍖 ' + proteinNumber(mealProteinG) + ' g' : '') + '</span></div>'
-            + items
-            + '</section>';
+          };
+          const previewCount = 4;
+          const previewItems = meal.items.slice(0, previewCount).map(foodItemHtml).join('');
+          const remainingItems = meal.items.slice(previewCount);
+          const moreItems = remainingItems.length
+            ? '<details class="food-more"><summary>還有 ' + number(remainingItems.length) + ' 項食物，點選查看</summary><div>' + remainingItems.map(foodItemHtml).join('') + '</div></details>'
+            : '';
+          return '<details class="meal-group food-meal">'
+            + '<summary><span class="food-meal-summary"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="food-meal-count">' + number(meal.items.length) + ' 項</span></span><span class="meal-total-kcal">' + number(mealTotal) + ' kcal' + (mealProteinG > 0 ? ' ・🍖 ' + proteinNumber(mealProteinG) + 'g' : '') + '</span><span class="meal-chevron" aria-hidden="true">▼</span></summary>'
+            + '<div class="food-meal-items">' + previewItems + moreItems + '</div>'
+            + '</details>';
         }).join('');
       }
-      return '<details class="food-details"><summary>🍽️ 食物細項（點選查看）</summary><div class="food-details-body">' + content + '</div></details>';
+      return '<details class="food-details"><summary>🍽️ 食物細項（依餐別展開）</summary><div class="food-details-body">' + content + '</div></details>';
     }
 
     function renderStreaks() {
@@ -1032,7 +1074,7 @@
     }
     function proteinBadgeHtml(record) {
       const grams = Math.max(0, Number(record && record.proteinG || 0));
-      return grams > 0 ? '<span class="protein-badge" title="蛋白質估算">🍖 ' + proteinNumber(grams) + 'g</span>' : '<span aria-hidden="true"></span>';
+      return grams > 0 ? '<span class="protein-badge" title="蛋白質估算">🍖 ' + proteinNumber(grams) + 'g</span>' : '<span class="protein-badge-placeholder" aria-hidden="true"></span>';
     }
     function formatQuantity(value) {
       const quantity = Math.max(0, Number(value || 0));
