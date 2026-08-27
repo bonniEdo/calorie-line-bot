@@ -92,6 +92,8 @@
     .protein-chart-bar { fill:#72a987; }
     .protein-chart-average { stroke:#d79a3c; stroke-width:2; stroke-dasharray:5 4; }
     .protein-chart-label { fill:#8c8172; font-size:10px; }
+    .protein-empty { padding:38px 10px 42px; color:var(--muted); font-size:12px; font-weight:800; text-align:center; }
+    .protein-empty span { display:block; margin-bottom:8px; font-size:42px; line-height:1; }
     .monthly-insights { margin:11px 0 0; padding:0; list-style:none; }
     .monthly-insights li { margin-top:7px; padding:9px 11px; border-radius:11px; background:#f4faf6; color:#416351; font-size:12px; font-weight:800; line-height:1.5; }
     .share-controls { margin-top:12px; }
@@ -429,6 +431,35 @@
           : 0;
       }
 
+      function isCalorieGoalReached_(record) {
+        if (!record || record.status !== '完成') return false;
+        const intake = Math.max(0, Number(record.intake || 0));
+        const tdee = Math.max(0, Number(record.tdee || 0));
+        return tdee > 0 && intake >= tdee * .8 && intake <= tdee * 1.1;
+      }
+
+      function reportGoalMetric_(stats) {
+        if (data.waterTrackingEnabled) {
+          const hasWaterRecords = stats.waterTrackedDays > 0;
+          return {
+            value: hasWaterRecords ? `${stats.waterGoalDays}/${stats.waterTrackedDays} 天` : '—',
+            label: '飲水達標天數',
+            icon: '💧',
+            rate: hasWaterRecords ? stats.waterGoalDays / stats.waterTrackedDays : 1,
+            focus: '提高飲水達標',
+            note: hasWaterRecords ? `目前 ${stats.waterGoalDays}/${stats.waterTrackedDays} 天` : '本期尚無飲水紀錄',
+          };
+        }
+        return {
+          value: stats.elapsedDays ? `${stats.calorieGoalDays}/${stats.elapsedDays} 天` : '—',
+          label: '熱量達標天數',
+          icon: '🎯',
+          rate: stats.elapsedDays ? stats.calorieGoalDays / stats.elapsedDays : 1,
+          focus: '提高熱量達標',
+          note: stats.elapsedDays ? `目前 ${stats.calorieGoalDays}/${stats.elapsedDays} 天` : '尚無可計算日期',
+        };
+      }
+
       function buildMonthlyStats_(monthKey) {
         const matched = String(monthKey || '').match(/^(\d{4})-(\d{2})$/);
         if (!matched) return null;
@@ -449,12 +480,14 @@
         const exerciseRecords = monthRecords.filter(record => Number(record.exerciseMinutes || 0) > 0 || Number(record.exerciseKcal || 0) > 0);
         const waterTrackedRecords = monthRecords.filter(record => record.waterTracked && Number(record.waterGoalMl || 0) > 0);
         const waterGoalDays = waterTrackedRecords.filter(record => Number(record.waterMl || 0) >= Number(record.waterGoalMl || 0)).length;
+        const calorieGoalDays = completedRecords.filter(isCalorieGoalReached_).length;
         const mealCount = monthRecords.reduce((sum, record) => sum + (Array.isArray(record.meals) ? record.meals.length : 0), 0);
         const previousRecords = records.filter(record => String(record.date || '').slice(0, 7) === previousMonthKey_(monthKey));
         const previousCompleted = previousRecords.filter(record => record.status === '完成').length;
         return {
           key: monthKey,
           label: monthLabel_(monthKey),
+          reportLabel: `${matched[1]}${matched[2]}`,
           year,
           month,
           daysInMonth,
@@ -473,6 +506,7 @@
           exerciseMinutes: Math.round(exerciseRecords.reduce((sum, record) => sum + Math.max(0, Number(record.exerciseMinutes || 0)), 0)),
           waterTrackedDays: waterTrackedRecords.length,
           waterGoalDays,
+          calorieGoalDays,
           previousCompleted,
         };
       }
@@ -488,7 +522,13 @@
         }
         if (stats.averageProtein > 0) insights.push(`完成日平均蛋白質約 ${number(stats.averageProtein)} g。`);
         if (stats.exerciseMinutes > 0) insights.push(`共運動 ${number(stats.exerciseDays)} 天、${number(stats.exerciseMinutes)} 分鐘。`);
-        if (stats.waterTrackedDays > 0) insights.push(`有追蹤喝水的 ${stats.waterTrackedDays} 天中，達標 ${stats.waterGoalDays} 天。`);
+        if (data.waterTrackingEnabled) {
+          insights.push(stats.waterTrackedDays > 0
+            ? `有設定飲水的 ${stats.waterTrackedDays} 天中，達標 ${stats.waterGoalDays} 天。`
+            : '目前已開啟飲水紀錄，本期尚無可統計的飲水資料。');
+        } else if (stats.elapsedDays > 0) {
+          insights.push(`熱量落在 TDEE 80%～110% 的目標區間共 ${stats.calorieGoalDays}/${stats.elapsedDays} 天。`);
+        }
         if (insights.length < 3) insights.push(`最長連續完成 ${stats.longestStreak} 天，共記錄 ${stats.mealCount} 餐。`);
         return insights.slice(0, 4);
       }
@@ -501,6 +541,9 @@
         const plotWidth = width - pad.left - pad.right;
         const plotHeight = height - pad.top - pad.bottom;
         const values = new Map(stats.records.map(record => [Number(String(record.date).slice(8, 10)), Math.max(0, Number(record.proteinG || 0))]));
+        if (!Array.from(values.values()).some(value => value > 0)) {
+          return '<div class="protein-chart-wrap"><div class="protein-empty"><span>🍖</span>尚無蛋白質資料</div></div>';
+        }
         const maximum = Math.max(20, ...Array.from(values.values()));
         const average = stats.averageProtein;
         const slot = plotWidth / stats.daysInMonth;
@@ -525,12 +568,12 @@
       }
 
       function renderMonthlyReport_(stats) {
-        const waterValue = stats.waterTrackedDays ? `${stats.waterGoalDays}/${stats.waterTrackedDays} 天` : '未啟用';
+        const goalMetric = reportGoalMetric_(stats);
         const insights = monthlyInsights_(stats);
         return '<section class="monthly-report-hero">'
           + '<button class="monthly-report-back" type="button" data-report-back>← 回到歷史</button>'
           + '<div class="eyebrow" style="margin-top:14px">MONTHLY REPORT</div>'
-          + '<h1>📅 ' + stats.label + '努力月報</h1>'
+          + '<h1>📅 ' + stats.reportLabel + ' 努力月報</h1>'
           + '<p>用每天留下的紀錄，看見這個月累積的努力。</p></section>'
           + '<section class="report-section"><div class="report-section-head"><div><h2>本月摘要</h2><p>完成率以本月已經過的日期計算。</p></div></div>'
           + '<div class="monthly-stats">'
@@ -539,7 +582,7 @@
           + '<div class="monthly-stat"><strong>' + stats.mealCount + ' 餐</strong><span>本月記錄餐數</span></div>'
           + '<div class="monthly-stat"><strong>' + (stats.averageProtein ? proteinNumber(stats.averageProtein) + ' g' : '—') + '</strong><span>完成日平均蛋白質</span></div>'
           + '<div class="monthly-stat"><strong>' + stats.exerciseMinutes + ' 分</strong><span>運動 ' + stats.exerciseDays + ' 天</span></div>'
-          + '<div class="monthly-stat"><strong>' + waterValue + '</strong><span>飲水達標／追蹤天數</span></div>'
+          + '<div class="monthly-stat"><strong>' + goalMetric.value + '</strong><span>' + goalMetric.icon + ' ' + goalMetric.label + '</span></div>'
           + '</div></section>'
           + '<section class="report-section"><div class="report-section-head"><div><h2>📈 每日熱量趨勢</h2><p>攝取量與 TDEE 皆為估算，重點是觀察整體節奏。</p></div></div>' + buildTrendChart(stats.records.slice().reverse()) + '</section>'
           + '<section class="report-section"><div class="report-section-head"><div><h2>🍖 每日蛋白質</h2><p>虛線是本月完成日的平均值。</p></div></div>' + buildProteinChart_(stats) + '</section>'
@@ -615,6 +658,7 @@
         const exerciseRecords = weekRecords.filter(record => Number(record.exerciseMinutes || 0) > 0 || Number(record.exerciseKcal || 0) > 0);
         const waterTrackedRecords = weekRecords.filter(record => record.waterTracked && Number(record.waterGoalMl || 0) > 0);
         const waterGoalDays = waterTrackedRecords.filter(record => Number(record.waterMl || 0) >= Number(record.waterGoalMl || 0)).length;
+        const calorieGoalDays = completedRecords.filter(isCalorieGoalReached_).length;
         const previousStart = addDateDays_(weekKey, -7);
         const previousEnd = addDateDays_(weekKey, -1);
         const previousRecords = records.filter(record => String(record.date || '') >= previousStart && String(record.date || '') <= previousEnd);
@@ -638,6 +682,7 @@
           exerciseMinutes: Math.round(exerciseRecords.reduce((sum, record) => sum + Math.max(0, Number(record.exerciseMinutes || 0)), 0)),
           waterTrackedDays: waterTrackedRecords.length,
           waterGoalDays,
+          calorieGoalDays,
           previousCompleted: previousRecords.filter(record => record.status === '完成').length,
         };
       }
@@ -650,7 +695,13 @@
         }
         if (stats.averageProtein > 0) insights.push(`完成日平均蛋白質約 ${proteinNumber(stats.averageProtein)} g。`);
         if (stats.exerciseMinutes > 0) insights.push(`本週運動 ${stats.exerciseDays} 天，共 ${number(stats.exerciseMinutes)} 分鐘。`);
-        if (stats.waterTrackedDays > 0) insights.push(`喝水追蹤 ${stats.waterTrackedDays} 天，達標 ${stats.waterGoalDays} 天。`);
+        if (data.waterTrackingEnabled) {
+          insights.push(stats.waterTrackedDays > 0
+            ? `有設定飲水的 ${stats.waterTrackedDays} 天中，達標 ${stats.waterGoalDays} 天。`
+            : '目前已開啟飲水紀錄，本期尚無可統計的飲水資料。');
+        } else if (stats.elapsedDays > 0) {
+          insights.push(`熱量落在 TDEE 80%～110% 的目標區間共 ${stats.calorieGoalDays}/${stats.elapsedDays} 天。`);
+        }
         return insights.slice(0, 4);
       }
 
@@ -661,6 +712,9 @@
         const plotWidth = width - pad.left - pad.right;
         const plotHeight = height - pad.top - pad.bottom;
         const values = stats.days.map(day => day.record ? Math.max(0, Number(day.record.proteinG || 0)) : 0);
+        if (!values.some(value => value > 0)) {
+          return '<div class="protein-chart-wrap"><div class="protein-empty"><span>🍖</span>本週尚無蛋白質資料</div></div>';
+        }
         const maximum = Math.max(20, ...values);
         const slot = plotWidth / 7;
         const barWidth = slot * .58;
@@ -679,7 +733,7 @@
       }
 
       function renderWeeklyReport_(stats) {
-        const waterValue = stats.waterTrackedDays ? `${stats.waterGoalDays}/${stats.waterTrackedDays} 天` : '未啟用';
+        const goalMetric = reportGoalMetric_(stats);
         const insights = weeklyInsights_(stats);
         return '<section class="monthly-report-hero"><button class="monthly-report-back" type="button" data-week-report-back>← 回到歷史</button>'
           + '<div class="eyebrow" style="margin-top:14px">WEEKLY REPORT</div><h1>📊 ' + stats.label + ' 努力週報</h1><p>用七天的節奏，看見這一週累積的努力。</p></section>'
@@ -689,7 +743,7 @@
           + '<div class="monthly-stat"><strong>' + stats.mealCount + ' 餐</strong><span>本週記錄餐數</span></div>'
           + '<div class="monthly-stat"><strong>' + (stats.averageProtein ? proteinNumber(stats.averageProtein) + ' g' : '—') + '</strong><span>完成日平均蛋白質</span></div>'
           + '<div class="monthly-stat"><strong>' + stats.exerciseMinutes + ' 分</strong><span>運動 ' + stats.exerciseDays + ' 天</span></div>'
-          + '<div class="monthly-stat"><strong>' + waterValue + '</strong><span>飲水達標／追蹤天數</span></div></div></section>'
+          + '<div class="monthly-stat"><strong>' + goalMetric.value + '</strong><span>' + goalMetric.icon + ' ' + goalMetric.label + '</span></div></div></section>'
           + '<section class="report-section"><div class="report-section-head"><div><h2>📈 本週熱量趨勢</h2><p>攝取量與 TDEE 皆為估算。</p></div></div>' + buildTrendChart(stats.records.slice().reverse()) + '</section>'
           + '<section class="report-section"><div class="report-section-head"><div><h2>🍖 本週蛋白質</h2><p>虛線是完成日平均值。</p></div></div>' + buildWeeklyProteinChart_(stats) + '</section>'
           + '<section class="report-section"><div class="report-section-head"><div><h2>✨ 本週觀察</h2></div></div><ul class="monthly-insights">' + insights.map(text => '<li>' + text + '</li>').join('') + '</ul></section>'
@@ -746,24 +800,24 @@
         context.stroke();
       }
 
-      function drawTechCard_(context, x, y, width, height, accent) {
+      function drawTechCard_(context, x, y, width, height, accent, accentWidth, accentBorder) {
         fillRoundedRect_(context, x, y, width, height, 24, '#0c1b2d');
-        strokeRoundedRect_(context, x, y, width, height, 24, '#203750', 2);
-        context.fillStyle = accent || '#42e8ff';
-        context.fillRect(x + 24, y, Math.min(150, width - 48), 4);
+        strokeRoundedRect_(context, x, y, width, height, 24, accentBorder ? (accent || '#ffcb66') : '#203750', accentBorder ? 3 : 2);
+        if (!accentBorder) {
+          context.fillStyle = accent || '#42e8ff';
+          context.fillRect(x + 24, y, Math.min(accentWidth || 50, width - 48), 4);
+        }
       }
 
       function drawIconBubble_(context, x, y, size, icon, accent) {
-        fillRoundedRect_(context, x, y, size, size, size / 2, accent + '1f');
-        strokeRoundedRect_(context, x, y, size, size, size / 2, accent + '73', 1);
         context.textAlign = 'center';
         context.fillStyle = '#f2fbff';
-        context.font = `${Math.round(size * .48)}px "Apple Color Emoji","Segoe UI Emoji",sans-serif`;
-        context.fillText(icon, x + size / 2, y + size * .68);
+        context.font = `${Math.round(size * .72)}px "Apple Color Emoji","Segoe UI Emoji",sans-serif`;
+        context.fillText(icon, x + size / 2, y + size * .78);
       }
 
-      function drawMetric_(context, x, y, width, value, label, accent, icon) {
-        drawTechCard_(context, x, y, width, 132, accent);
+      function drawMetric_(context, x, y, width, value, label, accent, icon, accentWidth) {
+        drawTechCard_(context, x, y, width, 132, accent, accentWidth);
         drawIconBubble_(context, x + 20, y + 29, 52, icon, accent);
         context.textAlign = 'left';
         context.fillStyle = accent;
@@ -856,6 +910,16 @@
 
       function drawProteinBars_(context, stats, x, y, width, height) {
         const values = new Map(stats.records.map(record => [Number(String(record.date).slice(8, 10)), Math.max(0, Number(record.proteinG || 0))]));
+        if (!Array.from(values.values()).some(value => value > 0)) {
+          context.textAlign = 'center';
+          context.fillStyle = '#f2fbff';
+          context.font = '52px "Apple Color Emoji","Segoe UI Emoji",sans-serif';
+          context.fillText('🍖', x + width / 2, y + height / 2 - 5);
+          context.fillStyle = '#7890a7';
+          context.font = '800 20px sans-serif';
+          context.fillText('尚無蛋白質資料', x + width / 2, y + height / 2 + 34);
+          return;
+        }
         const maximum = Math.max(20, stats.averageProtein, ...Array.from(values.values()));
         const slot = width / stats.daysInMonth;
         const barWidth = Math.max(8, slot * .58);
@@ -927,10 +991,10 @@
           context.textAlign = 'left';
           context.fillStyle = '#f2fbff';
           context.font = '900 54px sans-serif';
-          context.fillText(stats.label + '努力月報', 130, 132);
+          context.fillText(stats.reportLabel + ' 努力月報', 130, 132);
           context.fillStyle = '#8fa6bb';
           context.font = '700 22px sans-serif';
-          context.fillText('完整行為數據 · 熱量 · 蛋白質 · 運動 · 飲水', 55, 174);
+          context.fillText('完整行為數據 · 熱量 · 蛋白質 · 運動 · 達標', 55, 174);
           fillRoundedRect_(context, 818, 48, 207, 45, 22, 'rgba(66,232,255,.1)');
           strokeRoundedRect_(context, 818, 48, 207, 45, 22, '#2a819a', 1);
           context.textAlign = 'center';
@@ -940,35 +1004,35 @@
 
           const metricGap = 14;
           const metricWidth = (970 - metricGap * 2) / 3;
-          drawMetric_(context, 55, 210, metricWidth, `${stats.completedDays}/${stats.elapsedDays}`, `完成打卡 · ${stats.completionRate}%`, '#42e8ff', '✅');
-          drawMetric_(context, 55 + metricWidth + metricGap, 210, metricWidth, `${stats.longestStreak} 天`, '最長連續完成', '#71f6ad', '🔥');
-          drawMetric_(context, 55 + (metricWidth + metricGap) * 2, 210, metricWidth, `${stats.mealCount} 餐`, '本月記錄餐數', '#ffcb66', '🍽️');
+          drawMetric_(context, 55, 210, metricWidth, `${stats.completedDays}/${stats.elapsedDays}`, `完成打卡 · ${stats.completionRate}%`, '#42e8ff', '✅', 50);
+          drawMetric_(context, 55 + metricWidth + metricGap, 210, metricWidth, `${stats.longestStreak} 天`, '最長連續完成', '#71f6ad', '🔥', 50);
+          drawMetric_(context, 55 + (metricWidth + metricGap) * 2, 210, metricWidth, `${stats.mealCount} 餐`, '本月記錄餐數', '#ffcb66', '🍽️', 50);
 
           drawTechCard_(context, 50, 375, 980, 320, '#71f6ad');
-          drawSectionTitle_(context, 80, 430, '01  每日熱量趨勢', hideCalories ? 'PRIVACY MODE' : 'INTAKE vs TDEE', '#71f6ad', '📈');
+          drawSectionTitle_(context, 80, 430, '每日熱量趨勢', hideCalories ? 'PRIVACY MODE' : 'INTAKE vs TDEE', '#71f6ad', '📈');
           drawCalorieTrend_(context, stats, 80, 450, 920, 205, hideCalories);
 
           drawTechCard_(context, 50, 725, 980, 300, '#42e8ff');
-          drawSectionTitle_(context, 80, 780, '02  每日蛋白質', `完成日平均 ${stats.averageProtein ? proteinNumber(stats.averageProtein) + ' g' : '—'}`, '#42e8ff', '🍖');
+          drawSectionTitle_(context, 80, 780, '每日蛋白質', `完成日平均 ${stats.averageProtein ? proteinNumber(stats.averageProtein) + ' g' : '—'}`, '#42e8ff', '🍖');
           drawProteinBars_(context, stats, 85, 815, 910, 140);
 
           const highlightY = 1055;
           const highlightWidth = (970 - metricGap * 2) / 3;
+          const goalMetric = reportGoalMetric_(stats);
           const highlights = [
             { value: stats.averageProtein ? `${proteinNumber(stats.averageProtein)} g` : '—', label: '完成日平均蛋白質', accent: '#42e8ff', icon: '🍖' },
             { value: `${stats.exerciseMinutes} 分`, label: `運動共 ${stats.exerciseDays} 天`, accent: '#9b8cff', icon: '🏋️' },
-            { value: stats.waterTrackedDays ? `${stats.waterGoalDays}/${stats.waterTrackedDays} 天` : '未啟用', label: '飲水達標／追蹤天數', accent: '#71f6ad', icon: '💧' },
+            { value: goalMetric.value, label: goalMetric.label, accent: '#71f6ad', icon: goalMetric.icon },
           ];
           highlights.forEach((item, index) => {
             drawMetric_(context, 55 + index * (highlightWidth + metricGap), highlightY, highlightWidth, item.value, item.label, item.accent, item.icon);
           });
 
-          drawTechCard_(context, 50, 1217, 980, 315, '#ffcb66');
-          drawSectionTitle_(context, 80, 1272, '03  月底結論與重點', 'HIGHLIGHTS & NEXT FOCUS', '#ffcb66', '✨');
+          drawTechCard_(context, 50, 1217, 980, 315, '#ffcb66', 50, true);
+          drawSectionTitle_(context, 80, 1272, '月底結論與重點', 'HIGHLIGHTS & NEXT FOCUS', '#ffcb66', '✨');
           const difference = stats.previousCompleted > 0 ? stats.completedDays - stats.previousCompleted : null;
-          const waterRate = stats.waterTrackedDays ? stats.waterGoalDays / stats.waterTrackedDays : 1;
           let nextFocus = { value: '維持目前節奏', note: '穩定比完美重要' };
-          if (stats.waterTrackedDays && waterRate < .8) nextFocus = { value: '提高喝水達標', note: `目前 ${stats.waterGoalDays}/${stats.waterTrackedDays} 天` };
+          if (goalMetric.rate < .8) nextFocus = { value: goalMetric.focus, note: goalMetric.note };
           else if (stats.exerciseDays < 8) nextFocus = { value: '每週運動 2 次', note: `目前共 ${stats.exerciseDays} 天` };
           else if (stats.averageProtein > 0 && stats.averageProtein < 100) nextFocus = { value: '蛋白質更穩定', note: `目前平均 ${proteinNumber(stats.averageProtein)} g` };
           const insightTiles = [
@@ -1049,6 +1113,16 @@
 
       function drawWeeklyProteinBars_(context, stats, x, y, width, height) {
         const values = stats.days.map(day => day.record ? Math.max(0, Number(day.record.proteinG || 0)) : 0);
+        if (!values.some(value => value > 0)) {
+          context.textAlign = 'center';
+          context.fillStyle = '#f2fbff';
+          context.font = '52px "Apple Color Emoji","Segoe UI Emoji",sans-serif';
+          context.fillText('🍖', x + width / 2, y + height / 2 - 5);
+          context.fillStyle = '#7890a7';
+          context.font = '800 20px sans-serif';
+          context.fillText('本週尚無蛋白質資料', x + width / 2, y + height / 2 + 34);
+          return;
+        }
         const maximum = Math.max(20, stats.averageProtein, ...values);
         const slot = width / 7;
         const barWidth = slot * .5;
@@ -1107,12 +1181,13 @@
           context.font = '900 22px sans-serif';
           context.fillText('MENG MENG // WEEKLY PERFORMANCE', 55, 62);
           drawIconBubble_(context, 55, 88, 58, '📊', '#42e8ff');
+          context.textAlign = 'left';
           context.fillStyle = '#f2fbff';
           context.font = '900 51px sans-serif';
           context.fillText(stats.label + ' 努力週報', 130, 132, 650);
           context.fillStyle = '#8fa6bb';
           context.font = '700 22px sans-serif';
-          context.fillText('七日節奏 · 熱量 · 蛋白質 · 運動 · 飲水', 55, 174);
+          context.fillText('七日節奏 · 熱量 · 蛋白質 · 運動 · 達標', 55, 174);
           fillRoundedRect_(context, 818, 48, 207, 45, 22, 'rgba(66,232,255,.1)');
           strokeRoundedRect_(context, 818, 48, 207, 45, 22, '#2a819a', 1);
           context.textAlign = 'center';
@@ -1122,35 +1197,35 @@
 
           const gap = 14;
           const metricWidth = (970 - gap * 2) / 3;
-          drawMetric_(context, 55, 210, metricWidth, `${stats.completedDays}/${stats.elapsedDays}`, `完成打卡 · ${stats.completionRate}%`, '#42e8ff', '✅');
-          drawMetric_(context, 55 + metricWidth + gap, 210, metricWidth, `${stats.longestStreak} 天`, '最長連續完成', '#71f6ad', '🔥');
-          drawMetric_(context, 55 + (metricWidth + gap) * 2, 210, metricWidth, `${stats.mealCount} 餐`, '本週記錄餐數', '#ffcb66', '🍽️');
+          drawMetric_(context, 55, 210, metricWidth, `${stats.completedDays}/${stats.elapsedDays}`, `完成打卡 · ${stats.completionRate}%`, '#42e8ff', '✅', 50);
+          drawMetric_(context, 55 + metricWidth + gap, 210, metricWidth, `${stats.longestStreak} 天`, '最長連續完成', '#71f6ad', '🔥', 50);
+          drawMetric_(context, 55 + (metricWidth + gap) * 2, 210, metricWidth, `${stats.mealCount} 餐`, '本週記錄餐數', '#ffcb66', '🍽️', 50);
 
           drawTechCard_(context, 50, 375, 980, 330, '#71f6ad');
-          drawSectionTitle_(context, 80, 430, '01  本週熱量趨勢', hideCalories ? 'PRIVACY MODE' : 'INTAKE vs TDEE', '#71f6ad', '📈');
+          drawSectionTitle_(context, 80, 430, '本週熱量趨勢', hideCalories ? 'PRIVACY MODE' : 'INTAKE vs TDEE', '#71f6ad', '📈');
           drawWeeklyCalorieTrend_(context, stats, 80, 450, 920, 210, hideCalories);
 
           drawTechCard_(context, 50, 735, 980, 300, '#42e8ff');
-          drawSectionTitle_(context, 80, 790, '02  本週蛋白質', `完成日平均 ${stats.averageProtein ? proteinNumber(stats.averageProtein) + ' g' : '—'}`, '#42e8ff', '🍖');
+          drawSectionTitle_(context, 80, 790, '本週蛋白質', `完成日平均 ${stats.averageProtein ? proteinNumber(stats.averageProtein) + ' g' : '—'}`, '#42e8ff', '🍖');
           drawWeeklyProteinBars_(context, stats, 85, 825, 910, 140);
 
           const highlightY = 1065;
           const highlightWidth = (970 - gap * 2) / 3;
+          const goalMetric = reportGoalMetric_(stats);
           const highlights = [
             { value: stats.averageProtein ? `${proteinNumber(stats.averageProtein)} g` : '—', label: '完成日平均蛋白質', accent: '#42e8ff', icon: '🍖' },
             { value: `${stats.exerciseMinutes} 分`, label: `運動共 ${stats.exerciseDays} 天`, accent: '#9b8cff', icon: '🏋️' },
-            { value: stats.waterTrackedDays ? `${stats.waterGoalDays}/${stats.waterTrackedDays} 天` : '未啟用', label: '飲水達標／追蹤天數', accent: '#71f6ad', icon: '💧' },
+            { value: goalMetric.value, label: goalMetric.label, accent: '#71f6ad', icon: goalMetric.icon },
           ];
           highlights.forEach((item, index) => {
             drawMetric_(context, 55 + index * (highlightWidth + gap), highlightY, highlightWidth, item.value, item.label, item.accent, item.icon);
           });
 
-          drawTechCard_(context, 50, 1227, 980, 315, '#ffcb66');
-          drawSectionTitle_(context, 80, 1282, '03  本週結論與下週重點', 'HIGHLIGHTS & NEXT FOCUS', '#ffcb66', '✨');
+          drawTechCard_(context, 50, 1227, 980, 315, '#ffcb66', 50, true);
+          drawSectionTitle_(context, 80, 1282, '本週結論與下週重點', 'HIGHLIGHTS & NEXT FOCUS', '#ffcb66', '✨');
           const difference = stats.previousCompleted > 0 ? stats.completedDays - stats.previousCompleted : null;
-          const waterRate = stats.waterTrackedDays ? stats.waterGoalDays / stats.waterTrackedDays : 1;
           let nextFocus = { value: '維持目前節奏', note: '穩定比完美重要' };
-          if (stats.waterTrackedDays && waterRate < .8) nextFocus = { value: '提高喝水達標', note: `目前 ${stats.waterGoalDays}/${stats.waterTrackedDays} 天` };
+          if (goalMetric.rate < .8) nextFocus = { value: goalMetric.focus, note: goalMetric.note };
           else if (stats.exerciseDays < 2) nextFocus = { value: '安排 2 次運動', note: `本週共 ${stats.exerciseDays} 天` };
           else if (stats.averageProtein > 0 && stats.averageProtein < 100) nextFocus = { value: '蛋白質更穩定', note: `目前平均 ${proteinNumber(stats.averageProtein)} g` };
           const insightTiles = [
@@ -1200,7 +1275,7 @@
           if (!downloadOnly && typeof File === 'function' && navigator.share && navigator.canShare) {
             const file = new File([blob], filename, { type: 'image/png' });
             if (navigator.canShare({ files: [file] })) {
-              await navigator.share({ files: [file], title: stats.label + '努力月報', text: '這是我這個月累積的努力紀錄。' });
+              await navigator.share({ files: [file], title: stats.reportLabel + ' 努力月報', text: '這是我這個月累積的努力紀錄。' });
               status.textContent = '分享圖片已準備完成。';
               return;
             }

@@ -215,6 +215,9 @@ function doGet(e) {
       historyData.demoReport = String((e && e.parameter && e.parameter.report) || '') === 'week' ? 'week' : 'month';
     }
     if (tokenState === 'ok') {
+      // 報表依「目前」的飲水功能開關選擇摘要指標，不使用歷史紀錄反推。
+      // 每次開啟歷史頁都重新讀取，避免歷史資料快取保留舊設定。
+      historyData.waterTrackingEnabled = Boolean(getWaterSettings_(historyUid).enabled);
       // 歷史頁是本人表單權限，導覽可安全提供回到打卡與公開紀錄的入口。
       historyData.nav = {
         formUrl: getSignedFormUrl_(historyUid),
@@ -2687,7 +2690,7 @@ function parseExerciseRecords_(json, legacyName, legacyMinutes, legacyKcal) {
 function getHistoryData_(userId, dayCount) {
   userId = String(userId || '');
   const days = Math.min(365, Math.max(7, Number(dayCount) || 30));
-  const cacheKey = `history:v4:${userId}:${days}:${today_()}`;
+  const cacheKey = `history:v5:${userId}:${days}:${today_()}`;
   const cached = readJsonCache_(cacheKey);
   if (cached) return cached;
 
@@ -2716,7 +2719,12 @@ function getHistoryData_(userId, dayCount) {
   const records = Array.from(latestByDate.keys()).sort().reverse().map(date => {
     const row = latestByDate.get(date);
     const waterMl = Math.round(numberInRange_(row[10], 0, 20000));
-    const storedWaterGoalMl = Math.round(numberInRange_(row[25], 500, 10000));
+    // 空白欄位不可直接丟進 numberInRange_：Number('') 會成為 0，
+    // 再被最小值補成 500，造成未啟用飲水的舊紀錄被誤判為已設定。
+    const hasStoredWaterGoal = row[25] !== '' && row[25] !== null && row[25] !== undefined;
+    const storedWaterGoalMl = hasStoredWaterGoal
+      ? Math.round(numberInRange_(row[25], 500, 10000))
+      : 0;
     // v44 以前沒有逐日目標欄位；若舊紀錄確實有喝水數字，暫用目前目標補足顯示。
     const waterGoalMl = storedWaterGoalMl || (waterMl > 0 && waterSettings.enabled ? waterSettings.goalMl : 0);
     return {
@@ -2730,7 +2738,7 @@ function getHistoryData_(userId, dayCount) {
       proteinG: proteinGrams_(row[27]),
       waterMl,
       waterGoalMl,
-      waterTracked: waterGoalMl > 0 && (storedWaterGoalMl > 0 || waterMl > 0),
+      waterTracked: waterGoalMl > 0 && (hasStoredWaterGoal || waterMl > 0),
       status: isLogComplete_(row[20]) ? '完成' : '打卡中',
       meals: historyMealTotals_(row[17], [row[4], row[5], row[6], row[8], row[7]]),
     };
@@ -2746,6 +2754,7 @@ function getHistoryData_(userId, dayCount) {
     valid: true,
     today,
     days,
+    waterTrackingEnabled: Boolean(waterSettings.enabled),
     records,
     summary: {
       loggedDays: records.length,
@@ -4926,6 +4935,8 @@ function invalidateLogCache_(date, userId) {
     cache.remove(`history:v3:${userId}:365:${today_()}`);
     cache.remove(`history:v4:${userId}:30:${today_()}`);
     cache.remove(`history:v4:${userId}:365:${today_()}`);
+    cache.remove(`history:v5:${userId}:30:${today_()}`);
+    cache.remove(`history:v5:${userId}:365:${today_()}`);
     try {
       cache.remove(`public-like-target:v2:${publicLikeTargetKey_(userId)}`);
     } catch (error) {
