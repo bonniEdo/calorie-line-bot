@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-labelledby="title desc">
+  <title id="title">小丑魚</title>
+  <desc id="desc">一隻橘色、帶有白色條紋與黑色輪廓的可愛小丑魚</desc>
+  <defs>
+    <linearGradient id="bodyOrange" x1="0" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#ffb329"/>
+      <stop offset="0.42" stop-color="#f57919"/>
+      <stop offset="1" stop-color="#e34a12"/>
+    </linearGradient>
+    <linearGradient id="finOrange" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffbd35"/>
+      <stop offset="1" stop-color="#e85a14"/>
+    </linearGradient>
+    <filter id="softShadow" x="-25%" y="-25%" width="150%" height="160%">
+      <feDropShadow dx="0" dy="10" stdDeviation="7" flood-color="#703018" flood-opacity=".24"/>
+    </filter>
+  </defs>
+
+  <!-- Tail fin -->
+  <path d="M454 168c46-56 94-70 111-86-4 37-2 66 21 106-33 20-45 55-49 104-26-28-61-45-103-66z"
+        fill="url(#finOrange)" stroke="#1c2630" stroke-width="13" stroke-linejoin="round" filter="url(#softShadow)"/>
+  <path d="M492 151c21-15 38-28 54-44M503 214c20 12 37 26 52 43" fill="none" stroke="#ffc249" stroke-width="7" stroke-linecap="round" opacity=".7"/>
+
+  <!-- Fins behind body -->
+  <path d="M250 100c-2-39 18-72 54-90 0 43 17 70 50 93z"
+        fill="url(#finOrange)" stroke="#1c2630" stroke-width="13" stroke-linejoin="round"/>
+  <path d="M248 299c2 39 24 65 61 80-5-39 10-71 38-96z"
+        fill="url(#finOrange)" stroke="#1c2630" stroke-width="13" stroke-linejoin="round"/>
+
+  <!-- Body -->
+  <path d="M94 204c6-91 90-145 202-140 111 5 194 61 202 137-10 74-92 130-205 136-112 5-205-43-199-133z"
+        fill="url(#bodyOrange)" stroke="#1c2630" stroke-width="14" stroke-linejoin="round" filter="url(#softShadow)"/>
+
+  <!-- White bands with dark borders -->
+  <path d="M174 85c22-10 49-17 76-19-17 28-20 69-6 111 13 39 12 94-1 142-30-5-57-14-78-27 23-54 26-141 9-207z"
+        fill="#f7fbf7" stroke="#1c2630" stroke-width="11" stroke-linejoin="round"/>
+  <path d="M313 70c27 5 52 13 73 25-24 27-30 63-21 101 8 34 6 75-10 111-23 13-48 22-75 27 17-40 20-95 9-140-10-44-2-89 24-124z"
+        fill="#f7fbf7" stroke="#1c2630" stroke-width="11" stroke-linejoin="round"/>
+  <path d="M429 113c17 14 31 29 42 46-13 26-15 57-6 90-13 17-28 31-46 43 13-44 15-122 10-179z"
+        fill="#f7fbf7" stroke="#1c2630" stroke-width="11" stroke-linejoin="round"/>
+
+  <!-- Face -->
+  <ellipse cx="151" cy="156" rx="22" ry="27" fill="#fff" stroke="#1c2630" stroke-width="8"/>
+  <ellipse cx="155" cy="160" rx="10" ry="14" fill="#17212a"/>
+  <circle cx="159" cy="154" r="3.5" fill="#fff"/>
+  <path d="M108 233c17 14 40 17 58 7" fill="none" stroke="#1c2630" stroke-width="8" stroke-linecap="round"/>
+  <path d="M199 123c9-11 19-15 31-14" fill="none" stroke="#c74012" stroke-width="8" stroke-linecap="round" opacity=".55"/>
+
+  <!-- Side fin -->
+  <path d="M339 238c39 1 69 23 84 63-40 8-76-7-99-41z"
+        fill="#f99b22" stroke="#1c2630" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M352 251c21 7 36 19 47 36" fill="none" stroke="#ffd15d" stroke-width="6" stroke-linecap="round" opacity=".78"/>
+
+  <!-- Highlights -->
+  <path d="M215 102c17-12 34-17 54-19M385 126c13 5 24 11 34 18" fill="none" stroke="#ffd15d" stroke-width="8" stroke-linecap="round" opacity=".72"/>
+</svg>

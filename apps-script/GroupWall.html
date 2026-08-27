@@ -120,7 +120,7 @@
       const items = Array.isArray(meal && meal.items) ? meal.items : [];
       const mealKcal = Math.round(items.reduce((sum, item) => sum + Math.max(0, Number(item && item.calories || 0)), 0));
       const mealProteinG = Math.max(0, items.reduce((sum, item) => sum + Math.max(0, Number(item && item.proteinG || 0)), 0));
-      return '<div class="food-meal"><div class="food-meal-head"><strong>' + escapeHtml(meal && meal.label || '餐點') + '</strong><span class="food-meal-total">本餐共 ' + number(mealKcal) + ' kcal' + (mealProteinG > 0 ? ' ・🍖 ' + proteinNumber(mealProteinG) + ' g' : '') + '</span></div>'
+      return '<div class="food-meal"><div class="food-meal-head"><strong>' + escapeHtml(meal && meal.label || '餐點') + '</strong><span class="food-meal-total"> ' + number(mealKcal) + ' kcal' + (mealProteinG > 0 ? ' ・🍖 ' + proteinNumber(mealProteinG) + ' g' : '') + '</span></div>'
         + items.map(item => '<div class="food-item">' + escapeHtml(item.name || '食物') + (item.portion ? '・' + escapeHtml(item.portion) : '') + (Number(item.quantity || 0) > 1 ? ' × ' + escapeHtml(item.quantity) : '') + '・' + number(item.calories) + ' kcal</div>').join('')
         + '</div>';
     }
