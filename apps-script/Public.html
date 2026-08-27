@@ -190,18 +190,20 @@
     .food-details { margin-top:11px; border:1px solid #e8dfcf; border-radius:11px; background:#fffdf8; overflow:hidden; }
     .food-details summary { padding:9px 10px; color:#765c17; font-size:12px; font-weight:900; cursor:pointer; list-style-position:inside; }
     .food-details[open] summary { border-bottom:1px solid #f0e7d7; background:#fff8e8; }
-    .food-details-body { padding:0 10px 10px; }
+    /* 餐別列撐滿食物細項卡片；只有展開後的食物文字保留內距。 */
+    .food-details-body { padding:0; }
     /* 先選餐別、再看該餐食物；一餐超過四項時也不會一次撐滿手機畫面。 */
     .food-meal { margin:0; padding:0; border:0; }
-    .food-meal + .food-meal { margin-top:6px; border-top:1px solid #f3ecde; }
-    .food-meal > summary { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 0 7px; color:var(--green); cursor:pointer; list-style:none; }
+    .food-meal + .food-meal { margin-top:0; border-top:1px solid #f3ecde; }
+    .food-meal > summary { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:11px 10px; color:var(--green); cursor:pointer; list-style:none; }
+    .food-meal[open] > summary { background:#fffaf0; }
     .food-meal > summary::-webkit-details-marker, .food-more > summary::-webkit-details-marker { display:none; }
     .food-meal > summary::marker, .food-more > summary::marker { content:''; }
     .food-meal-summary { display:flex; align-items:center; min-width:0; gap:6px; font-size:12px; font-weight:900; }
     .food-meal-count { color:var(--muted); font-size:10px; font-weight:700; white-space:nowrap; }
     .meal-chevron { flex:0 0 auto; color:#b7ac9c; font-size:10px; transition:transform .16s ease; }
     .food-meal[open] .meal-chevron { transform:rotate(180deg); }
-    .food-meal-items { padding:0 0 5px; }
+    .food-meal-items { padding:0 10px 7px; }
     .food-more { margin-top:4px; border-top:1px dashed #e8dfcf; }
     .food-more > summary { padding:7px 0 2px; color:#765c17; font-size:11px; font-weight:900; cursor:pointer; list-style:none; }
 
@@ -857,7 +859,7 @@
           content = '<div class="no-details">' + escapeHtml(noDetailsText || '這位夥伴沒有公開食物細項。') + '</div>';
         } else {
           content = mealTotals.map(meal => '<section class="meal-group">'
-            + '<div class="meal-title"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="meal-total-kcal">本餐共 ' + number(meal.kcal) + ' kcal</span></div>'
+            + '<div class="meal-title"><span>' + escapeHtml(meal.label || '餐點') + '</span><span class="meal-total-kcal"> ' + number(meal.kcal) + ' kcal</span></div>'
             + '<div class="meal-total-only">' + escapeHtml(noDetailsText || '未公開食物細項') + '</div>'
             + '</section>').join('');
         }

@@ -206,15 +206,22 @@ function doGet(e) {
       ? launchAccess.state
       : inspectAccessToken_(historyUid, historySig, APP.tokenScopes.form);
     const historyTemplate = HtmlService.createTemplateFromFile('History');
+    const historyDemoMode = tokenState === 'ok'
+      && String((e && e.parameter && e.parameter.demo) || '') === '1';
     const historyData = tokenState === 'ok'
-      ? getHistoryData_(historyUid, 365)
+      ? (historyDemoMode ? getHistoryDemoData_() : getHistoryData_(historyUid, 365))
       : { valid: false, invalidReason: tokenState };
+    if (historyDemoMode) {
+      historyData.demoReport = String((e && e.parameter && e.parameter.report) || '') === 'week' ? 'week' : 'month';
+    }
     if (tokenState === 'ok') {
       // 歷史頁是本人表單權限，導覽可安全提供回到打卡與公開紀錄的入口。
       historyData.nav = {
         formUrl: getSignedFormUrl_(historyUid),
         publicWallUrl: getPublicWallUrl_(historyUid),
-        historyUrl: getHistoryUrl_(historyUid),
+        historyUrl: getHistoryUrl_(historyUid) + (historyDemoMode
+          ? `&demo=1&report=${encodeURIComponent(historyData.demoReport || 'month')}`
+          : ''),
         personalSettingsUrl: getPersonalSettingsUrl_(historyUid),
       };
     }
@@ -2752,6 +2759,99 @@ function getHistoryData_(userId, dayCount) {
   // 儲存任何一筆紀錄時會立即清掉這位使用者的歷史快取，可安心保留較久。
   writeJsonCache_(cacheKey, result, 300);
   return result;
+}
+
+/**
+ * 歷史週／月報的唯讀展示資料。只有通過本人權限且網址帶 demo=1 時才會使用，
+ * 不讀寫每日紀錄 Sheet，也不會進入正式歷史快取。
+ */
+function getHistoryDemoData_() {
+  const today = today_();
+  const todayMatch = String(today).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!todayMatch) throw new Error('無法建立月報展示資料：今日日期格式不正確。');
+
+  const todayDate = new Date(Number(todayMatch[1]), Number(todayMatch[2]) - 1, Number(todayMatch[3]), 12);
+  const startDate = new Date(todayDate.getFullYear(), todayDate.getMonth() - 2, 1, 12);
+  const demoMonthDate = new Date(todayDate.getFullYear(), todayDate.getMonth() - 1, 1, 12);
+  const demoMonth = `${demoMonthDate.getFullYear()}-${String(demoMonthDate.getMonth() + 1).padStart(2, '0')}`;
+  const records = [];
+  const dateKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const currentMonday = new Date(todayDate);
+  currentMonday.setDate(todayDate.getDate() - ((todayDate.getDay() + 6) % 7));
+  const demoWeekDate = new Date(currentMonday);
+  demoWeekDate.setDate(currentMonday.getDate() - 7);
+  const demoWeek = dateKey(demoWeekDate);
+  const breakfastNames = ['雞蛋與無糖豆漿', '鮪魚蛋吐司', '優格水果碗', '地瓜與茶葉蛋'];
+  const lunchNames = ['舒肥雞胸便當', '鮭魚時蔬餐', '牛肉蔬菜飯', '雞腿健康餐'];
+  const dinnerNames = ['豆腐雞肉鍋', '鯖魚與青菜', '番茄牛肉湯', '蒸蛋雞胸餐'];
+  const snackNames = ['乳清蛋白', '香蕉與堅果', '無糖優格'];
+
+  for (let cursor = new Date(startDate); cursor <= todayDate; cursor.setDate(cursor.getDate() + 1)) {
+    const day = cursor.getDate();
+    const monthNumber = cursor.getMonth() + 1;
+    const isCurrentMonth = cursor.getFullYear() === todayDate.getFullYear() && cursor.getMonth() === todayDate.getMonth();
+    // 固定留幾個空白日，讓月曆能同時預覽完成、打卡中與未記錄三種狀態。
+    if (day % 10 === 0 || (isCurrentMonth && day === 4)) continue;
+
+    const exerciseMinutes = day % 3 === 0 ? 45 : day % 5 === 0 ? 30 : day % 7 === 0 ? 60 : 0;
+    const exerciseKcal = exerciseMinutes ? Math.round(exerciseMinutes * (day % 2 ? 6.5 : 5.8)) : 0;
+    const tdee = 2050 + ((day * 37 + monthNumber * 13) % 260) + exerciseKcal;
+    const intake = 1580 + ((day * 73 + monthNumber * 41) % 610);
+    const proteinG = Math.round((82 + ((day * 11 + monthNumber * 7) % 68)) * 10) / 10;
+    const waterGoalMl = 2500;
+    const waterMl = day % 6 === 0 ? 1800 : day % 4 === 0 ? 2300 : 2500 + (day % 3) * 250;
+    const status = (isCurrentMonth && day === todayDate.getDate()) || day % 13 === 0 ? '打卡中' : '完成';
+    const breakfastKcal = 300 + (day % 4) * 30;
+    const lunchKcal = 520 + (day % 5) * 40;
+    const snackKcal = day % 2 ? 140 + (day % 3) * 25 : 0;
+    const dinnerKcal = Math.max(320, intake - breakfastKcal - lunchKcal - snackKcal);
+    const meals = [
+      { key: 'breakfast', label: '早餐', kcal: breakfastKcal, proteinG: Math.round(proteinG * .23 * 10) / 10, names: [breakfastNames[day % breakfastNames.length]] },
+      { key: 'lunch', label: '午餐', kcal: lunchKcal, proteinG: Math.round(proteinG * .36 * 10) / 10, names: [lunchNames[day % lunchNames.length]] },
+      { key: 'dinner', label: '晚餐', kcal: dinnerKcal, proteinG: Math.round(proteinG * (snackKcal ? .29 : .41) * 10) / 10, names: [dinnerNames[day % dinnerNames.length]] },
+    ];
+    if (snackKcal) {
+      meals.push({ key: 'snack', label: '點心', kcal: snackKcal, proteinG: Math.round(proteinG * .12 * 10) / 10, names: [snackNames[day % snackNames.length]] });
+    }
+    records.push({
+      date: dateKey(cursor),
+      intake,
+      tdee,
+      deficit: tdee - intake,
+      exerciseKcal,
+      exerciseMinutes,
+      exerciseName: exerciseMinutes ? (day % 2 ? '重量訓練' : '快走與有氧') : '',
+      proteinG,
+      waterMl,
+      waterGoalMl,
+      waterTracked: true,
+      status,
+      meals,
+    });
+  }
+
+  records.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const completedRecords = records.filter(record => record.status === '完成');
+  const average = key => completedRecords.length
+    ? Math.round(completedRecords.reduce((sum, record) => sum + Number(record[key] || 0), 0) / completedRecords.length)
+    : 0;
+  return {
+    valid: true,
+    demo: true,
+    demoMonth,
+    demoWeek,
+    today,
+    days: 365,
+    records,
+    summary: {
+      loggedDays: records.length,
+      completedDays: completedRecords.length,
+      averageIntake: average('intake'),
+      averageTdee: average('tdee'),
+      averageDeficit: average('deficit'),
+      averageBasis: '完成日',
+    },
+  };
 }
 
 function historyMealTotals_(detailsJson, fallbackTotals) {
