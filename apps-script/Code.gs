@@ -1,6 +1,6 @@
-// 應用程式版本：2026.09.17-119（報告本期觀察與同期比較）
+// 應用程式版本：2026.09.17-120（蛋白質目標依活動程度設定）
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.09.17-119';
+const APP_BUILD = '2026.09.17-120';
 // 每位使用者只會看到一次的打卡頁公告版本；未來有真正的新一波功能時再換這個值。
 const NEW_FEATURE_NOTICE_ID = '2026_09_history_and_effort_reports';
 
@@ -309,7 +309,7 @@ function doGet(e) {
     publicWallUrl: getPublicWallUrl_(valid ? uid : ''),
     historyUrl: getHistoryUrl_(valid ? uid : ''),
     personalSettingsUrl: valid ? getPersonalSettingsUrl_(uid) : '',
-    personalProfile: valid ? getPersonalProfile_(uid) : { weightKg: 0, proteinTargetG: 0 },
+    personalProfile: valid ? getPersonalProfile_(uid) : { weightKg: 0, proteinTargetG: 0, proteinActivityLevel: 'general' },
     proteinTarget: valid ? getProteinTargetInfo_(uid) : { targetG: 0, source: 'none', label: '' },
     // 打卡頁只需要群組名稱來顯示分享設定；群組入口統一由「紀錄牆」處理。
     groupWalls: valid ? getWallTabsForUser_(uid) : [],
@@ -3821,21 +3821,25 @@ function normalizePersonalProfile_(raw) {
   raw = raw || {};
   const rawWeight = Number(raw.weightKg || 0);
   const rawTarget = Number(raw.proteinTargetG || 0);
+  const activityLevel = ['general', 'active', 'strength'].indexOf(String(raw.proteinActivityLevel || '')) >= 0
+    ? String(raw.proteinActivityLevel)
+    : 'general';
   return {
     weightKg: rawWeight >= 20 && rawWeight <= 500 ? Math.round(rawWeight * 10) / 10 : 0,
     proteinTargetG: rawTarget > 0 && rawTarget <= 500 ? Math.round(rawTarget * 10) / 10 : 0,
+    proteinActivityLevel: activityLevel,
   };
 }
 
 function getPersonalProfile_(userId) {
   userId = String(userId || '');
-  if (!userId) return { weightKg: 0, proteinTargetG: 0 };
+  if (!userId) return { weightKg: 0, proteinTargetG: 0, proteinActivityLevel: 'general' };
   const raw = PropertiesService.getScriptProperties().getProperty(personalProfilePropertyKey_(userId));
-  if (!raw) return { weightKg: 0, proteinTargetG: 0 };
+  if (!raw) return { weightKg: 0, proteinTargetG: 0, proteinActivityLevel: 'general' };
   try {
     return normalizePersonalProfile_(JSON.parse(raw));
   } catch (error) {
-    return { weightKg: 0, proteinTargetG: 0 };
+    return { weightKg: 0, proteinTargetG: 0, proteinActivityLevel: 'general' };
   }
 }
 
@@ -3848,7 +3852,7 @@ function savePersonalProfile_(userId, profile) {
   );
 }
 
-/** 自訂每日克數優先；未自訂時使用體重 × 1.2 g 的一般日常建議。 */
+/** 自訂每日克數優先；未自訂時依活動程度使用體重倍數建議。 */
 function getProteinTargetInfo_(userId) {
   const profile = getPersonalProfile_(userId);
   if (profile.proteinTargetG > 0) {
@@ -3859,11 +3863,16 @@ function getProteinTargetInfo_(userId) {
     };
   }
   if (profile.weightKg > 0) {
-    const targetG = Math.round(profile.weightKg * 1.2 * 10) / 10;
+    const activity = {
+      general: { multiplier: 1.2, label: '一般活動' },
+      active: { multiplier: 1.5, label: '規律運動' },
+      strength: { multiplier: 1.8, label: '重訓／增肌／減脂' },
+    }[profile.proteinActivityLevel] || { multiplier: 1.2, label: '一般活動' };
+    const targetG = Math.round(profile.weightKg * activity.multiplier * 10) / 10;
     return {
       targetG,
       source: 'weight',
-      label: `體重 ${profile.weightKg} kg × 1.2 g`,
+      label: `${activity.label}・體重 ${profile.weightKg} kg × ${activity.multiplier} g`,
     };
   }
   return { targetG: 0, source: 'none', label: '設定體重或自訂目標後即可追蹤' };
