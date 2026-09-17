@@ -3,28 +3,60 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="飲控打卡緊迫盯人：從 LINE 開始，記錄飲食、蛋白質、飲水與運動，把每天的小努力變成週報與月報。">
+  <meta name="description" content="飲控打卡緊迫盯人是從 LINE 開始的 AI 飲食紀錄工具。支援餐點照片辨識、熱量與蛋白質記錄、飲水與運動追蹤，還能產出努力週報、月報圖片，和朋友一起累積日常的小努力。">
+  <link rel="canonical" href="https://bonniedo.github.io/calorie-line-bot/">
+  <meta name="robots" content="index,follow,max-image-preview:large">
   <meta name="theme-color" content="#fffaf0">
-  <meta property="og:title" content="飲控打卡緊迫盯人｜把每天的小努力，留下來">
+  <link rel="icon" type="image/png" href="assets/chick-favicon.png">
+  <link rel="apple-touch-icon" href="assets/chick-favicon.png">
+  <meta property="og:title" content="飲控打卡緊迫盯人｜AI 飲食紀錄與努力週月報">
   <meta property="og:description" content="AI 餐點辨識、日常打卡、歷史回顧與努力報告。加入 LINE，開始你的第一筆紀錄。">
   <meta property="og:type" content="website">
-  <title>飲控打卡緊迫盯人｜把每天的小努力，留下來</title>
+  <meta property="og:locale" content="zh_TW">
+  <meta property="og:site_name" content="飲控打卡緊迫盯人">
+  <meta property="og:url" content="https://bonniedo.github.io/calorie-line-bot/">
+  <meta property="og:image" content="https://bonniedo.github.io/calorie-line-bot/assets/social-cover-chick.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1734">
+  <meta property="og:image:height" content="907">
+  <meta property="og:image:alt" content="飲控打卡緊迫盯人：把每天的小努力，留下來。AI 餐點辨識、日常紀錄與週月報。">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="飲控打卡緊迫盯人｜AI 飲食紀錄與努力週月報">
+  <meta name="twitter:description" content="從 LINE 開始，記錄飲食、蛋白質、飲水與運動。把每天的小努力，變成可以收藏與分享的週報、月報。">
+  <meta name="twitter:image" content="https://bonniedo.github.io/calorie-line-bot/assets/social-cover-chick.png">
+  <meta name="twitter:image:alt" content="奶油黃色背景、小雞與飲食紀錄手機插畫，搭配飲控打卡緊迫盯人標題。">
+  <title>飲控打卡緊迫盯人｜LINE AI 飲食紀錄、熱量追蹤與週月報</title>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "飲控打卡緊迫盯人",
+    "url": "https://bonniedo.github.io/calorie-line-bot/",
+    "image": "https://bonniedo.github.io/calorie-line-bot/assets/social-cover-chick.png",
+    "description": "透過 LINE 開啟個人打卡頁，使用 AI 餐點辨識記錄飲食，追蹤蛋白質、飲水與運動，查看並分享努力週報與月報。",
+    "applicationCategory": "LifestyleApplication",
+    "operatingSystem": "Web",
+    "inLanguage": "zh-Hant",
+    "featureList": ["AI 餐點照片辨識", "熱量與蛋白質紀錄", "飲水與運動追蹤", "歷史紀錄與月曆", "週報與月報圖片", "好友打卡空間"]
+  }
+  </script>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="mascot.css">
   <script src="config.js" defer></script>
   <script src="site.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">跳至主要內容</a>
-  <header class="header wrap"><a class="brand" href="#"><span class="brand-icon">🐥</span><span>飲控打卡緊迫盯人<small>你的日常記錄小夥伴</small></span></a><nav aria-label="主要導覽"><a href="#features">功能介紹</a><a href="#preview">看看介面</a><a class="button small" href="#start">開始使用 ↗</a></nav></header>
+  <header class="header wrap"><a class="brand" href="#"><img class="brand-icon mascot-logo" src="assets/sport-chick.png" alt="運動小雞" width="46" height="46"><span>飲控打卡緊迫盯人<small>你的日常記錄小夥伴</small></span></a><nav aria-label="主要導覽"><a href="#features">功能介紹</a><a href="#preview">看看介面</a><a class="button small" href="#start">開始使用 ↗</a></nav></header>
   <main id="main">
     <section class="hero wrap">
       <div class="hero-copy"><p class="eyebrow">A LITTLE EVERY DAY</p><h1>好好吃飯，<br>也把努力<span class="underline">留下來。</span></h1><p class="lead">不用換一個生活方式，<br>從 LINE 開始，記錄你原本就有的每一天。</p><p class="intro">拍下餐點、記一杯水、留下一次運動。<br>讓零散的小紀錄，慢慢變成看得見的累積。</p><div class="actions"><a class="button" href="#start">加入 LINE 開始記錄 <span>↗</span></a><a class="text-link" href="#preview">先看看怎麼用 ↓</a></div><p class="micro">飲食 · 蛋白質 · 飲水 · 運動 · 週／月報</p></div>
-      <div class="hero-art"><span class="floating-note">今天也有照顧好自己！</span><div class="phone"><div class="phone-top"><span>9:41</span><span>● ● ▰</span></div><div class="app-hero"><small>DAILY CHECK-IN</small><h2>今天，吃得如何？</h2><p>一餐一餐，慢慢記就好。</p><div class="energy"><strong>1,280 <small>/ 1,800 kcal</small></strong><div class="bar"><i></i></div><span>今日已記錄攝取</span></div></div><div class="mini-metrics"><div>🍖 <strong>72 g</strong><small>蛋白質</small></div><div>💧 <strong>1,200 ml</strong><small>飲水</small></div></div><div class="meal"><span class="meal-icon">🥗</span><div><strong>午餐，記好了</strong><small>雞肉沙拉・地瓜・豆漿</small></div><span class="check">✓</span></div><div class="meal"><span class="meal-icon">🚶</span><div><strong>散步 30 分鐘</strong><small>讓身體動一動</small></div><span class="check">✓</span></div><div class="mock-button">＋ 記錄下一餐</div><div class="phone-nav">📝 打卡 <span>🌐 紀錄牆</span><span>📈 歷史</span><span>⚙ 設定</span></div></div><span class="demo-label">介面示意・展示資料，非真實使用者紀錄</span></div>
+      <div class="hero-art"><img class="hero-mascot" src="assets/waving-chick.png" alt="戴著綠色運動頭帶、揮手歡迎的小雞" width="160" height="160"><span class="floating-note">今天也有照顧好自己！</span><div class="phone"><div class="phone-top"><span>9:41</span><span>● ● ▰</span></div><div class="app-hero"><small>DAILY CHECK-IN</small><h2>今天，吃得如何？</h2><p>一餐一餐，慢慢記就好。</p><div class="energy"><strong>1,280 <small>/ 1,800 kcal</small></strong><div class="bar"><i></i></div><span>今日已記錄攝取</span></div></div><div class="mini-metrics"><div>🍖 <strong>72 g</strong><small>蛋白質</small></div><div>💧 <strong>1,200 ml</strong><small>飲水</small></div></div><div class="meal"><span class="meal-icon">🥗</span><div><strong>午餐，記好了</strong><small>雞肉沙拉・地瓜・豆漿</small></div><span class="check">✓</span></div><div class="meal"><span class="meal-icon">🚶</span><div><strong>散步 30 分鐘</strong><small>讓身體動一動</small></div><span class="check">✓</span></div><div class="mock-button">＋ 記錄下一餐</div><div class="phone-nav">📝 打卡 <span>🌐 紀錄牆</span><span>📈 歷史</span><span>⚙ 設定</span></div></div><span class="demo-label">介面示意・展示資料，非真實使用者紀錄</span></div>
     </section>
     <section class="ribbon"><div class="wrap">不需要每天完美。<span>每一次回來記錄，都算數。</span><span aria-hidden="true">✳</span></div></section>
     <section id="features" class="section wrap"><div class="section-heading"><div><p class="eyebrow">SMALL HABITS, BIG PICTURE</p><h2>把日常放在一起，<br>就看見自己的節奏。</h2></div><p>從一餐到一整個月，<br>記錄、回顧，還有一起努力的朋友。</p></div><div class="features"><article><span class="feature-icon">📸</span><span class="index">01</span><h3>餐點拍一下，記錄輕鬆些</h3><p>用 AI 照片辨識估算餐點，也能從食物庫挑選或手動輸入。確認份量與內容後，再留下這一餐。</p></article><article><span class="feature-icon">🌱</span><span class="index">02</span><h3>不只熱量，是整天的日常</h3><p>蛋白質、飲水與運動一起記。依平常活動程度設定蛋白質目標，LINE 提醒也能自行開關。</p></article><article><span class="feature-icon">📅</span><span class="index">03</span><h3>回頭看看，努力都有跡可循</h3><p>切換日期範圍、清單與月曆，查看每日明細。週報看生活節奏，月報看長期累積。</p></article><article><span class="feature-icon">🤝</span><span class="index">04</span><h3>找個伴，讓記錄多一點樂趣</h3><p>透過紀錄牆或私人打卡空間，和朋友一起留下日常。你可以設定是否公開、分享給哪些空間或群組。</p></article></div></section>
     <section id="preview" class="showcase"><div class="wrap"><p class="eyebrow">YOUR DAYS, AT A GLANCE</p><h2>每天的紀錄，<br>都有值得回看的地方。</h2><div class="preview-layout"><div class="preview-copy"><h3>從「今天吃了什麼」<br>到「這個月做到了什麼」。</h3><p>歷史頁把趨勢與明細整理好；努力報告則把紀錄天數、運動累積和同期變化放在一起。</p><p>看完報告，再決定要下載收藏，還是分享給一起努力的人。</p><a class="text-link" href="#start">到 LINE 開始累積你的第一週 ↗</a></div><div class="preview-card"><div class="preview-tabs" role="group" aria-label="選擇展示畫面"><button type="button" data-preview="history" aria-pressed="true">歷史紀錄</button><button type="button" data-preview="report" aria-pressed="false">努力報告</button></div><div id="history-preview"><div class="preview-title"><h3>📅 我的歷史紀錄</h3><span>本週</span></div><p class="muted">一眼回顧每天留下的小紀錄</p><div class="history-row"><strong>週四</strong><span>1,640 kcal<small>蛋白質 82 g</small></span><b>✓</b></div><div class="history-row"><strong>週三</strong><span>1,720 kcal<small>蛋白質 91 g</small></span><b>✓</b></div><div class="history-row"><strong>週二</strong><span>1,580 kcal<small>蛋白質 76 g</small></span><b>✓</b></div><div class="history-row"><strong>週一</strong><span>1,690 kcal<small>蛋白質 88 g</small></span><b>✓</b></div></div><div id="report-preview" hidden><p class="report-eyebrow">WEEKLY PERFORMANCE</p><h3>這週的小努力 ✨</h3><div class="report-stats"><div><strong>4 天</strong><span>留下紀錄</span></div><div><strong>90 分</strong><span>累積運動</span></div></div><div class="week" aria-label="週一至週四已記錄，週五至週日尚無紀錄"><span>一<b>✓</b></span><span>二<b>✓</b></span><span>三<b>✓</b></span><span>四<b>✓</b></span><span>五<b>－</b></span><span>六<b>－</b></span><span>日<b>－</b></span></div><p class="report-note">本期觀察<br><strong>有 3 天記錄運動，共累積 90 分鐘。</strong></p></div><p class="preview-caption">功能示意・數字為展示資料</p></div></div></div></section>
-    <section id="start" class="section wrap"><div class="section-heading"><div><p class="eyebrow">LET’S START SMALL</p><h2>第一筆紀錄，<br>從加一個好友開始。</h2></div></div><div class="start-layout"><ol class="steps"><li><span>01</span><div><h3>加入 LINE 官方帳號</h3><p>手機直接點按鈕；在電腦瀏覽時，可以拿手機掃描 QR Code。</p></div></li><li><span>02</span><div><h3>傳送「打卡」</h3><p>在聊天視窗輸入打卡，取得你的個人專屬連結。</p></div></li><li><span>03</span><div><h3>留下今天的第一餐</h3><p>開啟頁面，完成基本設定，就可以開始記錄飲食與運動。</p></div></li></ol><div class="join-card"><span class="join-icon">🐥</span><h3>飲控打卡緊迫盯人</h3><p>一起把日子，記得更清楚。</p><a id="line-link" class="button" hidden target="_blank" rel="noopener noreferrer">加入 LINE 好友 ↗</a><p id="join-pending" class="muted">加入好友入口準備中</p><img id="line-qr" width="164" height="164" alt="掃描 QR Code 加入 LINE 官方帳號" hidden><small id="qr-caption" hidden>用手機 LINE 掃描，或點上方按鈕</small></div></div></section>
+    <section id="start" class="section wrap"><div class="section-heading"><div><p class="eyebrow">LET’S START SMALL</p><h2>第一筆紀錄，<br>從加一個好友開始。</h2></div></div><div class="start-layout"><ol class="steps"><li><span>01</span><div><h3>加入 LINE 官方帳號</h3><p>手機直接點按鈕；在電腦瀏覽時，可以拿手機掃描 QR Code。</p></div></li><li><span>02</span><div><h3>傳送「打卡」</h3><p>在聊天視窗輸入打卡，取得你的個人專屬連結。</p></div></li><li><span>03</span><div><h3>留下今天的第一餐</h3><p>開啟頁面，完成基本設定，就可以開始記錄飲食與運動。</p></div></li></ol><div class="join-card"><img class="join-mascot" src="assets/sport-chick.png" alt="運動小雞陪你一起打卡" width="110" height="110" loading="lazy"><h3>飲控打卡緊迫盯人</h3><p>一起把日子，記得更清楚。</p><a id="line-link" class="button" hidden target="_blank" rel="noopener noreferrer">加入 LINE 好友 ↗</a><p id="join-pending" class="muted">加入好友入口準備中</p><img id="line-qr" width="164" height="164" alt="掃描 QR Code 加入 LINE 官方帳號" hidden><small id="qr-caption" hidden>用手機 LINE 掃描，或點上方按鈕</small></div></div></section>
     <section class="privacy wrap"><span>🔒</span><div><h3>自己的紀錄，由自己決定怎麼分享。</h3><p>個人打卡頁透過專屬連結存取。體重不會顯示在紀錄牆；公開與空間分享可在設定中調整。這個介紹頁只使用展示資料。</p><p>AI 辨識與營養數字皆為估算，請依實際份量與營養標示確認。</p></div></section>
-  </main><footer class="wrap"><span>🐥 飲控打卡緊迫盯人</span><span>用小小的記錄，陪自己走久一點。</span><a href="#">回到頂端 ↑</a></footer>
+  </main><footer class="wrap"><span class="footer-brand"><img src="assets/sport-chick.png" alt="" width="32" height="32" loading="lazy">飲控打卡緊迫盯人</span><span>用小小的記錄，陪自己走久一點。</span><a href="#">回到頂端 ↑</a></footer>
 </body></html>
