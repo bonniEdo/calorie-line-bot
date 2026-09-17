@@ -1,6 +1,6 @@
-// 應用程式版本：2026.08.25-112（補強體重欄位隱私標示）
+// 應用程式版本：2026.09.17-114（歷史篩選、月曆、圖表互動與餐點複製）
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.08.25-112';
+const APP_BUILD = '2026.09.17-114';
 // 每位使用者只會看到一次的打卡頁公告版本；未來有真正的新一波功能時再換這個值。
 const NEW_FEATURE_NOTICE_ID = '2026_08_ui_optimization_and_protein_tracking';
 
@@ -227,6 +227,8 @@ function doGet(e) {
           : ''),
         personalSettingsUrl: getPersonalSettingsUrl_(historyUid),
       };
+      // 歷史頁的「複製餐點」採用按需讀取；不把一年份完整餐點 JSON 塞進首頁。
+      historyData.session = { uid: historyUid, sig: historySig };
     }
     historyTemplate.historyJson = JSON.stringify(historyData);
     return historyTemplate.evaluate()
@@ -276,6 +278,10 @@ function doGet(e) {
     date,
     label: ['今天', '昨天', '前天', '三天前'][index],
   })) : [];
+  const requestedRecordDate = normalizeDateKey_((e && e.parameter && e.parameter.date) || '');
+  const initialDate = valid && recordDates.some(item => item.date === requestedRecordDate)
+    ? requestedRecordDate
+    : today_();
   // 一次讀取四天資料，切換日期時由前端直接還原，不再每次呼叫 Apps Script。
   const dailyLogs = valid
     ? getRecentDailyFormData_(uid, foods, recordDates.map(item => item.date))
@@ -289,6 +295,7 @@ function doGet(e) {
     uid,
     sig,
     today: today_(),
+    initialDate,
     recordDates,
     member: member || {},
     waterSettings,
@@ -991,6 +998,8 @@ function publicWallButtonMessages_(userId) {
  * 同一天、同一成員只保留一列，重送即更新。
  */
 function saveDailyLog(payload) {
+  const startedAt = Date.now();
+  const timing = {};
   payload = payload || {};
   const userId = String(payload.uid || '');
   const sig = String(payload.sig || '');
@@ -1201,22 +1210,36 @@ function saveDailyLog(payload) {
 
   // 只在真正寫入工作表時持有全域鎖，避免自動儲存長時間卡住公開頁按讚。
   const lock = LockService.getScriptLock();
+  timing.prepareMs = Date.now() - startedAt;
+  const lockStartedAt = Date.now();
   lock.waitLock(5000);
+  timing.lockWaitMs = Date.now() - lockStartedAt;
+  const writeStartedAt = Date.now();
   try {
     if (pendingMemberUpdate) upsertMember_(pendingMemberUpdate);
     // 開關改變時，所有既有日期立即統一成同一個群組分享狀態。
     if (groupPreferenceChanged) setGroupWallVisibilityForUser_(userId, requestedDefaultPublishToGroup);
-    saveWaterSettings_(userId, waterEnabled, waterGoalMl);
+    if (waterEnabled !== storedWaterSettings.enabled || waterGoalMl !== storedWaterSettings.goalMl) {
+      saveWaterSettings_(userId, waterEnabled, waterGoalMl);
+    }
     upsertDailyRow_(recordDate, userId, row);
     // 今日紀錄會影響「常吃的食物」統計，儲存後立即清除快捷區快取，
     // 避免使用者關閉頁面重開時還看到儲存前的四個預設項目。
-    CacheService.getScriptCache().remove(`frequent-foods:v5:${userId}:${today_()}`);
-    CacheService.getScriptCache().remove(`frequent-foods:v6:${userId}:${today_()}`);
+    CacheService.getScriptCache().removeAll([
+      `frequent-foods:v5:${userId}:${today_()}`,
+      `frequent-foods:v6:${userId}:${today_()}`,
+    ]);
+    SpreadsheetApp.flush();
+    timing.writeMs = Date.now() - writeStartedAt;
   } finally {
     lock.releaseLock();
   }
+  timing.totalMs = Date.now() - startedAt;
+  // 不記錄姓名、餐點、uid 或簽章，只保留效能數字與補登類型。
+  console.info(JSON.stringify({ event: 'daily_save', isBackfill: recordDate !== today_(), ...timing }));
   return {
     ok: true,
+    timing,
     date: recordDate,
     isBackfill: recordDate !== today_(),
     totalIntake,
@@ -1252,6 +1275,51 @@ function getDailyFormForDate(payload) {
   };
 }
 
+/**
+ * 歷史頁按下「複製餐點到今天」時才讀取該日完整餐點。
+ * 僅回傳餐點，不複製飲水、運動、公開設定或完成狀態。
+ */
+function getHistoryCopyDraftForClient(payload) {
+  payload = payload || {};
+  const userId = String(payload.uid || '');
+  const sig = String(payload.sig || '');
+  const tokenState = inspectAccessToken_(userId, sig, APP.tokenScopes.form);
+  if (tokenState !== 'ok') throw new Error(accessTokenErrorMessage_(tokenState));
+
+  const sourceDate = normalizeDateKey_(payload.sourceDate);
+  const today = today_();
+  const earliest = dateKeyDaysAgo_(today, 364);
+  if (!sourceDate || sourceDate >= today || sourceDate < earliest) {
+    throw new Error('只能複製最近一年內、今天以前的餐點。');
+  }
+
+  const sheet = getSheet_(APP.sheets.logs);
+  ensureLogStatusHeader_(sheet);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) throw new Error('找不到這天的紀錄。');
+  const rowCount = Math.min(lastRow - 1, 20000);
+  const startRow = lastRow - rowCount + 1;
+  const rows = sheet.getRange(startRow, 1, rowCount, APP.headers.logs.length).getValues();
+  let savedRow = null;
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const row = rows[index];
+    if (String(row[2] || '') !== userId) continue;
+    if (getLogRowDateKey_(row, null) !== sourceDate) continue;
+    savedRow = row;
+    break;
+  }
+  if (!savedRow) throw new Error('找不到這天的紀錄。');
+
+  const restored = dailyFormDataFromRow_(savedRow, getFoods_(), sourceDate);
+  return {
+    ok: true,
+    sourceDate,
+    targetDate: today,
+    meals: restored.meals,
+    aiMeals: restored.aiMeals,
+  };
+}
+
 /** 每日分時提醒：09:00、12:00、19:30（最後通知）。 */
 function sendReminderIfDue() {
   const now = new Date();
@@ -1281,7 +1349,7 @@ function sendMorningJobsAt0900() {
   } catch (error) {
     result.reminderError = error && error.message ? error.message : String(error);
   }
-  result.ok = !result.reminderError;
+  result.ok = !result.reminderError && (!result.reminder || result.reminder.ok !== false);
   return result;
 }
 
@@ -1290,50 +1358,84 @@ function sendReminderForSlot_(slot) {
   const reminderKey = `${date}|${slot}`;
 
   const lock = LockService.getScriptLock();
+  const properties = PropertiesService.getScriptProperties();
+  const progressKey = `REMINDER_PROGRESS_${slot}`;
+  let progress;
   if (!lock.tryLock(1000)) return { ok: true, skipped: 'another_run_active' };
   try {
-  if (getConfig_('LAST_REMINDER_SLOT') === reminderKey) return { ok: true, skipped: 'already_sent' };
-
-  const todayLogs = getTodayLogs_();
-  const completedIds = new Set(
-    todayLogs.filter(item => item.isComplete).map(item => item.userId)
-  );
-  const inProgressIds = new Set(
-    todayLogs.filter(item => !item.isComplete).map(item => item.userId)
-  );
-  // 即使今天已按「打卡完成」，後續時段仍可提醒補充下一餐。
-  const members = getReminderMembers_(slot);
-  let sent = 0;
-
-  members.forEach(member => {
-    const inProgress = inProgressIds.has(member.userId);
-    const completed = !inProgress && completedIds.has(member.userId);
-    const greeting = reminderGreeting_(slot, member.name);
-    const text = completed
-      ? `${greeting}\n下一餐預備備。`
-      : (inProgress
-        ? `${greeting}\n記得「送出」打卡喔！`
-        : `${greeting}\n點一下開始猛猛ㄉ飲控。`);
-    const messages = [{
-      type: 'template',
-      altText: text,
-      template: {
-        type: 'buttons',
-        text,
-        actions: [{
-          type: 'uri',
-          label: completed ? '補充下一餐' : (inProgress ? '繼續猛猛打卡' : '開始猛猛打卡'),
-          uri: getScheduledLaunchUrl_(member.userId, 'form'),
-        }],
-      },
-    }];
-    if (pushMessage_(member.userId, messages)) sent += 1;
-  });
-
-  setConfig_('LAST_REMINDER_SLOT', reminderKey, '避免同一時段重複提醒');
-  return { ok: true, date, slot, sent, completedMembers: completedIds.size };
+    if (getConfig_('LAST_REMINDER_SLOT') === reminderKey) return { ok: true, skipped: 'already_sent' };
+    progress = parseJsonObject_(properties.getProperty(progressKey));
+    if (progress.date !== date) progress = { date, sent: [], retryKeys: {} };
+    if (Number(progress.leaseUntil || 0) > Date.now()) return { ok: true, skipped: 'another_run_active' };
+    // 超過 Apps Script 單次執行上限，意外中斷後下一次執行仍可恢復。
+    progress.leaseUntil = Date.now() + 10 * 60 * 1000;
+    properties.setProperty(progressKey, JSON.stringify(progress));
   } finally {
     lock.releaseLock();
+  }
+  try {
+    const todayLogs = getTodayLogs_();
+    const completedIds = new Set(
+      todayLogs.filter(item => item.isComplete).map(item => item.userId)
+    );
+    const inProgressIds = new Set(
+      todayLogs.filter(item => !item.isComplete).map(item => item.userId)
+    );
+    // 即使今天已按「打卡完成」，後續時段仍可提醒補充下一餐。
+    const members = getReminderMembers_(slot);
+    let sent = 0;
+    let failed = 0;
+
+    members.forEach(member => {
+      if (progress.sent.includes(member.userId)) return;
+      if (!progress.retryKeys[member.userId]) {
+        progress.retryKeys[member.userId] = Utilities.getUuid();
+        properties.setProperty(progressKey, JSON.stringify(progress));
+      }
+      try {
+        const inProgress = inProgressIds.has(member.userId);
+        const completed = !inProgress && completedIds.has(member.userId);
+        const greeting = reminderGreeting_(slot, member.name);
+        const text = completed
+          ? `${greeting}\n下一餐預備備。`
+          : (inProgress
+            ? `${greeting}\n記得「送出」打卡喔！`
+            : `${greeting}\n點一下開始猛猛ㄉ飲控。`);
+        const messages = [{
+          type: 'template',
+          altText: text,
+          template: {
+            type: 'buttons',
+            text,
+            actions: [{
+              type: 'uri',
+              label: completed ? '補充下一餐' : (inProgress ? '繼續猛猛打卡' : '開始猛猛打卡'),
+              uri: getScheduledLaunchUrl_(member.userId, 'form'),
+            }],
+          },
+        }];
+        if (pushMessage_(member.userId, messages, progress.retryKeys[member.userId])) {
+          sent += 1;
+          progress.sent.push(member.userId);
+          properties.setProperty(progressKey, JSON.stringify(progress));
+        } else failed += 1;
+      } catch (error) {
+        failed += 1;
+        console.warn('提醒傳送失敗；保留進度供下一次執行重試。');
+      }
+    });
+
+    if (!failed) {
+      lock.waitLock(5000);
+      try {
+        setConfig_('LAST_REMINDER_SLOT', reminderKey, '避免同一時段重複提醒');
+        SpreadsheetApp.flush();
+      } finally { lock.releaseLock(); }
+    }
+    return { ok: failed === 0, date, slot, sent, failed, completedMembers: completedIds.size };
+  } finally {
+    progress.leaseUntil = 0;
+    properties.setProperty(progressKey, JSON.stringify(progress));
   }
 }
 
@@ -2950,6 +3052,18 @@ function upsertDailyRow_(date, userId, row) {
       return;
     }
   }
+  if (lastRow > 101) {
+    const olderKeys = sheet.getRange(2, 2, lastRow - 101, 2).getValues();
+    const index = olderKeys.findIndex(keys => normalizeDateKey_(keys[0]) === date && String(keys[1]) === userId);
+    if (index >= 0) {
+      const rowNumber = index + 2;
+      sheet.getRange(rowNumber, 2).setNumberFormat('@');
+      sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
+      cache.put(cacheKey, String(rowNumber), 21600);
+      invalidateLogCache_(date, userId);
+      return;
+    }
+  }
   const nextRow = lastRow + 1;
   sheet.getRange(nextRow, 2).setNumberFormat('@');
   sheet.getRange(nextRow, 1, 1, row.length).setValues([row]);
@@ -3843,24 +3957,26 @@ function upsertMember_(data) {
 
   if (rowNumber > 0) sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
   else sheet.appendRow(row);
-  const cache = CacheService.getScriptCache();
-  cache.remove(`member:${String(data.userId)}`);
-  cache.remove('members:v3');
-  cache.remove('members:v4');
-  cache.remove('members:v5');
-  cache.remove('members:v6');
-  cache.remove(`public-wall-base:v2:${today_()}`);
-  cache.remove(`public-wall-base:v3:${today_()}`);
-  cache.remove(`public-wall-base:v4:${today_()}`);
-  cache.remove(`public-wall-base:v5:${today_()}`);
-  cache.remove(`public-wall-base:v6:${today_()}`);
-  cache.remove(`public-wall-base:v7:${today_()}`);
-  cache.remove(`public-wall-base:v8:${today_()}`);
+  const keys = [];
+  keys.push(`member:${String(data.userId)}`);
+  keys.push('members:v3');
+  keys.push('members:v4');
+  keys.push('members:v5');
+  keys.push('members:v6');
+  keys.push(`public-wall-base:v2:${today_()}`);
+  keys.push(`public-wall-base:v3:${today_()}`);
+  keys.push(`public-wall-base:v4:${today_()}`);
+  keys.push(`public-wall-base:v5:${today_()}`);
+  keys.push(`public-wall-base:v6:${today_()}`);
+  keys.push(`public-wall-base:v7:${today_()}`);
+  keys.push(`public-wall-base:v8:${today_()}`);
+  keys.push(`public-wall-base:v9:${today_()}`);
   try {
-    cache.remove(`public-like-target:v2:${publicLikeTargetKey_(data.userId)}`);
+    keys.push(`public-like-target:v2:${publicLikeTargetKey_(data.userId)}`);
   } catch (error) {
     console.warn(`清除公開成員快取失敗：${error && error.message ? error.message : error}`);
   }
+  CacheService.getScriptCache().removeAll(keys);
 }
 
 /** 首次讀取食物庫時補上蛋白質欄位，不需要使用者手動執行 setupProject。 */
@@ -4358,25 +4474,26 @@ function replyMessage_(replyToken, messages) {
   });
 }
 
-function pushMessage_(to, messages) {
+function pushMessage_(to, messages, retryKey) {
   if (!to || !messages || !messages.length) return false;
   return callLineApi_('https://api.line.me/v2/bot/message/push', {
     to,
     messages: messages.slice(0, 5),
-  });
+  }, retryKey);
 }
 
-function callLineApi_(url, body) {
+function callLineApi_(url, body, retryKey) {
   const token = getLineToken_();
   if (!token) throw new Error('缺少 LINE_CHANNEL_ACCESS_TOKEN。');
   const response = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, ...(retryKey ? { 'X-Line-Retry-Key': retryKey } : {}) },
     payload: JSON.stringify(body),
     muteHttpExceptions: true,
   });
-  const ok = response.getResponseCode() >= 200 && response.getResponseCode() < 300;
+  const status = response.getResponseCode();
+  const ok = (status >= 200 && status < 300) || (Boolean(retryKey) && status === 409);
   if (!ok) console.error(`LINE API ${response.getResponseCode()}: ${response.getContentText()}`);
   return ok;
 }
@@ -4899,60 +5016,67 @@ function writeJsonCache_(key, value, seconds) {
 
 function invalidateLogCache_(date, userId) {
   date = String(date || '');
-  const cache = CacheService.getScriptCache();
-  if (date && userId) cache.remove(`daily-form:v1:${String(userId)}:${date}`);
-  cache.remove(`logs-for-date:v4:${date}`);
-  cache.remove(`public-wall-base:v2:${date}`);
-  cache.remove(`public-wall-base:v3:${date}`);
-  cache.remove(`public-wall-base:v4:${date}`);
-  cache.remove(`public-wall-base:v5:${date}`);
-  cache.remove(`public-wall-base:v6:${date}`);
-  cache.remove(`public-wall-base:v7:${date}`);
-  cache.remove(`public-wall-base:v8:${date}`);
-  cache.remove(`public-wall-base:v9:${date}`);
-  invalidateGroupWallCachesForUser_(date, userId);
+  const keys = [];
+  if (date && userId) keys.push(`daily-form:v1:${String(userId)}:${date}`);
+  keys.push(`logs-for-date:v4:${date}`);
+  keys.push(`public-wall-base:v2:${date}`);
+  keys.push(`public-wall-base:v3:${date}`);
+  keys.push(`public-wall-base:v4:${date}`);
+  keys.push(`public-wall-base:v5:${date}`);
+  keys.push(`public-wall-base:v6:${date}`);
+  keys.push(`public-wall-base:v7:${date}`);
+  keys.push(`public-wall-base:v8:${date}`);
+  keys.push(`public-wall-base:v9:${date}`);
+  keys.push(...groupWallCacheKeysForUser_(date, userId));
   // 補登過去日期可能改變「公開連續打卡」，因此也要清掉今日公開頁快取。
   if (date && date !== today_()) {
-    cache.remove(`public-wall-base:v2:${today_()}`);
-    cache.remove(`public-wall-base:v3:${today_()}`);
-    cache.remove(`public-wall-base:v4:${today_()}`);
-    cache.remove(`public-wall-base:v5:${today_()}`);
-    cache.remove(`public-wall-base:v6:${today_()}`);
-    cache.remove(`public-wall-base:v7:${today_()}`);
-    cache.remove(`public-wall-base:v8:${today_()}`);
-    cache.remove(`public-wall-base:v9:${today_()}`);
+    keys.push(`public-wall-base:v2:${today_()}`);
+    keys.push(`public-wall-base:v3:${today_()}`);
+    keys.push(`public-wall-base:v4:${today_()}`);
+    keys.push(`public-wall-base:v5:${today_()}`);
+    keys.push(`public-wall-base:v6:${today_()}`);
+    keys.push(`public-wall-base:v7:${today_()}`);
+    keys.push(`public-wall-base:v8:${today_()}`);
+    keys.push(`public-wall-base:v9:${today_()}`);
     // 公開牆的連續紀錄會受補登日影響；新版快取保留較久，因此一併清除可查的 30 天。
     for (let daysAgo = 0; daysAgo < 30; daysAgo += 1) {
-      cache.remove(`public-wall-base:v8:${dateKeyDaysAgo_(today_(), daysAgo)}`);
-      cache.remove(`public-wall-base:v9:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+      keys.push(`public-wall-base:v8:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+      keys.push(`public-wall-base:v9:${dateKeyDaysAgo_(today_(), daysAgo)}`);
     }
   }
   if (userId) {
-    cache.remove(`history:v1:${userId}:30:${today_()}`);
-    cache.remove(`history:v2:${userId}:30:${today_()}`);
-    cache.remove(`history:v2:${userId}:365:${today_()}`);
-    cache.remove(`history:v3:${userId}:30:${today_()}`);
-    cache.remove(`history:v3:${userId}:365:${today_()}`);
-    cache.remove(`history:v4:${userId}:30:${today_()}`);
-    cache.remove(`history:v4:${userId}:365:${today_()}`);
-    cache.remove(`history:v5:${userId}:30:${today_()}`);
-    cache.remove(`history:v5:${userId}:365:${today_()}`);
+    keys.push(`history:v1:${userId}:30:${today_()}`);
+    keys.push(`history:v2:${userId}:30:${today_()}`);
+    keys.push(`history:v2:${userId}:365:${today_()}`);
+    keys.push(`history:v3:${userId}:30:${today_()}`);
+    keys.push(`history:v3:${userId}:365:${today_()}`);
+    keys.push(`history:v4:${userId}:30:${today_()}`);
+    keys.push(`history:v4:${userId}:365:${today_()}`);
+    keys.push(`history:v5:${userId}:30:${today_()}`);
+    keys.push(`history:v5:${userId}:365:${today_()}`);
     try {
-      cache.remove(`public-like-target:v2:${publicLikeTargetKey_(userId)}`);
+      keys.push(`public-like-target:v2:${publicLikeTargetKey_(userId)}`);
     } catch (error) {
       console.warn(`清除公開按讚對象快取失敗：${error && error.message ? error.message : error}`);
     }
   }
+  CacheService.getScriptCache().removeAll([...new Set(keys)]);
+}
+
+function groupWallCacheKeysForUser_(date, userId) {
+  if (!date || !userId) return [];
+  const keys = [];
+  getActiveGroupIdsForUser_(userId).forEach(groupId => {
+    keys.push(`group-wall-base:v2:${groupId}:${date}`);
+    keys.push(`group-wall-base:v3:${groupId}:${date}`);
+    keys.push(`group-wall-base:v4:${groupId}:${date}`);
+  });
+  return keys;
 }
 
 function invalidateGroupWallCachesForUser_(date, userId) {
-  if (!date || !userId) return;
-  const cache = CacheService.getScriptCache();
-  getActiveGroupIdsForUser_(userId).forEach(groupId => {
-    cache.remove(`group-wall-base:v2:${groupId}:${date}`);
-    cache.remove(`group-wall-base:v3:${groupId}:${date}`);
-    cache.remove(`group-wall-base:v4:${groupId}:${date}`);
-  });
+  const keys = groupWallCacheKeysForUser_(date, userId);
+  if (keys.length) CacheService.getScriptCache().removeAll(keys);
 }
 
 /** 將一位成員所有既有每日紀錄統一成相同的群組牆分享狀態。 */
@@ -4984,25 +5108,27 @@ function setGroupWallVisibilityForUser_(userId, visible) {
 function invalidateAllGroupWallCachesForUser_(userId) {
   userId = String(userId || '');
   if (!userId) return;
-  const cache = CacheService.getScriptCache();
+  const keys = [];
   getActiveGroupIdsForUser_(userId).forEach(groupId => {
     for (let daysAgo = 0; daysAgo < 30; daysAgo += 1) {
-      cache.remove(`group-wall-base:v2:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
-      cache.remove(`group-wall-base:v3:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
-      cache.remove(`group-wall-base:v4:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+      keys.push(`group-wall-base:v2:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+      keys.push(`group-wall-base:v3:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+      keys.push(`group-wall-base:v4:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
     }
   });
+  if (keys.length) CacheService.getScriptCache().removeAll(keys);
 }
 
 function invalidateGroupWallCachesForGroup_(groupId) {
   groupId = String(groupId || '');
   if (!groupId) return;
-  const cache = CacheService.getScriptCache();
+  const keys = [];
   for (let daysAgo = 0; daysAgo < 30; daysAgo += 1) {
-    cache.remove(`group-wall-base:v2:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
-    cache.remove(`group-wall-base:v3:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
-    cache.remove(`group-wall-base:v4:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+    keys.push(`group-wall-base:v2:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+    keys.push(`group-wall-base:v3:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
+    keys.push(`group-wall-base:v4:${groupId}:${dateKeyDaysAgo_(today_(), daysAgo)}`);
   }
+  if (keys.length) CacheService.getScriptCache().removeAll(keys);
 }
 
 function jsonOutput_(value) {

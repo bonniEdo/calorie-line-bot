@@ -30,6 +30,16 @@
     .section h2 { margin:0 0 6px; font-size:18px; }
     .section-head { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
     .section-head h2 { margin:0; }
+    .history-controls { margin-top:16px; padding:14px; border:1px solid var(--line); border-radius:20px; background:#fff; box-shadow:0 6px 18px rgba(85,65,28,.05); }
+    .filter-tabs, .view-tabs { display:flex; gap:7px; overflow-x:auto; scrollbar-width:none; }
+    .filter-tabs::-webkit-scrollbar, .view-tabs::-webkit-scrollbar { display:none; }
+    .filter-button, .view-button { flex:0 0 auto; min-height:38px; padding:0 13px; border:1px solid var(--line); border-radius:999px; background:#fffaf0; color:var(--muted); font-size:12px; font-weight:900; cursor:pointer; }
+    .filter-button.active, .view-button.active { border-color:#d6a932; background:#fff0b5; color:#76500c; }
+    .custom-range { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:7px; margin-top:10px; }
+    .custom-range[hidden] { display:none; }
+    .custom-range input { min-width:0; min-height:40px; padding:0 9px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font:inherit; }
+    .filter-caption { margin:10px 1px 0; color:var(--muted); font-size:11px; font-weight:800; }
+    .view-tabs { justify-content:flex-start; margin:12px 0; }
     .chart-wrap { margin-top:13px; padding:10px 4px 2px; overflow:hidden; border-radius:16px; background:#fffaf0; }
     .chart-svg { display:block; width:100%; height:auto; min-height:230px; }
     .chart-grid { stroke:#eadfca; stroke-width:1; stroke-dasharray:3 4; }
@@ -43,6 +53,9 @@
     .chart-water.half .chart-water-outline { stroke:#377b99; }
     .chart-water.full .chart-water-outline { stroke:#267246; }
     .chart-dot-tdee { fill:#fff; stroke:#4e8b69; stroke-width:2; }
+    .chart-hit { cursor:pointer; fill:transparent; }
+    .chart-focus-line { stroke:#c7a33b; stroke-width:1.5; stroke-dasharray:4 4; }
+    .chart-selection { margin-top:8px; padding:9px 11px; border:1px solid #ead7a5; border-radius:11px; background:#fff; color:#5e512d; font-size:11px; font-weight:800; line-height:1.5; }
     .chart-legend { display:flex; justify-content:center; gap:18px; margin-top:8px; color:var(--muted); font-size:12px; font-weight:800; }
     .legend-item { display:inline-flex; align-items:center; gap:5px; }
     .legend-dot { width:9px; height:9px; border-radius:50%; display:inline-block; }
@@ -112,6 +125,29 @@
     .record summary::-webkit-details-marker { display:none; }
     .history-more { margin-top:14px; border-top:1px dashed var(--line); padding-top:12px; }
     .history-more > summary { color:#765c17; font-size:13px; font-weight:900; cursor:pointer; }
+    .record-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+    .record-action, .load-more { min-height:38px; padding:0 12px; border:1px solid #9fc7ae; border-radius:10px; background:#eef8f1; color:#35684b; font-size:12px; font-weight:900; cursor:pointer; text-decoration:none; }
+    .record-action.secondary { border-color:#e0c77b; background:#fff5cf; color:#765c17; }
+    .record-action:disabled { cursor:progress; opacity:.55; }
+    .load-more { display:block; width:100%; margin-top:13px; }
+    .calendar { margin-top:13px; }
+    .calendar-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .calendar-head strong { font-size:16px; }
+    .calendar-nav { width:38px; height:38px; border:1px solid var(--line); border-radius:11px; background:#fffaf0; color:#765c17; font-size:18px; font-weight:900; cursor:pointer; }
+    .calendar-weekdays, .calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:5px; }
+    .calendar-weekdays { margin-top:12px; color:var(--muted); font-size:10px; font-weight:900; text-align:center; }
+    .calendar-grid { margin-top:6px; }
+    .calendar-day { position:relative; min-height:50px; padding:7px 3px; border:1px solid transparent; border-radius:12px; background:#f7f3eb; color:#aaa095; text-align:center; font-size:12px; font-weight:900; }
+    button.calendar-day { cursor:pointer; }
+    .calendar-day.complete { border-color:#a9d0b7; background:#edf8f1; color:#35684b; }
+    .calendar-day.progress { border-color:#e7c777; background:#fff4ca; color:#765c17; }
+    .calendar-day.outside { visibility:hidden; }
+    .calendar-day.selected { outline:2px solid #332f29; outline-offset:1px; }
+    .calendar-day i { display:block; width:6px; height:6px; margin:5px auto 0; border-radius:50%; background:currentColor; }
+    .calendar-legend { display:flex; justify-content:center; gap:13px; margin-top:10px; color:var(--muted); font-size:10px; font-weight:800; }
+    .calendar-legend span::before { content:''; display:inline-block; width:7px; height:7px; margin-right:4px; border-radius:50%; vertical-align:1px; background:#b8afa2; }
+    .calendar-legend .complete::before { background:#4e8b69; }
+    .calendar-legend .progress::before { background:#c89822; }
     .date { display:flex; flex-direction:column; align-items:flex-start; gap:4px; color:var(--muted); font-size:13px; font-weight:800; }
     .energy { min-width:0; }
     .energy strong { display:block; font-size:17px; white-space:nowrap; letter-spacing:-.025em; }
@@ -140,6 +176,8 @@
       .protein-badge { padding:4px 6px; font-size:10px; }
       .record summary > .protein-badge { justify-self:end; }
       .record summary > .status { justify-self:end; }
+      .custom-range { grid-template-columns:1fr; }
+      .custom-range span { display:none; }
     }
     @media (max-width:380px) {
       .share-actions { grid-template-columns:1fr; }
@@ -183,52 +221,68 @@
       };
       const signed = value => value > 0 ? `+${number(value)}` : number(value);
       const records = Array.isArray(data.records) ? data.records : [];
-      const summary = data.summary || {};
       const nav = data.nav || {};
       let activeMonthKey = '';
       let activeWeekKey = '';
       let overviewScrollTop = 0;
-      let html = '<div id="historyOverview"><section class="hero">'
-        + '<div class="eyebrow">CALORIE HISTORY</div>'
-        + '<h1>📊 卡路里歷史紀錄</h1>'
-        + '<p>最近 ' + number(data.days || 30) + ' 天・只顯示自己的資料</p>'
-        + (data.demo ? '<span class="demo-notice">🧪 報表展示資料・不會寫入正式紀錄</span>' : '')
-        + '<div class="summary">'
-        + '<div class="summary-card"><strong>' + number(summary.averageIntake) + '</strong><span>平均攝取 kcal</span></div>'
-        + '<div class="summary-card"><strong>' + number(summary.averageTdee) + '</strong><span>平均 TDEE kcal</span></div>'
-        + '<div class="summary-card"><strong>' + number(summary.completedDays) + '/' + number(summary.loggedDays) + '</strong><span>完成紀錄天數</span></div>'
-        + '</div></section>';
-      html += '<section class="section chart-section"><div class="section-head"><div><h2>📈 攝取趨勢</h2><p class="hint">折線圖顯示最近 30 筆記錄。</p></div></div>';
-      if (!records.length) {
-        html += '<div class="chart-empty">有紀錄後，這裡會顯示你的熱量趨勢圖。</div>';
-      } else {
-        html += buildTrendChart(records.slice(0, 30));
-      }
-      html += '</section>';
-      if (records.length) {
-          html += '<section class="section"><div class="section-head"><div><h2>🗓️ 週／月熱量總覽</h2></div></div>'
-          + '<div class="period-grid">'
-          + renderPeriodCard('每週總計', aggregateByWeek(records), false, 'week')
-          + renderPeriodCard('每月總計', aggregateByMonth(records), false, 'month')
-          + '</div></section>';
-      }
-      html += '<section class="section"><div class="section-head"><div><h2>📅 我的歷史紀錄</h2><p class="hint">點開日期查看詳細記錄。</p></div></div>';
-      if (!records.length) {
-        html += '<div class="empty">目前還沒有歷史紀錄。</div>';
-      } else {
-        const recentRecords = records.slice(0, 3);
-        const olderRecords = records.slice(3);
-        html += recentRecords.map(renderRecord).join('');
-        if (olderRecords.length) {
-          html += '<details class="history-more"><summary>展開其餘 ' + number(olderRecords.length) + ' 筆歷史紀錄</summary>'
-            + olderRecords.map(renderRecord).join('')
-            + '</details>';
-        }
-      }
-      html += '</section></div><section id="monthlyReport" class="monthly-report-view" hidden></section><section id="weeklyEffortReport" class="weekly-effort-report-view" hidden></section>' + bottomNav(nav);
-      root.innerHTML = html;
+      const todayDate = parseDateKey(data.today) || new Date();
+      const historyState = {
+        range: 'month',
+        customStart: '',
+        customEnd: data.today,
+        view: 'list',
+        visibleCount: 15,
+        selectedDate: '',
+        calendarMonth: `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}`,
+      };
+      root.innerHTML = '<div id="historyOverview"></div><section id="monthlyReport" class="monthly-report-view" hidden></section>'
+        + '<section id="weeklyEffortReport" class="weekly-effort-report-view" hidden></section>' + bottomNav(nav);
+      renderHistoryOverview();
       bindBottomNavLoading(root);
       root.addEventListener('click', event => {
+        const filterButton = event.target.closest('[data-history-range]');
+        if (filterButton) {
+          historyState.range = filterButton.dataset.historyRange || 'month';
+          historyState.visibleCount = 15;
+          historyState.selectedDate = '';
+          historyState.calendarMonth = historyRange_().end.slice(0, 7);
+          renderHistoryOverview();
+          return;
+        }
+        const viewButton = event.target.closest('[data-history-view]');
+        if (viewButton) {
+          historyState.view = viewButton.dataset.historyView || 'list';
+          renderHistoryRecords_();
+          return;
+        }
+        if (event.target.closest('[data-load-more]')) {
+          historyState.visibleCount += 15;
+          renderHistoryRecords_();
+          return;
+        }
+        const calendarNav = event.target.closest('[data-calendar-shift]');
+        if (calendarNav) {
+          shiftCalendarMonth_(Number(calendarNav.dataset.calendarShift || 0));
+          historyState.selectedDate = '';
+          renderHistoryRecords_();
+          return;
+        }
+        const calendarDay = event.target.closest('[data-calendar-date]');
+        if (calendarDay) {
+          historyState.selectedDate = calendarDay.dataset.calendarDate || '';
+          renderHistoryRecords_();
+          return;
+        }
+        const chartDay = event.target.closest('[data-chart-date]');
+        if (chartDay) {
+          openHistoryRecord_(chartDay.dataset.chartDate || '');
+          return;
+        }
+        const copyButton = event.target.closest('[data-copy-date]');
+        if (copyButton) {
+          copyMealsToToday_(copyButton, copyButton.dataset.copyDate || '');
+          return;
+        }
         const openButton = event.target.closest('[data-month-report]');
         if (openButton) {
           openMonthlyReport(openButton.getAttribute('data-month-report') || '');
@@ -263,10 +317,228 @@
           shareWeeklyReport_(true);
         }
       });
+      root.addEventListener('change', event => {
+        if (event.target.matches('[data-custom-start], [data-custom-end]')) {
+          historyState.customStart = String((root.querySelector('[data-custom-start]') || {}).value || '');
+          historyState.customEnd = String((root.querySelector('[data-custom-end]') || {}).value || '');
+          historyState.visibleCount = 15;
+          historyState.calendarMonth = historyRange_().end.slice(0, 7);
+          renderHistoryOverview();
+        }
+      });
       if (data.demo && data.demoReport === 'week' && data.demoWeek) {
         window.setTimeout(() => openWeeklyReport(String(data.demoWeek)), 0);
       } else if (data.demo && data.demoMonth) {
         window.setTimeout(() => openMonthlyReport(String(data.demoMonth)), 0);
+      }
+
+      function historyRange_() {
+        const endToday = parseDateKey(data.today) || new Date();
+        let start = new Date(endToday);
+        let end = new Date(endToday);
+        let label = '本月';
+        if (historyState.range === 'week') {
+          start.setDate(end.getDate() - ((end.getDay() + 6) % 7));
+          label = '本週';
+        } else if (historyState.range === 'lastMonth') {
+          start = new Date(end.getFullYear(), end.getMonth() - 1, 1, 12);
+          end = new Date(end.getFullYear(), end.getMonth(), 0, 12);
+          label = '上月';
+        } else if (historyState.range === 'custom') {
+          const fallbackStart = new Date(end);
+          fallbackStart.setDate(end.getDate() - 29);
+          start = parseDateKey(historyState.customStart) || fallbackStart;
+          end = parseDateKey(historyState.customEnd) || endToday;
+          if (start > end) [start, end] = [end, start];
+          label = `${dateLabel(dateKey(start))}－${dateLabel(dateKey(end))}`;
+        } else {
+          start = new Date(end.getFullYear(), end.getMonth(), 1, 12);
+        }
+        return { start: dateKey(start), end: dateKey(end), label };
+      }
+
+      function rangeRecords_() {
+        const range = historyRange_();
+        return records.filter(record => record.date >= range.start && record.date <= range.end);
+      }
+
+      function rangeSummary_(items, range) {
+        const completed = items.filter(record => record.status === '完成');
+        const average = key => completed.length
+          ? Math.round(completed.reduce((sum, record) => sum + Number(record[key] || 0), 0) / completed.length)
+          : 0;
+        const periodDays = Math.max(1, Math.round((parseDateKey(range.end) - parseDateKey(range.start)) / 86400000) + 1);
+        return {
+          averageIntake: average('intake'),
+          averageTdee: average('tdee'),
+          completedDays: completed.length,
+          loggedDays: items.length,
+          periodDays,
+        };
+      }
+
+      function renderHistoryOverview() {
+        const overview = document.getElementById('historyOverview');
+        if (!overview) return;
+        const range = historyRange_();
+        const filtered = rangeRecords_();
+        const summary = rangeSummary_(filtered, range);
+        const customHidden = historyState.range === 'custom' ? '' : ' hidden';
+        let html = '<section class="hero">'
+          + '<div class="eyebrow">CALORIE HISTORY</div><h1>📊 卡路里歷史紀錄</h1>'
+          + '<p>' + escapeAttr(range.label) + '・只顯示自己的資料</p>'
+          + (data.demo ? '<span class="demo-notice">🧪 報表展示資料・不會寫入正式紀錄</span>' : '')
+          + '<div class="summary">'
+          + '<div class="summary-card"><strong>' + number(summary.averageIntake) + '</strong><span>完成日平均攝取</span></div>'
+          + '<div class="summary-card"><strong>' + number(summary.averageTdee) + '</strong><span>完成日平均 TDEE</span></div>'
+          + '<div class="summary-card"><strong>' + number(summary.completedDays) + '/' + number(summary.loggedDays) + '</strong><span>完成／記錄日</span></div>'
+          + '</div></section>'
+          + '<section class="history-controls"><div class="filter-tabs" role="group" aria-label="日期範圍">'
+          + rangeButton_('week', '本週') + rangeButton_('month', '本月') + rangeButton_('lastMonth', '上月') + rangeButton_('custom', '自訂')
+          + '</div><div class="custom-range"' + customHidden + '>'
+          + '<input type="date" data-custom-start value="' + escapeAttr(historyState.customStart || range.start) + '" max="' + escapeAttr(data.today) + '" aria-label="開始日期"><span>至</span>'
+          + '<input type="date" data-custom-end value="' + escapeAttr(historyState.customEnd || range.end) + '" max="' + escapeAttr(data.today) + '" aria-label="結束日期"></div>'
+          + '<p class="filter-caption">' + escapeAttr(range.start) + ' 至 ' + escapeAttr(range.end) + '・期間 ' + number(summary.periodDays) + ' 天・依 ' + number(summary.completedDays) + ' 個完成日計算平均</p>'
+          + '</section>';
+
+        html += '<section class="section chart-section"><div class="section-head"><div><h2>📈 攝取趨勢</h2><p class="hint">依真實日期間隔顯示；點日期可查看當日明細。</p></div></div>';
+        html += filtered.length ? buildTrendChart(filtered, range) : '<div class="chart-empty">這段期間尚無紀錄。</div>';
+        html += '</section>';
+
+        if (filtered.length) {
+          html += '<section class="section"><div class="section-head"><div><h2>🗓️ 週／月熱量總覽</h2></div></div><div class="period-grid">'
+            + renderPeriodCard('每週總計', aggregateByWeek(filtered), false, 'week')
+            + renderPeriodCard('每月總計', aggregateByMonth(filtered), false, 'month') + '</div></section>';
+        }
+
+        overview.innerHTML = html + '<section class="section" id="historyRecords"></section>';
+        renderHistoryRecords_();
+      }
+
+      function renderHistoryRecords_() {
+        const container = document.getElementById('historyRecords');
+        if (!container) return;
+        const scrollTop = window.scrollY;
+        const filtered = rangeRecords_();
+        let html = '<div class="section-head"><div><h2>📅 我的歷史紀錄</h2><p class="hint">'
+          + (historyState.view === 'calendar' ? '完成、打卡中與未記錄一眼看清楚。' : '每次顯示 15 筆，點開日期查看詳細記錄。')
+          + '</p></div></div><div class="view-tabs" role="group" aria-label="歷史紀錄顯示方式">'
+          + viewButton_('list', '清單') + viewButton_('calendar', '月曆') + '</div>';
+        if (historyState.view === 'calendar') {
+          html += renderCalendar_();
+          const selected = records.find(record => record.date === historyState.selectedDate);
+          html += selected ? renderRecord(selected, true)
+            : '<p class="hint" style="margin-top:14px">點選有紀錄的日期，即可在這裡查看當日明細。</p>';
+        } else if (!filtered.length) {
+          html += '<div class="empty">這段期間目前沒有歷史紀錄。</div>';
+        } else {
+          const visible = filtered.slice(0, historyState.visibleCount);
+          html += visible.map(record => renderRecord(record, record.date === historyState.selectedDate)).join('');
+          if (visible.length < filtered.length) {
+            html += '<button class="load-more" type="button" data-load-more>載入更多（尚有 ' + number(filtered.length - visible.length) + ' 筆）</button>';
+          }
+        }
+        container.innerHTML = html;
+        window.scrollTo({ top:scrollTop, behavior:'instant' });
+      }
+
+      function rangeButton_(key, label) {
+        return '<button class="filter-button' + (historyState.range === key ? ' active' : '') + '" type="button" data-history-range="' + key + '">' + label + '</button>';
+      }
+
+      function viewButton_(key, label) {
+        return '<button class="view-button' + (historyState.view === key ? ' active' : '') + '" type="button" aria-pressed="' + (historyState.view === key) + '" aria-controls="historyRecords" data-history-view="' + key + '">' + label + '</button>';
+      }
+
+      function shiftCalendarMonth_(amount) {
+        const match = historyState.calendarMonth.match(/^(\d{4})-(\d{2})$/);
+        if (!match) return;
+        const date = new Date(Number(match[1]), Number(match[2]) - 1 + amount, 1, 12);
+        historyState.calendarMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      }
+
+      function renderCalendar_() {
+        const match = historyState.calendarMonth.match(/^(\d{4})-(\d{2})$/);
+        if (!match) return '';
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const first = new Date(year, month - 1, 1, 12);
+        const days = new Date(year, month, 0, 12).getDate();
+        const leading = first.getDay();
+        const byDate = new Map(records.map(record => [record.date, record]));
+        let cells = Array.from({ length: leading }, () => '<span class="calendar-day outside"></span>');
+        for (let day = 1; day <= days; day += 1) {
+          const key = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const record = byDate.get(key);
+          const statusClass = record ? (record.status === '完成' ? ' complete' : ' progress') : '';
+          const selected = historyState.selectedDate === key ? ' selected' : '';
+          const disabled = key > data.today ? ' disabled' : '';
+          const attrs = record ? ' data-calendar-date="' + key + '" aria-label="' + key + ' ' + record.status + '"' : ' aria-label="' + key + ' 未記錄"';
+          cells.push('<button class="calendar-day' + statusClass + selected + '" type="button"' + attrs + disabled + '>' + day + (record ? '<i></i>' : '') + '</button>');
+        }
+        return '<div class="calendar"><div class="calendar-head"><button class="calendar-nav" type="button" data-calendar-shift="-1" aria-label="上個月">‹</button>'
+          + '<strong>' + year + ' 年 ' + month + ' 月</strong><button class="calendar-nav" type="button" data-calendar-shift="1" aria-label="下個月">›</button></div>'
+          + '<div class="calendar-weekdays"><span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span></div>'
+          + '<div class="calendar-grid">' + cells.join('') + '</div><div class="calendar-legend"><span class="complete">完成</span><span class="progress">打卡中</span><span>未記錄</span></div></div>';
+      }
+
+      function openHistoryRecord_(date) {
+        if (!records.some(record => record.date === date)) return;
+        historyState.selectedDate = date;
+        historyState.view = 'list';
+        let filtered = rangeRecords_();
+        if (!filtered.some(record => record.date === date)) {
+          historyState.range = 'custom';
+          historyState.customStart = date;
+          historyState.customEnd = date;
+          filtered = rangeRecords_();
+        }
+        const index = filtered.findIndex(record => record.date === date);
+        if (index >= 0) historyState.visibleCount = Math.max(historyState.visibleCount, index + 1);
+        renderHistoryOverview();
+        const selected = document.getElementById(`history-record-${date}`);
+        if (selected) selected.scrollIntoView({ behavior:'smooth', block:'center' });
+      }
+
+      function copyMealsToToday_(button, sourceDate) {
+        if (!sourceDate || !data.session || !data.session.uid || data.demo) return;
+        button.disabled = true;
+        button.textContent = '準備餐點中…';
+        google.script.run
+          .withSuccessHandler(result => {
+            try {
+              const draft = {
+                version: 1,
+                savedAt: Date.now(),
+                payload: {
+                  recordDate: result.targetDate,
+                  meals: result.meals || {},
+                  aiMeals: result.aiMeals || {},
+                  extraKcal: 0,
+                  isComplete: false,
+                  copyMealsOnly: true,
+                  sourceDate: result.sourceDate,
+                },
+              };
+              window.localStorage.setItem(`diet-draft:v1:${data.session.uid}:${result.targetDate}`, JSON.stringify(draft));
+              const link = document.createElement('a');
+              link.href = nav.formUrl;
+              link.target = '_top';
+              link.hidden = true;
+              document.body.append(link);
+              link.click();
+            } catch (error) {
+              button.disabled = false;
+              button.textContent = '複製餐點到今天';
+              window.alert('此瀏覽器無法保存餐點草稿，請直接回打卡頁手動加入。');
+            }
+          })
+          .withFailureHandler(error => {
+            button.disabled = false;
+            button.textContent = '複製餐點到今天';
+            window.alert(error && error.message ? error.message : '目前無法複製餐點，請稍後再試。');
+          })
+          .getHistoryCopyDraftForClient({ uid:data.session.uid, sig:data.session.sig, sourceDate });
       }
 
       function escapeAttr(value) {
@@ -289,14 +561,21 @@
         });
       }
 
-      function renderRecord(record) {
+      function renderRecord(record, open) {
         const progress = record.status !== '完成';
         const proteinG = Math.max(0, Number(record.proteinG || 0));
         const protein = proteinG > 0 ? '<span class="protein-badge" title="蛋白質估算">🍖 ' + proteinNumber(proteinG) + 'g</span>' : '';
         const waterMl = Math.max(0, Number(record.waterMl || 0));
         const waterGoalMl = Math.max(0, Number(record.waterGoalMl || 0));
         const waterTracked = Boolean(record.waterTracked && waterGoalMl > 0);
-        let result = '<details class="record"><summary>'
+        const ageDays = Math.round(((parseDateKey(data.today) || new Date()) - parseDateKey(record.date)) / 86400000);
+        const canBackfill = ageDays >= 1 && ageDays <= 3;
+        const action = canBackfill
+          ? '<a class="record-action secondary" target="_top" href="' + escapeAttr(withDate_(nav.formUrl, record.date)) + '">前往補登</a>'
+          : (ageDays > 3 && !data.demo
+            ? '<button class="record-action" type="button" data-copy-date="' + escapeAttr(record.date) + '">複製餐點到今天</button>'
+            : '');
+        let result = '<details id="history-record-' + escapeAttr(record.date) + '" class="record"' + (open ? ' open' : '') + '><summary>'
           + '<span class="date"><strong>' + dateLabel(record.date) + '</strong></span>'
           + '<span class="energy"><strong>' + number(record.intake) + ' / ' + number(record.tdee) + ' kcal</strong><small>差額 ' + signed(record.deficit) + ' kcal</small></span>'
           + protein
@@ -306,13 +585,18 @@
           + '<div class="detail-item"><strong>' + number(record.exerciseMinutes) + ' 分鐘</strong>運動時間</div>'
           + '<div class="detail-item"><strong>' + (proteinG > 0 ? proteinNumber(proteinG) + ' g' : '—') + '</strong>蛋白質估算</div>'
           + '<div class="detail-item"><strong>' + (waterTracked ? number(waterMl) + ' / ' + number(waterGoalMl) + ' ml' : '未啟用') + '</strong>飲水量</div>'
-          + '<div class="detail-item"><strong>' + (record.exerciseName || '未填寫') + '</strong>運動項目</div>'
+          + '<div class="detail-item"><strong>' + escapeAttr(record.exerciseName || '未填寫') + '</strong>運動項目</div>'
           + '</div><div class="meal-list">';
         (record.meals || []).forEach(meal => {
           const mealProteinG = Math.max(0, Number(meal && meal.proteinG || 0));
-          result += '<div class="meal"><span>' + meal.label + (meal.names && meal.names.length ? '・' + meal.names.join('、') : '') + '</span><span>' + number(meal.kcal) + ' kcal' + (mealProteinG > 0 ? ' ・🍖 ' + proteinNumber(mealProteinG) + ' g' : '') + '</span></div>';
+          result += '<div class="meal"><span>' + escapeAttr(meal.label) + (meal.names && meal.names.length ? '・' + escapeAttr(meal.names.join('、')) : '') + '</span><span>' + number(meal.kcal) + ' kcal' + (mealProteinG > 0 ? ' ・🍖 ' + proteinNumber(mealProteinG) + ' g' : '') + '</span></div>';
         });
-        return result + '</div></div></details>';
+        return result + '</div>' + (action ? '<div class="record-actions">' + action + '</div>' : '') + '</div></details>';
+      }
+
+      function withDate_(url, date) {
+        if (!url) return '#';
+        return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'date=' + encodeURIComponent(date);
       }
 
       function parseDateKey(value) {
@@ -1333,7 +1617,7 @@
         }
       }
 
-      function buildTrendChart(items) {
+      function buildTrendChart(items, range) {
         const ordered = items.slice().reverse();
         const width = 680;
         const height = 300;
@@ -1341,9 +1625,10 @@
         const plotWidth = width - pad.left - pad.right;
         const plotHeight = height - pad.top - pad.bottom;
         const max = Math.max(100, ...ordered.map(item => Math.max(Number(item.intake) || 0, Number(item.tdee) || 0)));
-        const x = index => ordered.length === 1
-          ? pad.left + plotWidth / 2
-          : pad.left + (plotWidth * index / (ordered.length - 1));
+        const rangeStart = parseDateKey(range && range.start) || parseDateKey(ordered[0].date);
+        const rangeEnd = parseDateKey(range && range.end) || parseDateKey(ordered[ordered.length - 1].date);
+        const rangeMs = Math.max(86400000, rangeEnd - rangeStart);
+        const x = index => pad.left + plotWidth * Math.max(0, Math.min(1, (parseDateKey(ordered[index].date) - rangeStart) / rangeMs));
         const y = value => pad.top + plotHeight - (Math.max(0, Number(value) || 0) / max * plotHeight);
         const path = key => ordered.map((item, index) => `${index ? 'L' : 'M'}${x(index).toFixed(1)},${y(item[key]).toFixed(1)}`).join(' ');
         const grid = [0, .25, .5, .75, 1].map(ratio => {
@@ -1352,7 +1637,8 @@
           return '<line class="chart-grid" x1="' + pad.left + '" y1="' + lineY + '" x2="' + (width - pad.right) + '" y2="' + lineY + '" />'
             + '<text class="chart-axis" x="' + (pad.left - 7) + '" y="' + (Number(lineY) + 3) + '" text-anchor="end">' + number(value) + '</text>';
         }).join('');
-        const dots = (key, klass) => ordered.map((item, index) => '<circle class="' + klass + '" cx="' + x(index).toFixed(1) + '" cy="' + y(item[key]).toFixed(1) + '" r="3.5" />').join('');
+        const dots = (key, klass) => ordered.map((item, index) => '<circle class="' + klass + '" cx="' + x(index).toFixed(1) + '" cy="' + y(item[key]).toFixed(1) + '" r="3.5"><title>' + item.date + '・' + number(item[key]) + ' kcal</title></circle>').join('');
+        const hitTargets = ordered.map((item, index) => '<rect class="chart-hit" data-chart-date="' + item.date + '" x="' + (x(index) - Math.max(7, plotWidth / Math.max(ordered.length, 1) / 2)).toFixed(1) + '" y="' + pad.top + '" width="' + Math.max(14, plotWidth / Math.max(ordered.length, 1)).toFixed(1) + '" height="' + plotHeight + '"><title>' + item.date + '・攝取 ' + number(item.intake) + ' kcal・TDEE ' + number(item.tdee) + ' kcal</title></rect>').join('');
         const waterIcons = ordered.map((item, index) => {
           const show = ordered.length <= 10 || index === 0 || index === ordered.length - 1 || index % Math.ceil(ordered.length / 6) === 0;
           const waterMl = Math.max(0, Number(item.waterMl || 0));
@@ -1373,11 +1659,15 @@
           const show = ordered.length <= 10 || index === 0 || index === ordered.length - 1 || index % Math.ceil(ordered.length / 6) === 0;
           return show ? '<text class="chart-axis" x="' + x(index).toFixed(1) + '" y="' + (height - 40) + '" text-anchor="middle">' + dateLabel(item.date) + '</text>' : '';
         }).join('');
+        const selected = ordered.find(item => item.date === historyState.selectedDate);
+        const selection = selected
+          ? '<div class="chart-selection">' + selected.date + '・攝取 ' + number(selected.intake) + ' kcal・TDEE ' + number(selected.tdee) + ' kcal・蛋白質 ' + proteinNumber(selected.proteinG) + ' g・飲水 ' + number(selected.waterMl) + ' ml</div>'
+          : '';
         return '<div class="chart-wrap"><svg class="chart-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="每日攝取與TDEE趨勢圖">'
           + grid + '<path class="chart-line-tdee" d="' + path('tdee') + '" />'
           + '<path class="chart-line-intake" d="' + path('intake') + '" />'
-          + dots('tdee', 'chart-dot-tdee') + dots('intake', 'chart-dot-intake') + labels + waterIcons
-          + '</svg><div class="chart-legend"><span class="legend-item"><i class="legend-dot legend-intake"></i>已攝取</span><span class="legend-item"><i class="legend-dot legend-tdee"></i>可攝取總量 TDEE</span></div></div>';
+          + dots('tdee', 'chart-dot-tdee') + dots('intake', 'chart-dot-intake') + hitTargets + labels + waterIcons
+          + '</svg><div class="chart-legend"><span class="legend-item"><i class="legend-dot legend-intake"></i>已攝取</span><span class="legend-item"><i class="legend-dot legend-tdee"></i>可攝取總量 TDEE</span></div>' + selection + '</div>';
       }
     }());
   </script>

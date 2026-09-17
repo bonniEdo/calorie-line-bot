@@ -1497,7 +1497,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.08.25-112';
+    window.__dietAppBuild = '2026.09.17-114';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1584,8 +1584,9 @@
     if (BOOTSTRAP && !Object.prototype.hasOwnProperty.call(DAILY_LOGS, BOOTSTRAP.today)) {
       DAILY_LOGS[BOOTSTRAP.today] = BOOTSTRAP.todayLog || null;
     }
-    let activeSavedLog = BOOTSTRAP && DAILY_LOGS[BOOTSTRAP.today] && DAILY_LOGS[BOOTSTRAP.today].exists
-      ? DAILY_LOGS[BOOTSTRAP.today]
+    const INITIAL_DATE = BOOTSTRAP && BOOTSTRAP.initialDate ? BOOTSTRAP.initialDate : (BOOTSTRAP && BOOTSTRAP.today);
+    let activeSavedLog = BOOTSTRAP && DAILY_LOGS[INITIAL_DATE] && DAILY_LOGS[INITIAL_DATE].exists
+      ? DAILY_LOGS[INITIAL_DATE]
       : null;
     const RECORD_DATES = BOOTSTRAP && Array.isArray(BOOTSTRAP.recordDates)
       ? BOOTSTRAP.recordDates
@@ -1623,12 +1624,19 @@
       savedMealRevision: 0,
       autoSaveTimer: null,
       saveInFlight: false,
+      authBlocked: false,
+      draftNeedsReview: false,
+      retryCount: 0,
+      retryTimer: null,
+      saveError: '',
+      draftStored: false,
+      lastSaveMs: null,
       queuedUserSave: null,
       userSubmitPending: false,
       lastSavedSignature: '',
       activeSaveSignature: '',
       pendingAutoComplete: false,
-      recordDate: BOOTSTRAP && BOOTSTRAP.today ? BOOTSTRAP.today : '',
+      recordDate: INITIAL_DATE || '',
       loadingRecordDate: false,
       pendingDateSwitch: '',
       recordDatePickerOpen: false,
@@ -1669,6 +1677,9 @@
       else {
         renderApp();
         startTaipeiDayWatcher();
+        cleanupLocalDrafts_();
+        offerLocalDraft_();
+        bindSaveRecovery_();
       }
       window.__dietAppReady = true;
       window.__dietAppStage = '完成';
@@ -4044,9 +4055,18 @@
       submitButton.textContent = todayIsComplete
         ? (isBackfill ? '✅ 這天已補登' : '✅ 今日已完成')
         : (isBackfill ? '送出補登完成' : '送出打卡完成');
+      if (state.saveError) {
+        submitButton.disabled = false;
+        saveStatus.textContent = state.saveError;
+        return;
+      }
+      if (!state.saveInFlight && state.mealRevision > state.savedMealRevision) {
+        saveStatus.textContent = state.draftStored ? '已存於此裝置・等待同步' : '尚未同步・請勿關閉頁面';
+        return;
+      }
       saveStatus.textContent = todayIsComplete
         ? (isBackfill ? '✅ 補登已完成' : '✅ 已完成')
-        : (state.saveInFlight ? '自動儲存中…' : (isBackfill ? '🕘 補登中・自動儲存' : '📝 打卡中・自動儲存'));
+        : (state.saveInFlight ? '自動儲存中…' : (state.lastSavedSignature ? '✅ 已同步・打卡中' : (isBackfill ? '🕘 補登中・自動儲存' : '📝 打卡中・自動儲存')));
     }
 
     function updateRecordStatusTag() {
@@ -4071,7 +4091,14 @@
 
       todayIsComplete = false;
       state.pendingAutoComplete = false;
+      state.draftNeedsReview = false;
       state.mealRevision += 1;
+      window.clearTimeout(state.retryTimer);
+      state.retryCount = 0;
+      state.saveError = state.authBlocked ? '連結失效，請回 LINE 重新取得打卡連結' : '';
+      persistLocalDraft_(false);
+      const recoveryPanel = document.getElementById('localDraftRecovery');
+      if (recoveryPanel) recoveryPanel.remove();
 
       updateSubmitButtons();
 
@@ -4096,6 +4123,11 @@
     function markPublicSettingsChanged(silent) {
       state.mealRevision += 1;
       state.pendingAutoComplete = todayIsComplete;
+      state.draftNeedsReview = false;
+      window.clearTimeout(state.retryTimer);
+      state.retryCount = 0;
+      state.saveError = state.authBlocked ? '連結失效，請回 LINE 重新取得打卡連結' : '';
+      persistLocalDraft_(todayIsComplete);
       window.clearTimeout(state.autoSaveTimer);
       updateSubmitButtons();
       state.autoSaveTimer = window.setTimeout(
@@ -4182,41 +4214,26 @@
       state.mealRevision = 0;
       state.savedMealRevision = 0;
       state.pendingAutoComplete = false;
+      state.lastSavedSignature = '';
+      state.draftNeedsReview = false;
+      state.saveError = '';
+      state.draftStored = false;
+      state.retryCount = 0;
+      window.clearTimeout(state.retryTimer);
       hydrateStateFromDailyLog(savedLog);
       renderApp();
+      offerLocalDraft_();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function submitLog(markComplete, automatic) {
-      automatic = Boolean(automatic);
-      if (state.saveInFlight) {
-        if (!automatic) {
-          state.queuedUserSave = Boolean(markComplete);
-          // 背景儲存已在進行時，介面仍只顯示一個「送出中」狀態。
-          // 第一筆結束後會立即送出完成狀態，不再顯示「排程送出中」。
-          setSavingState(true);
-        }
-        return;
-      }
-      const bmr = Number(document.getElementById('bmr').value || 0);
-      if (markComplete && !bmr) {
-        if (!automatic) setSavingState(false);
-        showToast('請先到下方「設定」填寫 BMR，或使用估算功能。');
-        return;
-      }
-      if (markComplete && grandTotal() <= 0) {
-        if (!automatic) setSavingState(false);
-        showToast('請先拍照辨識食物，或手動填寫食物熱量。');
-        return;
-      }
-
+    function buildSavePayload_(markComplete) {
       const exercise = exerciseSummary();
-      const payload = {
+      return {
         uid: BOOTSTRAP.uid,
         sig: BOOTSTRAP.sig,
         recordDate: state.recordDate,
         name: document.getElementById('name').value,
-        bmr,
+        bmr: Number(document.getElementById('bmr').value || 0),
         meals: serializeMeals(),
         aiMeals: serializeAiMeals(),
         extraKcal: 0,
@@ -4236,14 +4253,178 @@
         publishToGroup: Boolean(document.getElementById('publishToGroup') && document.getElementById('publishToGroup').checked),
       };
 
+    }
+
+    function draftKey_() {
+      return `diet-draft:v1:${BOOTSTRAP.uid}:${state.recordDate}`;
+    }
+
+    function persistLocalDraft_(markComplete) {
+      try {
+        const payload = buildSavePayload_(markComplete);
+        // 草稿只含表單資料，不保存登入簽章或照片。
+        delete payload.sig;
+        delete payload.uid;
+        const draft = { version: 1, savedAt: Date.now(), payload };
+        window.localStorage.setItem(draftKey_(), JSON.stringify(draft));
+        state.draftStored = true;
+      } catch (error) {
+        state.draftStored = false;
+      }
+    }
+
+    function clearLocalDraft_() {
+      try { window.localStorage.removeItem(draftKey_()); } catch (error) { /* 裝置可能封鎖儲存 */ }
+      state.draftStored = false;
+    }
+
+    function cleanupLocalDrafts_() {
+      try {
+        const prefix = `diet-draft:v1:${BOOTSTRAP.uid}:`;
+        for (let i = window.localStorage.length - 1; i >= 0; i -= 1) {
+          const key = window.localStorage.key(i);
+          if (!key || !key.startsWith(prefix)) continue;
+          const draft = JSON.parse(window.localStorage.getItem(key));
+          if (!draft || !Number.isFinite(draft.savedAt) || Date.now() - draft.savedAt > 4 * 86400000) {
+            window.localStorage.removeItem(key);
+          }
+        }
+      } catch (error) { /* 無法使用本機儲存仍可正常打卡 */ }
+    }
+
+    function offerLocalDraft_() {
+      let draft;
+      try { draft = JSON.parse(window.localStorage.getItem(draftKey_()) || 'null'); } catch (error) { return; }
+      if (!draft || draft.version !== 1 || !draft.payload || draft.payload.recordDate !== state.recordDate) return;
+      if (!Number.isFinite(draft.savedAt) || Date.now() - draft.savedAt > 4 * 86400000) {
+        clearLocalDraft_();
+        return;
+      }
+      const panel = el('div', 'notice');
+      panel.id = 'localDraftRecovery';
+      panel.append(el('p', '', '此裝置有尚未確認同步的草稿。還原後可檢查內容，再按送出；目前顯示的是雲端紀錄。'));
+      const restore = el('button', 'secondary', '還原草稿');
+      const discard = el('button', 'secondary', '保留雲端紀錄');
+      restore.type = discard.type = 'button';
+      restore.addEventListener('click', () => {
+        const data = draft.payload;
+        if (data.copyMealsOnly) {
+          // 從歷史頁複製時只替換餐點；保留今天既有飲水、運動與分享設定。
+          const base = activeSavedLog && activeSavedLog.exists ? activeSavedLog : { exists: true };
+          hydrateStateFromDailyLog({
+            ...base,
+            meals: data.meals || {},
+            aiMeals: data.aiMeals || {},
+            extraKcal: 0,
+            isComplete: false,
+          });
+        } else {
+          hydrateStateFromDailyLog({ ...data, exists: true, isPublic: data.publishToday, isGroupPublic: data.publishToGroup });
+          state.waterEnabled = Boolean(data.waterEnabled);
+          state.waterGoalMl = Number(data.waterGoalMl || 2000);
+        }
+        state.mealRevision += 1;
+        state.pendingAutoComplete = Boolean(data.isComplete);
+        todayIsComplete = false;
+        state.lastSavedSignature = '';
+        state.draftStored = true;
+        state.draftNeedsReview = true;
+        state.saveError = '已還原裝置草稿，請檢查後送出';
+        renderApp();
+        ['name', 'bmr', 'publicAlias'].forEach(id => {
+          const field = document.getElementById(id);
+          if (field && data[id] !== undefined) field.value = data[id];
+        });
+        ['publishToday', 'publishFoodDetails', 'joinPublicRanking', 'publishToGroup'].forEach(id => {
+          const field = document.getElementById(id);
+          if (field && data[id] !== undefined) field.checked = Boolean(data[id]);
+        });
+        updateTotals();
+        updatePublicSettingsSummary();
+        updateSubmitButtons();
+      });
+      discard.addEventListener('click', () => { clearLocalDraft_(); panel.remove(); });
+      panel.append(restore, discard);
+      app.prepend(panel);
+    }
+
+    function bindSaveRecovery_() {
+      window.addEventListener('online', () => {
+        if (state.mealRevision <= state.savedMealRevision || state.saveInFlight || state.authBlocked || state.draftNeedsReview) return;
+        state.retryCount = 0;
+        submitLog(Boolean(state.pendingAutoComplete), true);
+      });
+      window.addEventListener('pagehide', () => {
+        if (state.mealRevision > state.savedMealRevision || state.saveInFlight) {
+          persistLocalDraft_(state.pendingAutoComplete);
+        }
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden && (state.mealRevision > state.savedMealRevision || state.saveInFlight)) {
+          persistLocalDraft_(state.pendingAutoComplete);
+        }
+      });
+    }
+
+    function isTransientSaveError_(message) {
+      return /network|connection|timeout|timed out|try again|unavailable|internal error|too many times|lock|網路|連線|逾時|超時|稍後再試|鎖定|鎖逾時/i.test(message);
+    }
+
+    function submitLog(markComplete, automatic) {
+      automatic = Boolean(automatic);
+      window.clearTimeout(state.retryTimer);
+      if (!automatic) {
+        state.retryCount = 0;
+        state.draftNeedsReview = false;
+      }
+      if (automatic && (state.authBlocked || state.draftNeedsReview)) return;
+      if (state.saveInFlight) {
+        if (!automatic) {
+          state.queuedUserSave = Boolean(markComplete);
+          state.pendingAutoComplete = Boolean(markComplete);
+          persistLocalDraft_(markComplete);
+          // 背景儲存已在進行時，介面仍只顯示一個「送出中」狀態。
+          // 第一筆結束後會立即送出完成狀態，不再顯示「排程送出中」。
+          setSavingState(true);
+        }
+        return;
+      }
+      const bmr = Number(document.getElementById('bmr').value || 0);
+      if (markComplete && !bmr) {
+        if (!automatic) setSavingState(false);
+        showToast('請先到下方「設定」填寫 BMR，或使用估算功能。');
+        return;
+      }
+      if (markComplete && grandTotal() <= 0) {
+        if (!automatic) setSavingState(false);
+        showToast('請先拍照辨識食物，或手動填寫食物熱量。');
+        return;
+      }
+
+      // 完成狀態本身也是修改，離線送出後仍須在連線恢復時同步。
+      if (!automatic) state.mealRevision += 1;
+      const payload = buildSavePayload_(markComplete);
+      persistLocalDraft_(markComplete);
+
       const requestRevision = state.mealRevision;
       const requestSignature = JSON.stringify(payload);
       if (automatic && requestSignature === state.lastSavedSignature) {
+        clearLocalDraft_();
+        state.saveError = '';
         state.savedMealRevision = Math.max(state.savedMealRevision, requestRevision);
         if (finishSave(requestRevision)) return;
         updateSubmitButtons();
         return;
       }
+      state.pendingAutoComplete = Boolean(markComplete);
+      state.saveError = '';
+      state.authBlocked = false;
+      if (navigator.onLine === false) {
+        state.saveError = state.draftStored ? '離線・已存於此裝置，連線後同步' : '離線・裝置無法保存草稿，請勿關閉頁面';
+        setSavingState(false);
+        return;
+      }
+      const requestStartedAt = performance.now();
       state.saveInFlight = true;
       state.activeSaveSignature = requestSignature;
       window.clearTimeout(state.autoSaveTimer);
@@ -4253,7 +4434,13 @@
         .withSuccessHandler(result => {
           state.lastSavedSignature = requestSignature;
           state.activeSaveSignature = '';
-          todayIsComplete = Boolean(result.isComplete);
+          state.retryCount = 0;
+          state.saveError = '';
+          state.lastSaveMs = Math.round(performance.now() - requestStartedAt);
+          console.info('daily_save', { roundTripMs: state.lastSaveMs, server: result.timing || null });
+          const unchanged = state.mealRevision === requestRevision;
+          todayIsComplete = unchanged && Boolean(result.isComplete);
+          if (unchanged && state.queuedUserSave === null) clearLocalDraft_();
           const savedSnapshot = {
             exists: true,
             meals: payload.meals,
@@ -4267,7 +4454,7 @@
             exerciseKcal: payload.exerciseKcal,
             exerciseRecords: payload.exerciseRecords,
             note: '',
-            isComplete: todayIsComplete,
+            isComplete: Boolean(result.isComplete),
             isPublic: Boolean(payload.publishToday),
             publishFoodDetails: Boolean(payload.publishFoodDetails),
             isGroupPublic: Boolean(payload.publishToGroup),
@@ -4300,17 +4487,26 @@
         .withFailureHandler(error => {
           state.saveInFlight = false;
           state.activeSaveSignature = '';
-          state.pendingDateSwitch = '';
-          if (state.midnightReloadPending) state.midnightReloadPending = false;
-          const queuedComplete = state.queuedUserSave;
-          state.queuedUserSave = null;
-          if (queuedComplete !== null) {
-            submitLog(queuedComplete, false);
-            return;
+          const message = String(error && error.message ? error.message : error);
+          state.authBlocked = /連結.*(過期|驗證失敗)|尚未綁定/.test(message);
+          if (state.queuedUserSave !== null) {
+            state.pendingAutoComplete = state.queuedUserSave;
+            state.queuedUserSave = null;
           }
-          if (!automatic || state.userSubmitPending) setSavingState(false);
-          else updateSubmitButtons();
-          showToast(`儲存失敗：${error && error.message ? error.message : error}`);
+          persistLocalDraft_(state.pendingAutoComplete);
+          const retryable = !state.authBlocked && isTransientSaveError_(message);
+          if (retryable && state.retryCount < 3 && navigator.onLine !== false) {
+            const delay = [2000, 5000, 10000][state.retryCount++];
+            state.saveError = `同步失敗，${delay / 1000} 秒後重試（${state.retryCount}/3）`;
+            state.retryTimer = window.setTimeout(() => submitLog(Boolean(state.pendingAutoComplete), true), delay);
+          } else {
+            state.pendingDateSwitch = '';
+            state.midnightReloadPending = false;
+            state.saveError = state.authBlocked ? '連結失效，請回 LINE 重新取得打卡連結'
+              : (state.draftStored ? '尚未同步・草稿已存於此裝置，請再按送出' : '尚未同步・裝置無法保存草稿，請勿關閉頁面');
+          }
+          setSavingState(false);
+          showToast(`儲存失敗：${message}`);
         })
         .saveDailyLog(payload);
     }
