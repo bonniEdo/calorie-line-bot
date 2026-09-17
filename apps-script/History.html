@@ -249,7 +249,7 @@
         customStart: '',
         customEnd: data.today,
         view: 'list',
-        visibleCount: 15,
+        visibleCount: 5,
         selectedDate: '',
         calendarMonth: `${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}`,
       };
@@ -261,7 +261,7 @@
         const filterButton = event.target.closest('[data-history-range]');
         if (filterButton) {
           historyState.range = filterButton.dataset.historyRange || 'month';
-          historyState.visibleCount = 15;
+          historyState.visibleCount = 5;
           historyState.selectedDate = '';
           historyState.calendarMonth = historyRange_().end.slice(0, 7);
           renderHistoryOverview();
@@ -274,7 +274,7 @@
           return;
         }
         if (event.target.closest('[data-load-more]')) {
-          historyState.visibleCount += 15;
+          historyState.visibleCount += 5;
           renderHistoryRecords_();
           return;
         }
@@ -344,7 +344,7 @@
         if (event.target.matches('[data-custom-start], [data-custom-end]')) {
           historyState.customStart = String((root.querySelector('[data-custom-start]') || {}).value || '');
           historyState.customEnd = String((root.querySelector('[data-custom-end]') || {}).value || '');
-          historyState.visibleCount = 15;
+          historyState.visibleCount = 5;
           historyState.calendarMonth = historyRange_().end.slice(0, 7);
           renderHistoryOverview();
         }
@@ -472,7 +472,7 @@
         const scrollTop = window.scrollY;
         const filtered = rangeRecords_();
         let html = '<div class="section-head"><div><h2>📅 我的歷史紀錄</h2><p class="hint">'
-          + (historyState.view === 'calendar' ? '完成、打卡中與未記錄一眼看清楚。' : '每次顯示 15 筆，點開日期查看詳細記錄。')
+          + (historyState.view === 'calendar' ? '完成、打卡中與未記錄一眼看清楚。' : '預設顯示最近 5 筆，點開日期查看詳細記錄。')
           + '</p></div></div><div class="history-section-tabs" role="group" aria-label="歷史紀錄顯示方式" style="margin-top:12px">'
           + viewButton_('list', '清單') + viewButton_('calendar', '月曆') + '</div><div class="history-section-body" id="historyRecordContent">';
         if (historyState.view === 'calendar') {
