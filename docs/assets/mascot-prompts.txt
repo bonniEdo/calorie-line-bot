@@ -1,0 +1,9 @@
+Generated using built-in imagegen, based on the user-provided sports chick screenshot.
+
+Mascot: Preserve the yellow round chick, sparkling brown eyes, determined eyebrows, pink cheeks, green-white headband and bow, green strap with broccoli badge, aqua water bottle, green-check clipboard and orange feet. Remove screenshot frame and close button. Cream background, entire character visible, no text.
+
+Social cover: Replace the original cover's plain chick with the referenced sports chick. Preserve cream/yellow/sage palette, landscape composition, phone illustration and exact Traditional Chinese title 飲控打卡緊迫盯人, tagline 把每天的小努力，留下來。, feature text AI 餐點辨識 · 日常紀錄 · 週／月報. No extra wording or screenshot UI.
+
+Hero wave: Preserve the character identity and change the pose to a cheerful side-facing wave. Keep the green-white headband, bow, strap, broccoli badge and water bottle; remove the clipboard for a compact silhouette. Transparent background, full body, no text.
+
+Favicon: Tight head-and-upper-chest portrait of the same chick, with sparkling eyes, determined brows, pink cheeks, headband and bow. Mint circular background, simple shapes readable at 16 px, no text.
