@@ -20,7 +20,15 @@
 
 內建食物與辨識結果是估算值，請依實際份量、營養標示或可靠資料校正。照片辨識預設限制每人每日 40 次、全體每日 300 次，仍需具備可用的 Gemini API 額度。
 
-## 架構與檔案
+## 公開作品介紹頁（GitHub Pages）
+
+`docs/` 是獨立的靜態介紹頁，僅包含展示資料，不連接正式紀錄。先在 `docs/config.js` 填入 LINE 官方帳號公開加入好友網址，並將 QR Code 圖片放進 `docs/assets/`，設定 `qrImage` 相對路徑。未設定網址時，頁面顯示「加入好友入口準備中」。
+
+GitHub repository 的 Settings → Pages → Source 選擇 **GitHub Actions**。推送 `docs/` 與 `.github/workflows/pages.yml` 到 `main` 後，工作流程只發布 `docs/`。成功後預期網址為 `https://bonniEdo.github.io/calorie-line-bot/`，實際網址以 Pages 部署結果為準。勿將帶有 uid／sig 的個人打卡連結放進介紹頁。
+
+本機預覽可在專案根目錄執行 `python3 -m http.server 8080 --directory docs`，再開啟 `http://localhost:8080`。
+
+## 系統架構
 
 ```text
 LINE webhook → Cloudflare Worker 驗證簽章／過濾群聊 → Apps Script → LINE API
