@@ -92,11 +92,16 @@
         + '</nav>';
     }
 
-    function proteinTargetText(weight, target) {
+    function proteinTargetText(weight, target, activityLevel) {
       const custom = Math.max(0, Number(target || 0));
       const kg = Math.max(0, Number(weight || 0));
+      const activity = {
+        general: { multiplier: 1.2, label: '一般活動' },
+        active: { multiplier: 1.5, label: '規律運動' },
+        strength: { multiplier: 1.8, label: '重訓／增肌／減脂' },
+      }[activityLevel] || { multiplier: 1.2, label: '一般活動' };
       if (custom > 0) return { value: custom, text: '自訂每日目標' };
-      if (kg >= 20) return { value: Math.round(kg * 1.2 * 10) / 10, text: '依體重 × 1.2 g 建議' };
+      if (kg >= 20) return { value: Math.round(kg * activity.multiplier * 10) / 10, text: activity.label + '・依體重 × ' + activity.multiplier + ' g 建議' };
       return { value: 0, text: '請設定體重或自訂克數' };
     }
 
@@ -132,7 +137,7 @@
       const profile = DATA.profile || {};
       const reminders = DATA.reminders || {};
       const groups = Array.isArray(DATA.groupWalls) ? DATA.groupWalls : [];
-      const target = proteinTargetText(profile.weightKg, profile.proteinTargetG);
+      const target = proteinTargetText(profile.weightKg, profile.proteinTargetG, profile.proteinActivityLevel);
       app.innerHTML = [
         '<section class="hero"><div class="eyebrow">PERSONAL SETTINGS</div><h1>👤 個人設定</h1><p>在這裡管理消耗熱量、蛋白質目標、分享與 LINE 提醒。</p></section>',
         '<section class="section"><h2>⚡ 消耗與蛋白質</h2><p>BMR 會用於打卡頁的可消耗熱量估算；體重只保存在你的私密設定，不會寫入 Google Sheet。</p>',
@@ -140,6 +145,7 @@
             '<label>顯示名稱<input id="name" maxlength="40" value="' + escapeAttr(member.name || '') + '"></label>',
             '<label>基礎代謝 BMR（kcal）<input id="bmr" type="number" inputmode="numeric" min="500" max="5000" value="' + escapeAttr(member.bmr || '') + '" placeholder="例如 1334"></label>',
             '<label>體重 kg（不會有人知道）<input id="weightKg" type="number" inputmode="decimal" min="20" max="500" step="0.1" value="' + escapeAttr(profile.weightKg || '') + '" placeholder="例如 60"></label>',
+            '<label>活動程度<select id="proteinActivityLevel"><option value="general"' + (profile.proteinActivityLevel === 'general' || !profile.proteinActivityLevel ? ' selected' : '') + '>一般活動・體重 × 1.2 g</option><option value="active"' + (profile.proteinActivityLevel === 'active' ? ' selected' : '') + '>規律運動・體重 × 1.5 g</option><option value="strength"' + (profile.proteinActivityLevel === 'strength' ? ' selected' : '') + '>重訓／增肌／減脂・體重 × 1.8 g</option></select></label>',
             '<label>自訂蛋白質目標（g／天）<input id="proteinTargetG" type="number" inputmode="decimal" min="0" max="500" step="0.1" value="' + escapeAttr(profile.proteinTargetG || '') + '" placeholder="留白使用體重建議"></label>',
           '</div>',
           '<div class="protein-target"><div class="protein-target-head"><strong>🥚 蛋白質進度條目標</strong><span id="proteinTargetPreview">' + proteinNumber(target.value) + (target.value ? ' g／天' : '尚未設定') + '</span></div><small id="proteinTargetHint">' + escapeHtml(target.text) + '。自訂克數優先於體重建議。</small></div>',
@@ -169,7 +175,7 @@
     function refreshProteinTargetPreview() {
       const preview = document.getElementById('proteinTargetPreview');
       const hint = document.getElementById('proteinTargetHint');
-      const value = proteinTargetText(document.getElementById('weightKg').value, document.getElementById('proteinTargetG').value);
+      const value = proteinTargetText(document.getElementById('weightKg').value, document.getElementById('proteinTargetG').value, document.getElementById('proteinActivityLevel').value);
       if (preview) preview.textContent = value.value ? proteinNumber(value.value) + ' g／天' : '尚未設定';
       if (hint) hint.textContent = value.text + '。自訂克數優先於體重建議。';
     }
@@ -180,6 +186,7 @@
         link.addEventListener('click', () => { link.classList.add('is-loading'); link.setAttribute('aria-busy', 'true'); }, { once:true });
       });
       ['weightKg', 'proteinTargetG'].forEach(id => document.getElementById(id).addEventListener('input', refreshProteinTargetPreview));
+      document.getElementById('proteinActivityLevel').addEventListener('change', refreshProteinTargetPreview);
       document.getElementById('publishToday').addEventListener('change', event => {
         const food = document.getElementById('publishFoodDetails');
         if (!event.target.checked) food.checked = false;
@@ -226,7 +233,7 @@
         })
         .savePersonalSettingsForClient(Object.assign(accessPayload(), {
           member,
-          profile: { weightKg: numberOrBlank('weightKg'), proteinTargetG: numberOrBlank('proteinTargetG') },
+          profile: { weightKg: numberOrBlank('weightKg'), proteinTargetG: numberOrBlank('proteinTargetG'), proteinActivityLevel: document.getElementById('proteinActivityLevel').value },
         }));
     }
 
