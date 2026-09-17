@@ -1497,7 +1497,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.09.17-114';
+    window.__dietAppBuild = '2026.09.17-119';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -2280,15 +2280,12 @@
       if (!NEW_FEATURE_NOTICE || !NEW_FEATURE_NOTICE.show) return '';
       return [
         '<details id="newFeatureNotice" class="feature-notice" open>',
-          '<summary>✨ 最新功能與提醒</summary>',
+          '<summary>✨ 歷史頁換新裝，努力也能變成報告！</summary>',
           '<div class="feature-notice-body">',
-            '<p>這次更新重點如下：</p>',
+            '<p>到下方「歷史」，看看你每天累積的努力。</p>',
             '<div class="feature-notice-list">',
-              '<div class="feature-notice-item">✨ <strong>介面使用優化</strong>：打卡流程更順暢，運動與週／月總覽改為需要時再展開。</div>',
-              '<div class="feature-notice-item">🍖 <strong>新增蛋白質紀錄</strong>：可在打卡頁追蹤已吃／建議蛋白質。<br><small>入口：上方蛋白質進度條旁的 ✎，可設定體重或自訂每日目標</small></div>',
-              '<div class="feature-notice-item">👥 <strong>打卡空間</strong>：不用建立 LINE 群組，也能邀請朋友一起看猛猛紀錄牆。<br><small>入口：底部「設定」→「打卡空間」</small></div>',
-              '<div class="feature-notice-item">🫶 <strong>空間／群組分享紀錄</strong>：可選擇分享給同一個打卡空間或 LINE 群組的成員。<br><small>入口：底部「設定」→「公開／空間分享」</small></div>',
-              '<div class="feature-notice-item">🔔 <strong>LINE 提醒可自行開關</strong>：早上 09:00、中午 12:00、晚上 19:30 可分別設定。<br><small>入口：底部「設定」→「LINE 提醒」</small></div>',
+              '<div class="feature-notice-item">📅 <strong>歷史紀錄更好找</strong>：日期篩選與分頁介面更新，可切換清單／月曆，也能點趨勢圖查看當天明細。</div>',
+              '<div class="feature-notice-item">📊 <strong>把努力變成週報、月報</strong>：在「我的努力報告」查看不同期間的成果，還能產出圖片，下載收藏或分享給朋友。<br><small>入口：底部「歷史」→「我的努力報告」</small></div>',
             '</div>',
             '<button id="dismissNewFeatureNotice" class="feature-notice-dismiss" type="button">我知道了，不再顯示</button>',
           '</div>',
@@ -2527,7 +2524,7 @@
               NEW_FEATURE_NOTICE.show = false;
               const notice = document.getElementById('newFeatureNotice');
               if (notice) notice.remove();
-              showToast('已收好新功能說明，需要時可在「說明」查看。');
+              showToast('已關閉這次公告，歡迎到「歷史」看看新功能。');
             })
             .withFailureHandler(error => {
               dismissFeatureNotice.disabled = false;

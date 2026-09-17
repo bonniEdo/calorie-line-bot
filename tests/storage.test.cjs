@@ -5,6 +5,32 @@ const vm = require('node:vm');
 const backend = fs.readFileSync('apps-script/Code.gs', 'utf8');
 const frontend = fs.readFileSync('apps-script/Index.html', 'utf8');
 
+test('report comparisons use matching days and distinguish sparse or unfinished records', () => {
+  const source = fs.readFileSync('apps-script/History.html', 'utf8');
+  const c = vm.createContext({ records: [], data: { today: '2026-03-31' } });
+  for (const name of ['parseDateKey', 'dateKey', 'dateLabel', 'previousMonthKey_', 'monthLabel_', 'completedStreak_', 'averageOf_', 'isCalorieGoalReached_', 'addDateDays_', 'buildMonthlyStats_', 'buildWeeklyStats_', 'comparisonObservation_']) {
+    if (name === 'dateLabel') { vm.runInContext('function dateLabel(v) { return v.slice(5); }', c); continue; }
+    const start = source.indexOf('      function ' + name + '(');
+    const end = source.indexOf('\n      function ', start + 1);
+    vm.runInContext(source.slice(start, end), c);
+  }
+  const record = date => ({ date, status: '完成' });
+  c.records = ['2026-03-01','2026-03-02','2026-03-03','2026-03-31','2026-02-01','2026-02-02','2026-02-03'].map(record);
+  const month = c.buildMonthlyStats_('2026-03');
+  assert.equal(month.comparisonDays, 28);
+  assert.equal(month.comparisonCompleted, 3);
+  assert.equal(c.comparisonObservation_(month).value, '0 天');
+  c.data.today = '2026-09-17';
+  c.records = ['2026-09-14','2026-09-15','2026-09-16','2026-09-07','2026-09-08','2026-09-09','2026-09-12'].map(record);
+  const week = c.buildWeeklyStats_('2026-09-14');
+  assert.equal(week.comparisonDays, 4);
+  assert.equal(week.previousCompleted, 3);
+  assert.equal(c.comparisonObservation_(week).value, '0 天');
+  assert.equal(c.comparisonObservation_({ ...week, previousLoggedDays: 0 }).value, '上一期無紀錄');
+  assert.equal(c.comparisonObservation_({ ...week, previousCompleted: 0 }).value, '上一期無完成紀錄');
+  assert.equal(c.comparisonObservation_({ ...week, loggedDays: 1 }).value, '同期資料較少');
+});
+
 function server(overrides = {}) {
   const c = vm.createContext({ console: { info() {}, warn() {}, error() {} }, ...overrides });
   vm.runInContext(backend, c);
@@ -250,7 +276,8 @@ test('history copy loads one authorized day and returns meal data only', () => {
 test('history page includes unified filters, calendar, batching, chart selection, and record actions', () => {
   const history = fs.readFileSync('apps-script/History.html', 'utf8');
   for (const marker of [
-    'data-history-range', 'data-history-view', 'renderCalendar_', 'data-load-more',
+    'data-history-range', 'history-section-tab', 'historyTrend', 'historyRecordContent',
+    'data-history-view', 'renderCalendar_', 'data-load-more',
     'data-chart-date', '前往補登', 'data-copy-date', 'getHistoryCopyDraftForClient',
   ]) assert.match(history, new RegExp(marker));
   assert.match(frontend, /copyMealsOnly/);

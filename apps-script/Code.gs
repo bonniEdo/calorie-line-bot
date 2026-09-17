@@ -1,8 +1,8 @@
-// 應用程式版本：2026.09.17-114（歷史篩選、月曆、圖表互動與餐點複製）
+// 應用程式版本：2026.09.17-119（報告本期觀察與同期比較）
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.09.17-114';
+const APP_BUILD = '2026.09.17-119';
 // 每位使用者只會看到一次的打卡頁公告版本；未來有真正的新一波功能時再換這個值。
-const NEW_FEATURE_NOTICE_ID = '2026_08_ui_optimization_and_protein_tracking';
+const NEW_FEATURE_NOTICE_ID = '2026_09_history_and_effort_reports';
 
 // 食物庫尚未手動填寫蛋白質時，內建食物仍可提供每份的保守估算值。
 // 使用者自建食物可直接在「食物庫」的「蛋白質g」欄位填寫，優先權高於這份預設資料。

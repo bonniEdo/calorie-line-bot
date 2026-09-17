@@ -40,6 +40,16 @@
     .custom-range input { min-width:0; min-height:40px; padding:0 9px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--ink); font:inherit; }
     .filter-caption { margin:10px 1px 0; color:var(--muted); font-size:11px; font-weight:800; }
     .view-tabs { justify-content:flex-start; margin:12px 0; }
+    .history-frame { margin-top:16px; }
+    .history-section-tabs { position:relative; z-index:2; display:flex; gap:8px; margin:0 14px -2px; padding:0 2px; overflow-x:auto; scrollbar-width:none; }
+    .history-section-tabs::-webkit-scrollbar { display:none; }
+    .history-section-tab { flex:0 0 auto; min-height:50px; padding:12px 16px; overflow:hidden; border:2px solid var(--line); border-bottom-color:#efbc45; border-radius:18px 18px 0 0; background:#fffaf0; color:var(--muted); font-size:13px; font-weight:900; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+    .history-section-tab.active { position:relative; z-index:3; min-height:52px; padding-bottom:14px; border-color:#efbc45; border-bottom:0; background:#fffdf7; color:#76500c; box-shadow:0 -4px 12px rgba(85,65,28,.05); }
+    .history-section-tab.active::after { position:absolute; right:0; bottom:-3px; left:0; height:5px; background:#fffdf7; content:''; }
+    .history-section-body { position:relative; z-index:1; min-height:180px; padding:16px; border:2px solid #efbc45; border-radius:22px; background:#fffdf7; box-shadow:0 6px 18px rgba(85,65,28,.05); }
+    .history-section-body h2 { margin:0; font-size:18px; }
+    #historyRecords > .section-head { padding:0 16px; }
+    #historyRecords h2 { font-size:18px; }
     .chart-wrap { margin-top:13px; padding:10px 4px 2px; overflow:hidden; border-radius:16px; background:#fffaf0; }
     .chart-svg { display:block; width:100%; height:auto; min-height:230px; }
     .chart-grid { stroke:#eadfca; stroke-width:1; stroke-dasharray:3 4; }
@@ -118,6 +128,12 @@
     .share-action.secondary { border:1px solid #9fc7ae; background:#eef8f1; color:#35684b; }
     .share-action:disabled { cursor:progress; opacity:.58; }
     .share-status { min-height:18px; margin:7px 0 0; color:var(--muted); font-size:10px; font-weight:800; text-align:center; }
+    .report-shortcuts { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
+    .report-shortcut { min-width:0; padding:12px; border:1px solid var(--line); border-radius:14px; background:#fffaf0; }
+    .report-shortcut strong, .report-shortcut small { display:block; margin-bottom:6px; }
+    .report-shortcut small { color:var(--muted); font-size:11px; line-height:1.6; }
+    .report-picker { display:block; margin-top:14px; font-size:12px; font-weight:800; }
+    .report-picker select { display:block; width:100%; min-height:44px; margin-top:6px; padding:8px; border:1px solid var(--line); border-radius:10px; background:#fffdf7; color:var(--ink); font:inherit; }
     .hint { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
     .record { border-top:1px solid var(--line); padding:13px 0 0; margin-top:13px; }
     .record:first-child { border-top:0; margin-top:0; padding-top:0; }
@@ -165,6 +181,8 @@
     .empty, .error { padding:22px 10px; text-align:center; color:var(--muted); line-height:1.6; }
     .error { color:var(--red); }
     @media (max-width:520px) {
+      .history-section-tabs { gap:5px; margin-right:10px; margin-left:10px; }
+      .history-section-tab { padding-right:12px; padding-left:12px; }
       .period-grid { grid-template-columns:1fr; }
       .monthly-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
       /* 蛋白質維持在熱量右側；縮短日期欄與欄距，讓 kcal 不會被擠成兩行。 */
@@ -318,6 +336,11 @@
         }
       });
       root.addEventListener('change', event => {
+        if (event.target.matches('[data-report-period]')) {
+          if (event.target.dataset.reportPeriod === 'week') openWeeklyReport(event.target.value);
+          else openMonthlyReport(event.target.value);
+          return;
+        }
         if (event.target.matches('[data-custom-start], [data-custom-end]')) {
           historyState.customStart = String((root.querySelector('[data-custom-start]') || {}).value || '');
           historyState.customEnd = String((root.querySelector('[data-custom-end]') || {}).value || '');
@@ -392,27 +415,55 @@
           + '<div class="summary-card"><strong>' + number(summary.averageIntake) + '</strong><span>完成日平均攝取</span></div>'
           + '<div class="summary-card"><strong>' + number(summary.averageTdee) + '</strong><span>完成日平均 TDEE</span></div>'
           + '<div class="summary-card"><strong>' + number(summary.completedDays) + '/' + number(summary.loggedDays) + '</strong><span>完成／記錄日</span></div>'
-          + '</div></section>'
-          + '<section class="history-controls"><div class="filter-tabs" role="group" aria-label="日期範圍">'
+          + '</div></section>' + renderReportShortcuts_()
+          + '<div class="history-frame"><div class="history-section-tabs" role="group" aria-label="日期範圍">'
           + rangeButton_('week', '本週') + rangeButton_('month', '本月') + rangeButton_('lastMonth', '上月') + rangeButton_('custom', '自訂')
-          + '</div><div class="custom-range"' + customHidden + '>'
+          + '</div><section class="history-section-body" id="historyTrend"><div class="custom-range"' + customHidden + '>'
           + '<input type="date" data-custom-start value="' + escapeAttr(historyState.customStart || range.start) + '" max="' + escapeAttr(data.today) + '" aria-label="開始日期"><span>至</span>'
           + '<input type="date" data-custom-end value="' + escapeAttr(historyState.customEnd || range.end) + '" max="' + escapeAttr(data.today) + '" aria-label="結束日期"></div>'
           + '<p class="filter-caption">' + escapeAttr(range.start) + ' 至 ' + escapeAttr(range.end) + '・期間 ' + number(summary.periodDays) + ' 天・依 ' + number(summary.completedDays) + ' 個完成日計算平均</p>'
-          + '</section>';
-
-        html += '<section class="section chart-section"><div class="section-head"><div><h2>📈 攝取趨勢</h2><p class="hint">依真實日期間隔顯示；點日期可查看當日明細。</p></div></div>';
-        html += filtered.length ? buildTrendChart(filtered, range) : '<div class="chart-empty">這段期間尚無紀錄。</div>';
-        html += '</section>';
-
+          + '<div class="section-head" style="margin-top:12px"><div><h2>📈 攝取趨勢</h2><p class="hint">依真實日期間隔顯示；點日期可查看當日明細。</p></div></div>'
+          + (filtered.length ? buildTrendChart(filtered, range) : '<div class="chart-empty">這段期間尚無紀錄。</div>')
+          + '</section></div>';
         if (filtered.length) {
           html += '<section class="section"><div class="section-head"><div><h2>🗓️ 週／月熱量總覽</h2></div></div><div class="period-grid">'
             + renderPeriodCard('每週總計', aggregateByWeek(filtered), false, 'week')
             + renderPeriodCard('每月總計', aggregateByMonth(filtered), false, 'month') + '</div></section>';
         }
-
-        overview.innerHTML = html + '<section class="section" id="historyRecords"></section>';
+        overview.innerHTML = html + '<section class="history-frame" id="historyRecords"></section>';
         renderHistoryRecords_();
+      }
+
+      function reportPeriods_(type) {
+        const current = type === 'week' ? dateKey(new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate() - ((todayDate.getDay() + 6) % 7), 12)) : String(data.today).slice(0, 7);
+        const previous = type === 'week' ? addDateDays_(current, -7) : previousMonthKey_(current);
+        const groups = type === 'week' ? aggregateByWeek(records) : aggregateByMonth(records);
+        return Array.from(new Set([current, previous, ...groups.map(group => group.key)])).sort().reverse().map(key => {
+          const label = type === 'week' ? key + '－' + addDateDays_(key, 6) : monthLabel_(key);
+          const prefix = key === current ? (type === 'week' ? '本週' : '本月') : key === previous ? (type === 'week' ? '上週' : '上月') : '';
+          return { key, label: (prefix ? prefix + '・' : '') + label, current: key === current };
+        });
+      }
+
+      function reportControls_(type, key, count) {
+        const periods = reportPeriods_(type);
+        const current = periods.some(period => period.key === key && period.current);
+        return '<p class="hint" style="margin-top:10px">' + (current ? '本期累積中・數字會持續更新' : '本期已結束') + '・目前有 ' + count + ' 天紀錄</p>'
+          + '<label class="report-picker">' + (type === 'week' ? '選擇週次' : '選擇月份')
+          + '<select data-report-period="' + type + '">' + periods.map(period => '<option value="' + period.key + '"' + (period.key === key ? ' selected' : '') + '>' + period.label + '</option>').join('') + '</select></label>';
+      }
+
+      function renderReportShortcuts_() {
+        return '<section class="section"><h2>✨ 我的努力報告</h2><p class="hint">先查看報告，再選擇分享或下載圖片。</p><div class="report-shortcuts">'
+          + ['week', 'month'].map(type => {
+            const period = reportPeriods_(type).find(item => item.current);
+            const stats = type === 'week' ? buildWeeklyStats_(period.key) : buildMonthlyStats_(period.key);
+            return '<div class="report-shortcut"><strong>' + (type === 'week' ? '本週進度' : '本月進度') + '</strong><small>' + period.label + '<br>累積中・目前有 ' + (stats ? stats.loggedDays : 0) + ' 天紀錄</small><button type="button" class="' + (type === 'week' ? 'week' : 'month') + '-report-button" data-' + type + '-report="' + period.key + '">查看' + (type === 'week' ? '週報' : '月報') + '</button></div>';
+          }).join('') + '</div></section>';
+      }
+
+      function emptyReport_(type, key) {
+        return '<section class="monthly-report-hero"><button class="monthly-report-back" type="button" ' + (type === 'week' ? 'data-week-report-back' : 'data-report-back') + '>← 回到歷史</button><h1>' + (type === 'week' ? '努力週報' : '努力月報') + '</h1>' + reportControls_(type, key, 0) + '</section><section class="report-section empty">這段期間尚無紀錄，可以切換其他期間查看報告。</section>';
       }
 
       function renderHistoryRecords_() {
@@ -422,8 +473,8 @@
         const filtered = rangeRecords_();
         let html = '<div class="section-head"><div><h2>📅 我的歷史紀錄</h2><p class="hint">'
           + (historyState.view === 'calendar' ? '完成、打卡中與未記錄一眼看清楚。' : '每次顯示 15 筆，點開日期查看詳細記錄。')
-          + '</p></div></div><div class="view-tabs" role="group" aria-label="歷史紀錄顯示方式">'
-          + viewButton_('list', '清單') + viewButton_('calendar', '月曆') + '</div>';
+          + '</p></div></div><div class="history-section-tabs" role="group" aria-label="歷史紀錄顯示方式" style="margin-top:12px">'
+          + viewButton_('list', '清單') + viewButton_('calendar', '月曆') + '</div><div class="history-section-body" id="historyRecordContent">';
         if (historyState.view === 'calendar') {
           html += renderCalendar_();
           const selected = records.find(record => record.date === historyState.selectedDate);
@@ -438,16 +489,16 @@
             html += '<button class="load-more" type="button" data-load-more>載入更多（尚有 ' + number(filtered.length - visible.length) + ' 筆）</button>';
           }
         }
-        container.innerHTML = html;
-        window.scrollTo({ top:scrollTop, behavior:'instant' });
+        container.innerHTML = html + '</div>';
+        window.scrollTo(0, scrollTop);
       }
 
       function rangeButton_(key, label) {
-        return '<button class="filter-button' + (historyState.range === key ? ' active' : '') + '" type="button" data-history-range="' + key + '">' + label + '</button>';
+        return '<button class="history-section-tab' + (historyState.range === key ? ' active' : '') + '" type="button" aria-pressed="' + (historyState.range === key) + '" aria-controls="historyTrend" data-history-range="' + key + '">' + label + '</button>';
       }
 
       function viewButton_(key, label) {
-        return '<button class="view-button' + (historyState.view === key ? ' active' : '') + '" type="button" aria-pressed="' + (historyState.view === key) + '" aria-controls="historyRecords" data-history-view="' + key + '">' + label + '</button>';
+        return '<button class="history-section-tab' + (historyState.view === key ? ' active' : '') + '" type="button" aria-pressed="' + (historyState.view === key) + '" aria-controls="historyRecordContent" data-history-view="' + key + '">' + label + '</button>';
       }
 
       function shiftCalendarMonth_(amount) {
@@ -756,7 +807,7 @@
           .sort((a, b) => String(a.date).localeCompare(String(b.date)));
         if (!monthRecords.length) return null;
         const completedRecords = monthRecords.filter(record => record.status === '完成');
-        const averageBasis = completedRecords.length ? completedRecords : monthRecords;
+        const averageBasis = completedRecords;
         const todayMonth = String(data.today || '').slice(0, 7);
         const elapsedDays = monthKey === todayMonth
           ? Math.min(daysInMonth, Number(String(data.today || '').slice(8, 10)) || daysInMonth)
@@ -766,7 +817,10 @@
         const waterGoalDays = waterTrackedRecords.filter(record => Number(record.waterMl || 0) >= Number(record.waterGoalMl || 0)).length;
         const calorieGoalDays = completedRecords.filter(isCalorieGoalReached_).length;
         const mealCount = monthRecords.reduce((sum, record) => sum + (Array.isArray(record.meals) ? record.meals.length : 0), 0);
-        const previousRecords = records.filter(record => String(record.date || '').slice(0, 7) === previousMonthKey_(monthKey));
+        const previousKey = previousMonthKey_(monthKey);
+        const previousDays = new Date(year, month - 1, 0, 12).getDate();
+        const comparisonDays = Math.min(elapsedDays, previousDays);
+        const previousRecords = records.filter(record => String(record.date || '').slice(0, 7) === previousKey && Number(record.date.slice(8, 10)) <= comparisonDays);
         const previousCompleted = previousRecords.filter(record => record.status === '完成').length;
         return {
           key: monthKey,
@@ -792,31 +846,43 @@
           waterGoalDays,
           calorieGoalDays,
           previousCompleted,
+          comparisonDays,
+          comparisonCompleted: completedRecords.filter(record => Number(record.date.slice(8, 10)) <= comparisonDays).length,
+          previousLoggedDays: previousRecords.length,
         };
       }
 
       function monthlyInsights_(stats) {
-        const insights = [];
-        insights.push(`這個月已完成 ${stats.completedDays} 天打卡，完成率 ${stats.completionRate}%。`);
-        if (stats.previousCompleted > 0) {
-          const difference = stats.completedDays - stats.previousCompleted;
-          insights.push(difference >= 0
-            ? `比上個月多完成 ${difference} 天，持續記錄的節奏正在累積。`
-            : `比上個月少 ${Math.abs(difference)} 天，但這個月仍留下了 ${stats.loggedDays} 天紀錄。`);
-        }
-        if (stats.averageProtein > 0) insights.push(`完成日平均蛋白質約 ${number(stats.averageProtein)} g。`);
-        if (stats.exerciseMinutes > 0) insights.push(`共運動 ${number(stats.exerciseDays)} 天、${number(stats.exerciseMinutes)} 分鐘。`);
-        if (data.waterTrackingEnabled) {
-          insights.push(stats.waterTrackedDays > 0
-            ? `有設定飲水的 ${stats.waterTrackedDays} 天中，達標 ${stats.waterGoalDays} 天。`
-            : '目前已開啟飲水紀錄，本期尚無可統計的飲水資料。');
-        } else if (stats.elapsedDays > 0) {
-          insights.push(`熱量落在 TDEE 80%～110% 的目標區間共 ${stats.calorieGoalDays}/${stats.elapsedDays} 天。`);
-        }
-        if (insights.length < 3) insights.push(`最長連續完成 ${stats.longestStreak} 天，共記錄 ${stats.mealCount} 餐。`);
-        return insights.slice(0, 4);
+        return reportInsights_(stats, 'month');
       }
 
+      function comparisonObservation_(stats) {
+        if (!stats.previousLoggedDays) return { value: '上一期無紀錄', note: '同期資料不足，暫不比較' };
+        if (!stats.previousCompleted) return { value: '上一期無完成紀錄', note: '同期有記錄，尚未完成打卡' };
+        if (stats.loggedDays < 3 || stats.previousLoggedDays < 3) return { value: '同期資料較少', note: '先累積紀錄，暫不判斷變化' };
+        const difference = stats.comparisonCompleted - stats.previousCompleted;
+        return { value: `${difference > 0 ? '+' : ''}${difference} 天`, note: `前 ${stats.comparisonDays} 天完成：${stats.comparisonCompleted}／上期 ${stats.previousCompleted}` };
+      }
+
+      function periodObservation_(stats) {
+        if (stats.loggedDays < 3) return { value: `累積 ${stats.loggedDays} 天紀錄`, note: '資料較少，暫不判斷習慣' };
+        return { value: `運動記錄 ${stats.exerciseDays} 天`, note: `累積 ${stats.exerciseMinutes} 分鐘・未記錄不代表沒運動` };
+      }
+
+      function reportInsights_(stats, type) {
+        const comparison = comparisonObservation_(stats);
+        const insights = [`已記錄 ${stats.loggedDays}／${stats.elapsedDays} 天，其中 ${stats.completedDays} 天完成打卡。未記錄不代表沒有做到。`,
+          `與上一期同期比較：${comparison.value}（${comparison.note}）。`];
+        if (stats.loggedDays < 3) insights.push(`目前累積 ${stats.loggedDays} 天紀錄，先保留這次起點，尚不足以判斷日常習慣。`);
+        if (type === 'week') {
+          insights.push('有記錄的日子：' + stats.days.filter(day => day.record).map(day => '週' + day.weekday).join('、') + '。');
+          insights.push(`運動記錄 ${stats.exerciseDays} 天，共 ${stats.exerciseMinutes} 分鐘。`);
+        } else {
+          insights.push('每週記錄天數（限本月）：' + aggregateByWeek(stats.records).map(week => `${week.label}：${week.days} 天`).join('；') + '。');
+          insights.push(`本月累積運動 ${stats.exerciseMinutes} 分鐘，最長連續完成 ${stats.longestStreak} 天。`);
+        }
+        return insights;
+      }
 
       function buildProteinChart_(stats) {
         const width = 680;
@@ -858,7 +924,7 @@
           + '<button class="monthly-report-back" type="button" data-report-back>← 回到歷史</button>'
           + '<div class="eyebrow" style="margin-top:14px">MONTHLY REPORT</div>'
           + '<h1>📅 ' + stats.reportLabel + ' 努力月報</h1>'
-          + '<p>用每天留下的紀錄，看見這個月累積的努力。</p></section>'
+          + '<p>用每天留下的紀錄，看見這個月累積的努力。</p>' + reportControls_('month', stats.key, stats.loggedDays) + '</section>'
           + '<section class="report-section"><div class="report-section-head"><div><h2>本月摘要</h2><p>完成率以本月已經過的日期計算。</p></div></div>'
           + '<div class="monthly-stats">'
           + '<div class="monthly-stat"><strong>' + stats.completedDays + '/' + stats.elapsedDays + '</strong><span>完成打卡・' + stats.completionRate + '%</span></div>'
@@ -880,12 +946,11 @@
 
       function openMonthlyReport(monthKey) {
         const stats = buildMonthlyStats_(monthKey);
-        if (!stats) return;
         const overview = document.getElementById('historyOverview');
         const report = document.getElementById('monthlyReport');
-        overviewScrollTop = window.scrollY || 0;
+        if (!overview.hidden) overviewScrollTop = window.scrollY || 0;
         activeMonthKey = monthKey;
-        report.innerHTML = renderMonthlyReport_(stats);
+        report.innerHTML = stats ? renderMonthlyReport_(stats) : emptyReport_('month', monthKey);
         overview.hidden = true;
         report.hidden = false;
         window.scrollTo({ top: 0, behavior: 'auto' });
@@ -938,13 +1003,13 @@
         if (todayDate && todayDate < startDate) elapsedDays = 0;
         else if (todayDate && todayDate <= endDate) elapsedDays = Math.min(7, Math.floor((todayDate - startDate) / 86400000) + 1);
         const completedRecords = weekRecords.filter(record => record.status === '完成');
-        const averageBasis = completedRecords.length ? completedRecords : weekRecords;
+        const averageBasis = completedRecords;
         const exerciseRecords = weekRecords.filter(record => Number(record.exerciseMinutes || 0) > 0 || Number(record.exerciseKcal || 0) > 0);
         const waterTrackedRecords = weekRecords.filter(record => record.waterTracked && Number(record.waterGoalMl || 0) > 0);
         const waterGoalDays = waterTrackedRecords.filter(record => Number(record.waterMl || 0) >= Number(record.waterGoalMl || 0)).length;
         const calorieGoalDays = completedRecords.filter(isCalorieGoalReached_).length;
         const previousStart = addDateDays_(weekKey, -7);
-        const previousEnd = addDateDays_(weekKey, -1);
+        const previousEnd = addDateDays_(previousStart, elapsedDays - 1);
         const previousRecords = records.filter(record => String(record.date || '') >= previousStart && String(record.date || '') <= previousEnd);
         return {
           key: weekKey,
@@ -968,25 +1033,14 @@
           waterGoalDays,
           calorieGoalDays,
           previousCompleted: previousRecords.filter(record => record.status === '完成').length,
+          comparisonDays: elapsedDays,
+          comparisonCompleted: completedRecords.length,
+          previousLoggedDays: previousRecords.length,
         };
       }
 
       function weeklyInsights_(stats) {
-        const insights = [`本週完成 ${stats.completedDays} 天，完成率 ${stats.completionRate}%。`];
-        if (stats.previousCompleted > 0) {
-          const difference = stats.completedDays - stats.previousCompleted;
-          insights.push(difference >= 0 ? `比上週多完成 ${difference} 天。` : `比上週少 ${Math.abs(difference)} 天，但仍留下 ${stats.loggedDays} 天紀錄。`);
-        }
-        if (stats.averageProtein > 0) insights.push(`完成日平均蛋白質約 ${proteinNumber(stats.averageProtein)} g。`);
-        if (stats.exerciseMinutes > 0) insights.push(`本週運動 ${stats.exerciseDays} 天，共 ${number(stats.exerciseMinutes)} 分鐘。`);
-        if (data.waterTrackingEnabled) {
-          insights.push(stats.waterTrackedDays > 0
-            ? `有設定飲水的 ${stats.waterTrackedDays} 天中，達標 ${stats.waterGoalDays} 天。`
-            : '目前已開啟飲水紀錄，本期尚無可統計的飲水資料。');
-        } else if (stats.elapsedDays > 0) {
-          insights.push(`熱量落在 TDEE 80%～110% 的目標區間共 ${stats.calorieGoalDays}/${stats.elapsedDays} 天。`);
-        }
-        return insights.slice(0, 4);
+        return reportInsights_(stats, 'week');
       }
 
       function buildWeeklyProteinChart_(stats) {
@@ -1020,7 +1074,7 @@
         const goalMetric = reportGoalMetric_(stats);
         const insights = weeklyInsights_(stats);
         return '<section class="monthly-report-hero"><button class="monthly-report-back" type="button" data-week-report-back>← 回到歷史</button>'
-          + '<div class="eyebrow" style="margin-top:14px">WEEKLY REPORT</div><h1>📊 ' + stats.label + ' 努力週報</h1><p>用七天的節奏，看見這一週累積的努力。</p></section>'
+          + '<div class="eyebrow" style="margin-top:14px">WEEKLY REPORT</div><h1>📊 ' + stats.label + ' 努力週報</h1><p>用七天的節奏，看見這一週累積的努力。</p>' + reportControls_('week', stats.key, stats.loggedDays) + '</section>'
           + '<section class="report-section"><div class="report-section-head"><div><h2>本週摘要</h2><p>進行中的本週只計算已經過的日期。</p></div></div><div class="monthly-stats">'
           + '<div class="monthly-stat"><strong>' + stats.completedDays + '/' + stats.elapsedDays + '</strong><span>完成打卡・' + stats.completionRate + '%</span></div>'
           + '<div class="monthly-stat"><strong>' + stats.longestStreak + ' 天</strong><span>最長連續完成</span></div>'
@@ -1039,12 +1093,11 @@
 
       function openWeeklyReport(weekKey) {
         const stats = buildWeeklyStats_(weekKey);
-        if (!stats) return;
         const overview = document.getElementById('historyOverview');
         const report = document.getElementById('weeklyEffortReport');
-        overviewScrollTop = window.scrollY || 0;
+        if (!overview.hidden) overviewScrollTop = window.scrollY || 0;
         activeWeekKey = weekKey;
-        report.innerHTML = renderWeeklyReport_(stats);
+        report.innerHTML = stats ? renderWeeklyReport_(stats) : emptyReport_('week', weekKey);
         overview.hidden = true;
         report.hidden = false;
         window.scrollTo({ top: 0, behavior: 'auto' });
@@ -1313,17 +1366,14 @@
           });
 
           drawTechCard_(context, 50, 1217, 980, 315, '#ffcb66', 50, true);
-          drawSectionTitle_(context, 80, 1272, '月底結論與重點', 'HIGHLIGHTS & NEXT FOCUS', '#ffcb66', '✨');
-          const difference = stats.previousCompleted > 0 ? stats.completedDays - stats.previousCompleted : null;
-          let nextFocus = { value: '維持目前節奏', note: '穩定比完美重要' };
-          if (goalMetric.rate < .8) nextFocus = { value: goalMetric.focus, note: goalMetric.note };
-          else if (stats.exerciseDays < 8) nextFocus = { value: '每週運動 2 次', note: `目前共 ${stats.exerciseDays} 天` };
-          else if (stats.averageProtein > 0 && stats.averageProtein < 100) nextFocus = { value: '蛋白質更穩定', note: `目前平均 ${proteinNumber(stats.averageProtein)} g` };
+          drawSectionTitle_(context, 80, 1272, '本月累積與觀察', 'MONTHLY OBSERVATIONS', '#ffcb66', '✨');
+          const comparison = comparisonObservation_(stats);
+          const observation = periodObservation_(stats);
           const insightTiles = [
-            { icon: '✅', label: '本月完成', value: `${stats.completedDays} 天`, note: `完成率 ${stats.completionRate}%`, accent: '#42e8ff' },
-            { icon: '📈', label: '與上月相比', value: difference === null ? '首次月報' : `${difference > 0 ? '+' : ''}${difference} 天`, note: difference === null ? '開始累積比較資料' : `上月 ${stats.previousCompleted} 天`, accent: '#71f6ad' },
+            { icon: '✅', label: '本月記錄', value: `${stats.loggedDays}／${stats.elapsedDays} 天`, note: `其中完成 ${stats.completedDays} 天`, accent: '#42e8ff' },
+            { icon: '📈', label: '與上月同期相比', value: comparison.value, note: comparison.note, accent: '#71f6ad' },
             { icon: '🔥', label: '本月亮點', value: `連續 ${stats.longestStreak} 天`, note: '最長完成紀錄', accent: '#9b8cff' },
-            { icon: '🎯', label: '下月重點', value: nextFocus.value, note: nextFocus.note, accent: '#ffcb66' },
+            { icon: '🔎', label: '本期觀察', value: observation.value, note: observation.note, accent: '#ffcb66' },
           ];
           insightTiles.forEach((item, index) => {
             const column = index % 2;
@@ -1334,7 +1384,7 @@
           context.textAlign = 'center';
           context.fillStyle = '#42e8ff';
           context.font = '900 17px sans-serif';
-          context.fillText('CONSISTENCY > PERFECTION', 540, 1635);
+          context.fillText('每週記錄（限本月）：' + aggregateByWeek(stats.records).map(week => `${dateLabel(week.key)} 起 ${week.days} 天`).join('・'), 540, 1635, 960);
           context.fillStyle = '#7890a7';
           context.font = '700 18px sans-serif';
           context.fillText('不需要每天完美，每一次回來記錄都算數。', 540, 1663);
@@ -1506,17 +1556,14 @@
           });
 
           drawTechCard_(context, 50, 1227, 980, 315, '#ffcb66', 50, true);
-          drawSectionTitle_(context, 80, 1282, '本週結論與下週重點', 'HIGHLIGHTS & NEXT FOCUS', '#ffcb66', '✨');
-          const difference = stats.previousCompleted > 0 ? stats.completedDays - stats.previousCompleted : null;
-          let nextFocus = { value: '維持目前節奏', note: '穩定比完美重要' };
-          if (goalMetric.rate < .8) nextFocus = { value: goalMetric.focus, note: goalMetric.note };
-          else if (stats.exerciseDays < 2) nextFocus = { value: '安排 2 次運動', note: `本週共 ${stats.exerciseDays} 天` };
-          else if (stats.averageProtein > 0 && stats.averageProtein < 100) nextFocus = { value: '蛋白質更穩定', note: `目前平均 ${proteinNumber(stats.averageProtein)} g` };
+          drawSectionTitle_(context, 80, 1282, '本週節奏與觀察', 'WEEKLY OBSERVATIONS', '#ffcb66', '✨');
+          const comparison = comparisonObservation_(stats);
+          const observation = periodObservation_(stats);
           const insightTiles = [
-            { icon: '✅', label: '本週完成', value: `${stats.completedDays} 天`, note: `完成率 ${stats.completionRate}%`, accent: '#42e8ff' },
-            { icon: '📈', label: '與上週相比', value: difference === null ? '首次週報' : `${difference > 0 ? '+' : ''}${difference} 天`, note: difference === null ? '開始累積比較' : `上週 ${stats.previousCompleted} 天`, accent: '#71f6ad' },
+            { icon: '✅', label: '本週記錄', value: `${stats.loggedDays}／${stats.elapsedDays} 天`, note: `其中完成 ${stats.completedDays} 天`, accent: '#42e8ff' },
+            { icon: '📈', label: '與上週同期相比', value: comparison.value, note: comparison.note, accent: '#71f6ad' },
             { icon: '🔥', label: '本週亮點', value: `連續 ${stats.longestStreak} 天`, note: '最長完成紀錄', accent: '#9b8cff' },
-            { icon: '🎯', label: '下週重點', value: nextFocus.value, note: nextFocus.note, accent: '#ffcb66' },
+            { icon: '🔎', label: '本期觀察', value: observation.value, note: observation.note, accent: '#ffcb66' },
           ];
           insightTiles.forEach((item, index) => {
             drawInsightTile_(context, 80 + (index % 2) * 462, 1310 + Math.floor(index / 2) * 88, 446, item);
