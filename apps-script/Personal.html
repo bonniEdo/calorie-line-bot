@@ -22,6 +22,19 @@
     label { display:block; color:var(--muted); font-size:12px; font-weight:800; }
     input { width:100%; min-height:43px; margin-top:5px; padding:9px 10px; border:1px solid var(--line); border-radius:11px; background:#fffdf9; color:var(--ink); }
     input:focus { outline:0; border-color:#d6a42c; box-shadow:0 0 0 3px rgba(230,188,66,.16); }
+    .form-grid > label, .form-grid input { min-width:0; }
+    .activity-options { min-width:0; margin:16px 0 0; padding:0; border:0; }
+    .activity-options legend { padding:0; color:var(--ink); font-size:13px; font-weight:900; }
+    .activity-options .hint { margin:4px 0 9px; }
+    .activity-choice { position:relative; display:flex; align-items:center; gap:10px; min-height:52px; margin-top:7px; padding:10px 12px; border:1px solid var(--line); border-radius:12px; background:#fffdf9; cursor:pointer; }
+    .activity-choice:has(input:checked) { border-color:#d6a42c; background:#fff3c9; color:#76500c; }
+    .activity-choice:focus-within { outline:2px solid #d6a42c; outline-offset:2px; }
+    .activity-choice input { flex:0 0 18px; width:18px; height:18px; min-height:0; margin:0; padding:0; accent-color:#a77712; box-shadow:none; }
+    .activity-choice strong { flex:1; min-width:0; font-size:13px; line-height:1.5; }
+    .activity-choice span { flex:0 0 auto; padding:4px 8px; border-radius:8px; background:rgba(245,215,122,.22); font-size:12px; }
+    .custom-protein { margin-top:14px; }
+    .custom-protein small { display:block; margin-top:5px; font-size:11px; font-weight:400; line-height:1.5; }
+    .protein-target-head { flex-wrap:wrap; }
     .privacy-note { margin-top:10px; padding:9px 10px; border-radius:11px; background:#f1f8f3; color:#35684b; font-size:11px; font-weight:800; line-height:1.5; }
     .protein-target { margin-top:12px; padding:12px; border:1px solid #c8e2d0; border-radius:15px; background:#f6fbf7; }
     .protein-target-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
@@ -144,10 +157,13 @@
           '<div class="form-grid">',
             '<label>顯示名稱<input id="name" maxlength="40" value="' + escapeAttr(member.name || '') + '"></label>',
             '<label>基礎代謝 BMR（kcal）<input id="bmr" type="number" inputmode="numeric" min="500" max="5000" value="' + escapeAttr(member.bmr || '') + '" placeholder="例如 1334"></label>',
-            '<label>體重 kg（不會有人知道）<input id="weightKg" type="number" inputmode="decimal" min="20" max="500" step="0.1" value="' + escapeAttr(profile.weightKg || '') + '" placeholder="例如 60"></label>',
-            '<label>活動程度<select id="proteinActivityLevel"><option value="general"' + (profile.proteinActivityLevel === 'general' || !profile.proteinActivityLevel ? ' selected' : '') + '>一般活動・體重 × 1.2 g</option><option value="active"' + (profile.proteinActivityLevel === 'active' ? ' selected' : '') + '>規律運動・體重 × 1.5 g</option><option value="strength"' + (profile.proteinActivityLevel === 'strength' ? ' selected' : '') + '>重訓／增肌／減脂・體重 × 1.8 g</option></select></label>',
-            '<label>自訂蛋白質目標（g／天）<input id="proteinTargetG" type="number" inputmode="decimal" min="0" max="500" step="0.1" value="' + escapeAttr(profile.proteinTargetG || '') + '" placeholder="留白使用體重建議"></label>',
           '</div>',
+          '<label class="custom-protein">體重（kg）<input id="weightKg" type="number" inputmode="decimal" min="20" max="500" step="0.1" value="' + escapeAttr(profile.weightKg || '') + '" placeholder="例如 60"></label>',
+          '<fieldset class="activity-options"><legend>活動程度</legend><p class="hint">選擇平常的活動習慣，依體重計算每日蛋白質目標。</p>',
+          '<input id="proteinActivityLevel" type="hidden" value="' + escapeAttr(profile.proteinActivityLevel || 'general') + '">',
+          [['general', '一般活動', '1.2'], ['active', '規律運動', '1.5'], ['strength', '重訓／增肌／減脂', '1.8']].map(item => '<label class="activity-choice"><input type="radio" name="proteinActivity" value="' + item[0] + '"' + checked((profile.proteinActivityLevel || 'general') === item[0]) + '><strong>' + item[1] + '</strong><span>× ' + item[2] + ' g／kg</span></label>').join(''),
+          '</fieldset>',
+          '<label class="custom-protein">自訂蛋白質目標（選填，g／天）<input id="proteinTargetG" type="number" inputmode="decimal" min="0" max="500" step="0.1" value="' + escapeAttr(profile.proteinTargetG || '') + '" placeholder="留白，依活動程度計算"><small>填寫後優先使用自訂克數；清空即可恢復活動程度建議。</small></label>',
           '<div class="protein-target"><div class="protein-target-head"><strong>🥚 蛋白質進度條目標</strong><span id="proteinTargetPreview">' + proteinNumber(target.value) + (target.value ? ' g／天' : '尚未設定') + '</span></div><small id="proteinTargetHint">' + escapeHtml(target.text) + '。自訂克數優先於體重建議。</small></div>',
           '<div class="privacy-note">🔒 體重只保存在個人私密設定，用於運動與蛋白質估算；不會出現在 Google Sheet、公開牆、群組牆或其他人的頁面。</div>',
         '</section>',
@@ -186,7 +202,10 @@
         link.addEventListener('click', () => { link.classList.add('is-loading'); link.setAttribute('aria-busy', 'true'); }, { once:true });
       });
       ['weightKg', 'proteinTargetG'].forEach(id => document.getElementById(id).addEventListener('input', refreshProteinTargetPreview));
-      document.getElementById('proteinActivityLevel').addEventListener('change', refreshProteinTargetPreview);
+      document.querySelectorAll('input[name="proteinActivity"]').forEach(input => input.addEventListener('change', () => {
+        document.getElementById('proteinActivityLevel').value = input.value;
+        refreshProteinTargetPreview();
+      }));
       document.getElementById('publishToday').addEventListener('change', event => {
         const food = document.getElementById('publishFoodDetails');
         if (!event.target.checked) food.checked = false;
