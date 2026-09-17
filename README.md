@@ -28,7 +28,7 @@ GitHub repository 的 Settings → Pages → Source 選擇 **GitHub Actions**。
 
 本機預覽可在專案根目錄執行 `python3 -m http.server 8080 --directory docs`，再開啟 `http://localhost:8080`。
 
-介紹頁包含搜尋摘要、canonical、Open Graph／Twitter 分享標籤、WebApplication 結構化資料與 `sitemap.xml`。分享封面為 `docs/assets/social-cover-chick.png`，網站運動小雞為 `docs/assets/sport-chick.png`。若變更網域或 repository 名稱，請同步更新 `docs/index.html` 與 `docs/sitemap.xml` 中的公開網址；網站發布後分享圖片才能被外部服務讀取。
+介紹頁包含搜尋摘要、canonical、Open Graph／Twitter 分享標籤、WebApplication 結構化資料與 `sitemap.xml`。預設分享封面為正方形 `docs/assets/social-square.png`（1254 × 1254），以大標題與小雞提升 LINE 小縮圖辨識度；另保留 `docs/assets/project-card-cover.png` 作為 4:3 作品封面。網站運動小雞為 `docs/assets/sport-chick.png`。若變更網域或 repository 名稱，請同步更新 `docs/index.html` 與 `docs/sitemap.xml` 中的公開網址；網站發布後分享圖片才能被外部服務讀取。
 
 ## 系統架構
 
