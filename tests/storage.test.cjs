@@ -44,7 +44,7 @@ function client() {
   const state = { recordDate: '2026-09-16', mealRevision: 1, savedMealRevision: 0, retryCount: 0, queuedUserSave: null, saveInFlight: false, pendingAutoComplete: false, waterEnabled: true, waterGoalMl: 2000, waterMl: 500 };
   const localStorage = { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k), key: i => [...storage.keys()][i], get length() { return storage.size; } };
   const c = vm.createContext({
-    state, console: { info() {} }, navigator: { onLine: true }, performance: { now: () => 100 },
+    state, settingsWriteBusy:false, settingsDeferredSave:null, console: { info() {} }, navigator: { onLine: true }, performance: { now: () => 100 },
     BOOTSTRAP: { uid: 'u1', sig: 'secret', today: state.recordDate }, MEMBER: {}, WATER_SETTINGS: {}, DAILY_LOGS: {}, todayIsComplete: false,
     window: { localStorage, setTimeout(fn, ms) { timers.set(++timerId, { fn, ms }); return timerId; }, clearTimeout(id) { timers.delete(id); }, addEventListener: (name, fn) => { events[name] = fn; } },
     document: { getElementById: id => fields[id] || null, addEventListener: (name, fn) => { events[name] = fn; } },
@@ -163,6 +163,35 @@ test('transient failures retry at 2, 5, 10 seconds and then stop', () => {
   requests.at(-1).fail(new Error('Lock timeout'));
   assert.equal(requests.length, 4); assert.equal(timers.size, 0);
   assert.match(state.saveError, /尚未同步/);
+});
+
+test('settings write queues a daily save without losing its local draft', () => {
+  const {c,requests,storage}=client();
+  c.settingsWriteBusy=true;
+  c.submitLog(true,false);
+  assert.equal(requests.length,0);
+  assert.equal(storage.size,1);
+  assert.equal(c.settingsDeferredSave.markComplete,true);
+  const start=frontend.indexOf('    function resumeFormSave_(');
+  vm.runInContext(frontend.slice(start,frontend.indexOf('\n    async function ',start+1)),c);
+  c.resumeFormSave_();
+  assert.equal(c.settingsWriteBusy,false);
+  assert.equal(requests.length,1);
+  assert.equal(c.settingsDeferredSave,null);
+});
+
+test('an old autosave cannot cancel deferred completion, but a new edit can', () => {
+  const {c,state,storage}=client();
+  c.settingsWriteBusy=true;
+  c.submitLog(true,false);
+  c.submitLog(false,true);
+  assert.equal(c.settingsDeferredSave.markComplete,true);
+  assert.equal(state.pendingAutoComplete,true);
+  assert.equal(JSON.parse([...storage.values()][0]).payload.isComplete,true);
+  state.mealRevision++;
+  c.submitLog(false,true);
+  assert.equal(c.settingsDeferredSave.markComplete,false);
+  assert.equal(state.pendingAutoComplete,false);
 });
 
 test('expired credentials do not retry or send automatically on reconnect', () => {

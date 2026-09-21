@@ -1,6 +1,6 @@
-// 應用程式版本：2026.09.17-120（蛋白質目標依活動程度設定）
+// 應用程式版本：2026.09.21-127（單頁資料競態與紀錄牆日期修正）
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.09.17-120';
+const APP_BUILD = '2026.09.21-127';
 // 每位使用者只會看到一次的打卡頁公告版本；未來有真正的新一波功能時再換這個值。
 const NEW_FEATURE_NOTICE_ID = '2026_09_history_and_effort_reports';
 
@@ -143,7 +143,9 @@ function doGet(e) {
   // 由目前 /exec 的部署版本在使用者點擊時自己簽發、自己驗證，避免 HEAD 與部署版錯位。
   const launchAccess = resolveScheduledLaunchAccess_(e);
   const requestedView = String((e && e.parameter && e.parameter.view) || '');
-  const view = launchAccess.present && launchAccess.valid ? launchAccess.view : requestedView;
+  const entryView = launchAccess.present && launchAccess.valid ? launchAccess.view : requestedView;
+  const spaEntry = ['history', 'personal', 'wall'].includes(entryView) && String((e && e.parameter && e.parameter.demo) || '') !== '1';
+  const view = spaEntry ? '' : entryView;
   if (view === 'public') {
     const publicUid = String((e && e.parameter && e.parameter.uid) || '');
     const publicSig = String((e && e.parameter && e.parameter.sig) || '');
@@ -257,7 +259,7 @@ function doGet(e) {
   // 測試專案可用 ?test=1 直接開啟指定測試帳號；正式環境可使用即時簽章網址，
   // 或由排程推播的 launch 啟動碼進入。
   const testAccess = getTestWebAccess_(e);
-  const formLaunchValid = launchAccess.present && launchAccess.valid && launchAccess.view === 'form';
+  const formLaunchValid = launchAccess.present && launchAccess.valid && ['form', 'history', 'personal'].includes(launchAccess.view);
   const uid = testAccess
     ? testAccess.uid
     : (formLaunchValid ? launchAccess.uid : String((e && e.parameter && e.parameter.uid) || ''));
@@ -289,6 +291,7 @@ function doGet(e) {
   const template = HtmlService.createTemplateFromFile('Index');
 
   const bootstrap = {
+    initialView: spaEntry ? entryView : 'form',
     valid,
     // 讓畫面能分辨「連結過期」與「連結錯誤」，給出不同的說明。
     invalidReason: valid ? '' : tokenState,
@@ -306,7 +309,7 @@ function doGet(e) {
     // 跨日時由前端導向一個全新的頂層頁面，避免只 reload Apps Script
     // 內層 iframe 而出現白畫面；每次載入都重新簽發有效網址。
     formUrl: valid ? getSignedFormUrl_(uid) : '',
-    publicWallUrl: getPublicWallUrl_(valid ? uid : ''),
+    publicWallUrl: valid ? getAppWallUrl_(uid) : getPublicWallUrl_(''),
     historyUrl: getHistoryUrl_(valid ? uid : ''),
     personalSettingsUrl: valid ? getPersonalSettingsUrl_(uid) : '',
     personalProfile: valid ? getPersonalProfile_(uid) : { weightKg: 0, proteinTargetG: 0, proteinActivityLevel: 'general' },
@@ -318,6 +321,15 @@ function doGet(e) {
     newFeatureNotice: valid ? getNewFeatureNotice_(uid) : { show: false },
   };
   // 新版頁面從隱藏的 HTML 文字節點讀取。
+  // 外部直達時準備目的頁；單一讀取失敗仍保留可操作的外殼，讓使用者重試。
+  if (valid && spaEntry) {
+    try {
+      bootstrap.initialSubview = getSpaDataForClient({ uid, sig, view:entryView, date:String((e && e.parameter && e.parameter.date) || '') });
+    } catch (error) {
+      bootstrap.initialSubview = { view:entryView, data:{ error:String(error && error.message || '頁面資料讀取失敗') } };
+    }
+  }
+  template.initialSubviewClass = valid && spaEntry ? 'spa-initial-subview' : '';
   template.bootstrapJson = JSON.stringify(bootstrap);
   const output = template.evaluate()
     .setTitle('飲控打卡緊迫盯人')
@@ -339,6 +351,65 @@ function getPublicWallDataForClient(viewerId, viewerSignature, selectedDate) {
 /** 群組牆日期切換的前端入口；每次都重新確認觀看者仍是群組成員。 */
 function getGroupWallDataForClient(viewerId, viewerSignature, groupId, selectedDate) {
   return getGroupWallData_(viewerId, viewerSignature, groupId, selectedDate);
+}
+
+/** 所有私人分頁以 form 憑證讀取資料；不接受 hub/wall 憑證提升權限。 */
+function getSpaDataForClient(payload) {
+  const userId = requireFormAccessUserId_(payload);
+  const view = String(payload.view || '');
+  if (view === 'history') {
+    const data = getHistoryData_(userId, 365);
+    data.waterTrackingEnabled = Boolean(getWaterSettings_(userId).enabled);
+    data.session = { uid:userId, sig:String(payload.sig) };
+    data.nav = { formUrl:getSignedFormUrl_(userId), historyUrl:getHistoryUrl_(userId),
+      personalSettingsUrl:getPersonalSettingsUrl_(userId), publicWallUrl:getAppWallUrl_(userId) };
+    return { view, data };
+  }
+  if (view === 'personal') return { view, data:getPersonalSettingsData_(userId) };
+  if (view === 'wall') {
+    const hubSig = issueAccessToken_(userId, APP.tokenScopes.hub, APP.tokenTtlSeconds.hub);
+    return { view, data:getPublicWallData_(userId, hubSig, payload.date || today_()) };
+  }
+  throw new Error('不支援的頁面。');
+}
+
+function getAppWallUrl_(userId) {
+  return getSignedFormUrl_(userId) + '&view=wall';
+}
+
+/**
+ * 一次傳送三個畫面的靜態元件與函式。程式來自受控 HTML 原始碼，非伺服器資料。
+ * 每個 mount 有自己的 lexical scope，DOM/CSS 由 ShadowRoot 隔離；不建立 iframe、不 eval。
+ * 保留獨立展示／公開入口與主程式共用相同元件來源，避免雙份程式產生差異。
+ */
+function getSpaModulesScript_() {
+  const configs = [
+    ['history', 'History', 'historyData'],
+    ['personal', 'Personal', 'personalData'],
+    ['wall', 'Public', 'publicData'],
+  ];
+  const literal = value => JSON.stringify(value).replace(/</g, '\\u003c');
+  const definitions = configs.map(([view, file, dataId]) => {
+    const source = HtmlService.createTemplateFromFile(file).getRawContent();
+    const css = Array.from(source.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g), match => match[1]).join('\n')
+      .replace(/:root/g, ':host').replace(/(^|\n)(\s*)body(?=\s*\{)/g, '$1$2.view-body');
+    const bodyMatch = source.match(/<body[^>]*>([\s\S]*?)<\/body>/);
+    if (!bodyMatch) throw new Error('缺少頁面內容：' + file);
+    const body = bodyMatch[1];
+    const markup = body.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '').replace(/<\?[\s\S]*?\?>/g, '');
+    const scripts = Array.from(body.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g), match => match[1]).join('\n');
+    return literal(view) + ':{css:' + literal(css) + ',markup:' + literal(markup) + ',dataId:' + literal(dataId)
+      + ',mount:function(document,window,api){\n' + scripts + '\n}}';
+  });
+  return '<script>window.DietViewModules={' + definitions.join(',') + '};</script>';
+}
+
+/** 獨立歷史展示頁的資料更新入口。 */
+function getHistoryDataForClient(payload) {
+  const userId = requireFormAccessUserId_(payload);
+  const historyData = getHistoryData_(userId, 365);
+  historyData.waterTrackingEnabled = Boolean(getWaterSettings_(userId).enabled);
+  return historyData;
 }
 
 /** 打卡頁的空間管理入口；所有操作都需要本人有效的打卡連結。 */
@@ -4317,15 +4388,15 @@ function getPersonalSettingsUrl_(userId) {
 }
 
 /**
- * 「紀錄牆」是本人入口，因此發 hub 範圍的 token：可看公開與本人群組卡夾，
- * 但不能讀寫任何人的打卡紀錄。舊 wall token 仍只保留公開頁相容性。
+ * 新發的本人「紀錄牆」連結進入四分頁應用，使用 form 憑證，與本人打卡連結同等權限。
+ * 沒有 userId 的公開網址與舊 view=public 的 hub/wall 憑證仍保留唯讀公開入口；
+ * 不把舊的有限權限憑證拿來呼叫私人 SPA 資料 API。
  */
 function getPublicWallUrl_(userId) {
   const baseUrl = getWebAppExecUrl_();
   userId = String(userId || '');
   if (!userId) return `${baseUrl}?view=public`;
-  const token = issueAccessToken_(userId, APP.tokenScopes.hub, APP.tokenTtlSeconds.hub);
-  return `${baseUrl}?view=public&uid=${encodeURIComponent(userId)}&sig=${encodeURIComponent(token)}`;
+  return getAppWallUrl_(userId);
 }
 
 /**

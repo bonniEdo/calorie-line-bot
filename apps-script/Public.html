@@ -409,10 +409,12 @@
 
     let likeRequestInFlight = false;
     let dateRequestInFlight = false;
+    let dateRequestGeneration = 0;
     let activeWallTab = 'public';
     let GROUP_DATA = null;
     let groupViewRequestKey = '';
     const GROUP_CACHE = new Map();
+    let groupCacheGeneration = 0;
     const groupLoadWaiters = new Map();
     let selectedDate = String(DATA.date || DATA.today || '');
     let selectedDateLabel = formatDateLabel(selectedDate);
@@ -509,17 +511,19 @@
         showToast(`只能查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)}。`, 2200);
         return;
       }
-      if (date === selectedDate) return;
+      if (date === selectedDate && String(DATA.date || '') === date) return;
 
       // 日期切換改成同頁請求：不重新載入整個 Apps Script iframe，
       // 因此不會因冷啟動、網路或舊版部署短暫白畫面。
       dateRequestInFlight = true;
+      const requestGeneration = ++dateRequestGeneration;
       document.querySelectorAll('#publicDateSelect, #publicDateToday').forEach(control => {
         control.disabled = true;
       });
       showToast(`正在載入 ${formatDateLabel(date)} 公開紀錄…`, 30000);
       google.script.run
         .withSuccessHandler(nextData => {
+          if (requestGeneration !== dateRequestGeneration) return;
           dateRequestInFlight = false;
           document.querySelectorAll('#publicDateSelect, #publicDateToday').forEach(control => {
             control.disabled = false;
@@ -529,15 +533,17 @@
             return;
           }
           DATA = nextData;
+          if (activeWallTab !== 'public') return;
           selectedDate = String(DATA.date || date);
           selectedDateLabel = formatDateLabel(selectedDate);
-          try {
+          if (!window.dietApp) try {
             const url = new URL(window.location.href);
             url.searchParams.set('date', selectedDate);
             window.history.replaceState({}, '', url.toString());
           } catch (historyError) {
             // Apps Script 某些內嵌瀏覽器不允許改 iframe history；不影響資料畫面更新。
           }
+          if (activeWallTab !== 'public') return;
           refreshDateView();
           renderRecords();
           renderStreaks();
@@ -545,6 +551,7 @@
           showToast(`已切換到 ${selectedDateLabel}`, 1000);
         })
         .withFailureHandler(error => {
+          if (requestGeneration !== dateRequestGeneration) return;
           dateRequestInFlight = false;
           document.querySelectorAll('#publicDateSelect, #publicDateToday').forEach(control => {
             control.disabled = false;
@@ -609,7 +616,7 @@
       });
     }
 
-    function activateWallTab(tabKey) {
+    function activateWallTab(tabKey, options) {
       const next = wallTabItems_().find(item => item.key === tabKey);
       if (!next) return;
       activeWallTab = next.key;
@@ -629,7 +636,7 @@
       }
       publicWallContent.hidden = true;
       groupWallContent.hidden = false;
-      loadGroupWall(next.groupId, selectedDate);
+      loadGroupWall(next.groupId, selectedDate, options);
     }
 
     function navigateGroupToDate(date) {
@@ -665,7 +672,9 @@
         return;
       }
       groupLoadWaiters.set(key, [callback]);
+      const generation = groupCacheGeneration;
       const finish = (error, nextData) => {
+        if (generation !== groupCacheGeneration) return;
         const waiters = groupLoadWaiters.get(key) || [];
         groupLoadWaiters.delete(key);
         if (!error && nextData && !nextData.error) GROUP_CACHE.set(key, nextData);
@@ -683,6 +692,13 @@
 
     function loadGroupWall(groupId, date, options) {
       const display = !options || options.display !== false;
+      const preserve = display && Boolean(options && options.preserve);
+      const detailKey = node => {
+        const person = node.closest('.person');
+        const name = person && person.querySelector('.person-name');
+        return (name ? name.textContent : '') + '::' + (node.classList.contains('person') ? 'person' : node.querySelector('summary')?.textContent);
+      };
+      const expanded = preserve ? new Set(Array.from(groupRecordsPanel.querySelectorAll('details[open]'), detailKey)) : null;
       const key = groupCacheKey_(groupId, date);
       const cached = GROUP_CACHE.get(key);
       if (cached) {
@@ -694,7 +710,7 @@
       }
       if (display) {
         groupViewRequestKey = key;
-        groupRecordsPanel.innerHTML = '<div class="empty">正在載入群組紀錄…</div>';
+        if (!preserve) groupRecordsPanel.innerHTML = '<div class="empty">正在載入群組紀錄…</div>';
       }
       requestGroupWallData_(groupId, date, (error, nextData) => {
         // 預載只進快取，不影響使用者目前正在看的分頁。
@@ -707,7 +723,12 @@
         GROUP_DATA = nextData;
         selectedDate = String(GROUP_DATA.date || date);
         selectedDateLabel = formatDateLabel(selectedDate);
+        const scroll = window.scrollY;
         refreshGroupView();
+        if (preserve) {
+          groupRecordsPanel.querySelectorAll('details').forEach(node => { node.open = expanded.has(detailKey(node)); });
+          window.scrollTo({ top:scroll, behavior:'auto' });
+        }
       });
     }
 
@@ -1093,6 +1114,36 @@
     renderStreaks();
     updateLikeHint();
     prefetchGroupWalls();
+    if (window.dietApp) window.dietApp.register({
+      getRequest:() => ({ date:selectedDate }),
+      clearPrivate:() => {
+        dateRequestGeneration += 1;
+        dateRequestInFlight = false;
+        document.querySelectorAll('#publicDateSelect, #publicDateToday').forEach(control => { control.disabled = false; });
+        groupCacheGeneration += 1;
+        GROUP_CACHE.clear();
+        groupLoadWaiters.clear();
+        GROUP_DATA = null;
+        groupRecordsPanel.innerHTML = '';
+      },
+      update:next => {
+        if (likeRequestInFlight || dateRequestInFlight || (next.date && next.date !== selectedDate)) return false;
+        const scroll = window.scrollY;
+        const expanded = Array.from(document.querySelectorAll('details[open]')).map(node => node.id || node.querySelector('summary')?.textContent);
+        DATA = next;
+        groupCacheGeneration += 1;
+        GROUP_CACHE.clear();
+        groupLoadWaiters.clear();
+        GROUP_DATA = null;
+        if (!wallTabItems_().some(tab => tab.key === activeWallTab)) activeWallTab = 'public';
+        if (selectedDate < DATA.minDate || selectedDate > DATA.maxDate) selectedDate = DATA.date || DATA.today;
+        selectedDateLabel = formatDateLabel(selectedDate);
+        initDatePicker();
+        activateWallTab(activeWallTab, { preserve:true });
+        document.querySelectorAll('details').forEach(node => { node.open = expanded.includes(node.id || node.querySelector('summary')?.textContent); });
+        window.scrollTo({ top:scroll, behavior:'auto' });
+      },
+    });
   </script>
 </body>
 </html>

@@ -87,6 +87,8 @@
     let DATA;
     const app = document.getElementById('app');
     const toast = document.getElementById('toast');
+    const dirtyFields = new Set();
+    let settingsSaving = false;
     try { DATA = JSON.parse(document.getElementById('personalData').textContent || '{}'); }
     catch (error) { DATA = { valid:false, invalidReason:'invalid' }; }
 
@@ -98,11 +100,40 @@
 
     function bottomNav(nav) {
       return '<nav class="bottom-nav" aria-label="主要導覽">'
-        + '<a href="' + escapeAttr(nav.formUrl || '#') + '" target="_top"><span>📝</span>打卡</a>'
+        + '<a href="' + escapeAttr(nav.formUrl || '#') + '" target="_top" data-spa-view="form"><span>📝</span>打卡</a>'
         + '<a href="' + escapeAttr(nav.publicWallUrl || '#') + '" target="_top"><span>🌐</span>紀錄牆</a>'
-        + '<a href="' + escapeAttr(nav.historyUrl || '#') + '" target="_top"><span>📈</span>歷史</a>'
-        + '<a class="active" href="' + escapeAttr(nav.personalSettingsUrl || '#') + '" target="_top"><span>⚙️</span>設定</a>'
+        + '<a href="' + escapeAttr(nav.historyUrl || '#') + '" target="_top" data-spa-view="history"><span>📈</span>歷史</a>'
+        + '<a class="active" href="' + escapeAttr(nav.personalSettingsUrl || '#') + '" target="_top" data-spa-view="personal"><span>⚙️</span>設定</a>'
         + '</nav>';
+    }
+
+    function requestSpaNavigation(view, extra) {
+      if (!window.dietApp) return false;
+      window.dietApp.navigate(view, extra || {});
+      return true;
+    }
+
+    function fieldSnapshot() {
+      return Array.from(app.querySelectorAll('input')).map((node, index) => ({
+        key:node.id || node.name + ':' + node.value, index, value:node.value, checked:node.checked,
+      }));
+    }
+
+    function updateSettings(next) {
+      if (settingsSaving) return false;
+      const preserved = fieldSnapshot().filter(item => dirtyFields.has(item.key));
+      const scroll = window.scrollY;
+      DATA = next;
+      if (window.dietApp) window.dietApp.spacesUpdated(next);
+      render();
+      const fields = app.querySelectorAll('input');
+      preserved.forEach(item => {
+        const node = Array.from(fields).find(field => (field.id || field.name + ':' + field.value) === item.key);
+        if (node) { node.value = item.value; node.checked = item.checked; }
+      });
+      refreshProteinTargetPreview();
+      document.getElementById('publishFoodDetails').disabled = !document.getElementById('publishToday').checked;
+      window.scrollTo({ top:scroll, behavior:'auto' });
     }
 
     function proteinTargetText(weight, target, activityLevel) {
@@ -199,7 +230,15 @@
     function bindEvents() {
       document.querySelectorAll('.bottom-nav a[href]').forEach(link => {
         if (!link.getAttribute('href') || link.getAttribute('href') === '#') return;
-        link.addEventListener('click', () => { link.classList.add('is-loading'); link.setAttribute('aria-busy', 'true'); }, { once:true });
+        link.addEventListener('click', event => {
+          const view = link.dataset.spaView || '';
+          if (view && requestSpaNavigation(view)) {
+            event.preventDefault();
+            return;
+          }
+          link.classList.add('is-loading');
+          link.setAttribute('aria-busy', 'true');
+        });
       });
       ['weightKg', 'proteinTargetG'].forEach(id => document.getElementById(id).addEventListener('input', refreshProteinTargetPreview));
       document.querySelectorAll('input[name="proteinActivity"]').forEach(input => input.addEventListener('change', () => {
@@ -219,7 +258,8 @@
       document.querySelectorAll('[data-leave]').forEach(button => button.addEventListener('click', () => leaveSpace(button.dataset.leave || '')));
     }
 
-    function saveSettings() {
+    async function saveSettings() {
+      if (settingsSaving) return;
       const button = document.getElementById('saveSettings');
       const status = document.getElementById('saveStatus');
       const numberOrBlank = id => String(document.getElementById(id).value || '').trim();
@@ -238,25 +278,46 @@
         },
       };
       button.disabled = true;
+      settingsSaving = true;
       status.textContent = '正在儲存…';
+      // The new-space name is a separate action, not part of saving personal settings.
+      const snapshot = fieldSnapshot().filter(item => item.key !== 'spaceName');
+      const profile = { weightKg:numberOrBlank('weightKg'), proteinTargetG:numberOrBlank('proteinTargetG'), proteinActivityLevel:document.getElementById('proteinActivityLevel').value };
+      try {
+        if (window.dietApp) await window.dietApp.beforeSettingsSave();
+      } catch (error) {
+        settingsSaving = false;
+        button.disabled = false;
+        status.textContent = error.message;
+        return;
+      }
       google.script.run
         .withSuccessHandler(result => {
-          DATA = result || DATA;
-          render();
+          settingsSaving = false;
+          const current = fieldSnapshot();
+          snapshot.forEach(item => {
+            const field = current.find(value => value.key === item.key);
+            if (field && field.value === item.value && field.checked === item.checked) dirtyFields.delete(item.key);
+          });
+          if (window.dietApp) window.dietApp.settingsSaved(result);
+          updateSettings(result || DATA);
           showToast('✅ 個人設定已儲存');
         })
         .withFailureHandler(error => {
+          settingsSaving = false;
+          if (window.dietApp) window.dietApp.settingsFailed();
           button.disabled = false;
           status.textContent = '儲存失敗，請稍後再試。';
           showToast(error && error.message ? error.message : '儲存失敗，請稍後再試。');
         })
         .savePersonalSettingsForClient(Object.assign(accessPayload(), {
           member,
-          profile: { weightKg: numberOrBlank('weightKg'), proteinTargetG: numberOrBlank('proteinTargetG'), proteinActivityLevel: document.getElementById('proteinActivityLevel').value },
+          profile,
         }));
     }
 
     function reloadSettings() {
+      if (window.dietApp) { window.dietApp.spacesChanged(); return; }
       const url = DATA.nav && DATA.nav.personalSettingsUrl;
       if (url) window.top.location.href = url + '&refresh=' + Date.now();
       else window.location.reload();
@@ -293,6 +354,16 @@
     function fallbackCopy(value, done) { const input = document.createElement('textarea'); input.value = value; input.style.position = 'fixed'; input.style.opacity = '0'; document.body.append(input); input.select(); try { document.execCommand('copy'); done(); } catch (error) { showToast('請長按複製邀請碼：' + value); } input.remove(); }
 
     render();
+    app.addEventListener('input', event => {
+      const node = event.target;
+      if (node.tagName === 'INPUT') dirtyFields.add(node.id || node.name + ':' + node.value);
+      if (node.id === 'publishToday') dirtyFields.add('publishFoodDetails');
+      if (node.name === 'proteinActivity') {
+        dirtyFields.add('proteinActivityLevel');
+        app.querySelectorAll('[name="proteinActivity"]').forEach(field => dirtyFields.add(field.name + ':' + field.value));
+      }
+    });
+    if (window.dietApp) window.dietApp.register({ update:updateSettings });
   </script>
 </body>
 </html>

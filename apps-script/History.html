@@ -243,6 +243,7 @@
       let activeMonthKey = '';
       let activeWeekKey = '';
       let overviewScrollTop = 0;
+      let reportBusy = false;
       const todayDate = parseDateKey(data.today) || new Date();
       const historyState = {
         range: 'month',
@@ -257,6 +258,7 @@
         + '<section id="weeklyEffortReport" class="weekly-effort-report-view" hidden></section>' + bottomNav(nav);
       renderHistoryOverview();
       bindBottomNavLoading(root);
+      if (window.dietApp) window.dietApp.register({ update:updateHistoryData_ });
       root.addEventListener('click', event => {
         const filterButton = event.target.closest('[data-history-range]');
         if (filterButton) {
@@ -294,6 +296,11 @@
         const chartDay = event.target.closest('[data-chart-date]');
         if (chartDay) {
           openHistoryRecord_(chartDay.dataset.chartDate || '');
+          return;
+        }
+        const backfillLink = event.target.closest('[data-spa-backfill]');
+        if (backfillLink && requestSpaNavigation_('form', backfillLink.dataset.spaBackfill || '')) {
+          event.preventDefault();
           return;
         }
         const copyButton = event.target.closest('[data-copy-date]');
@@ -558,6 +565,12 @@
         google.script.run
           .withSuccessHandler(result => {
             try {
+              if (window.dietApp) {
+                button.disabled = false;
+                button.textContent = '複製餐點到今天';
+                window.dietApp.copyMeals(result);
+                return;
+              }
               const draft = {
                 version: 1,
                 savedAt: Date.now(),
@@ -572,6 +585,7 @@
                 },
               };
               window.localStorage.setItem(`diet-draft:v1:${data.session.uid}:${result.targetDate}`, JSON.stringify(draft));
+              if (requestSpaNavigation_('form', result.targetDate)) return;
               const link = document.createElement('a');
               link.href = nav.formUrl;
               link.target = '_top';
@@ -598,17 +612,74 @@
 
       function bottomNav(nav) {
         return '<nav class="bottom-nav" aria-label="主要導覽">'
-          + '<a href="' + escapeAttr(nav.formUrl || '#') + '" target="_top"><span>📝</span>打卡</a>'
+          + '<a href="' + escapeAttr(nav.formUrl || '#') + '" target="_top" data-spa-view="form"><span>📝</span>打卡</a>'
           + '<a href="' + escapeAttr(nav.publicWallUrl || '#') + '" target="_top"><span>🌐</span>紀錄牆</a>'
-          + '<a class="active" href="' + escapeAttr(nav.historyUrl || '#') + '" target="_top"><span>📈</span>歷史</a>'
-          + '<a href="' + escapeAttr(nav.personalSettingsUrl || '#') + '" target="_top"><span>⚙️</span>設定</a>'
+          + '<a class="active" href="' + escapeAttr(nav.historyUrl || '#') + '" target="_top" data-spa-view="history"><span>📈</span>歷史</a>'
+          + '<a href="' + escapeAttr(nav.personalSettingsUrl || '#') + '" target="_top" data-spa-view="personal"><span>⚙️</span>設定</a>'
           + '</nav>';
+      }
+
+      function requestSpaNavigation_(view, recordDate) {
+        if (!window.dietApp) return false;
+        window.dietApp.navigate(view, { recordDate });
+        return true;
+      }
+
+      function updateHistoryData_(result) {
+        if (reportBusy) return false;
+        if (!result || !result.valid || !Array.isArray(result.records)) throw new Error('歷史資料無法讀取。');
+        const scrollTop = window.scrollY || 0;
+        const openDetails = Array.from(root.querySelectorAll('#historyOverview details')).map((node, index) => ({ id:node.id, index, open:node.open }));
+        const privacy = Array.from(root.querySelectorAll('input[type="checkbox"]')).map(node => ({ id:node.id, checked:node.checked }));
+        records.splice(0, records.length, ...result.records);
+        Object.assign(data, result);
+        renderHistoryOverview();
+        const details = root.querySelectorAll('#historyOverview details');
+        openDetails.forEach(item => {
+          const node = item.id ? document.getElementById(item.id) : details[item.index];
+          if (node) node.open = item.open;
+        });
+        if (activeMonthKey && !document.getElementById('monthlyReport').hidden) {
+          const stats = buildMonthlyStats_(activeMonthKey);
+          document.getElementById('monthlyReport').innerHTML = stats ? renderMonthlyReport_(stats) : emptyReport_('month', activeMonthKey);
+        }
+        if (activeWeekKey && !document.getElementById('weeklyEffortReport').hidden) {
+          const stats = buildWeeklyStats_(activeWeekKey);
+          document.getElementById('weeklyEffortReport').innerHTML = stats ? renderWeeklyReport_(stats) : emptyReport_('week', activeWeekKey);
+        }
+        privacy.forEach(item => { const node = document.getElementById(item.id); if (node) node.checked = item.checked; });
+        window.scrollTo({ top:scrollTop, behavior:'auto' });
+      }
+
+      function refreshHistoryData_() {
+        if (!data.session || !data.session.uid || !data.session.sig) return;
+        const scrollTop = window.scrollY || 0;
+        google.script.run
+          .withSuccessHandler(result => {
+            if (!result || !result.valid || !Array.isArray(result.records)) return;
+            records.splice(0, records.length, ...result.records);
+            data.today = result.today || data.today;
+            data.summary = result.summary || data.summary;
+            data.waterTrackingEnabled = Boolean(result.waterTrackingEnabled);
+            renderHistoryOverview();
+            window.setTimeout(() => window.scrollTo({ top:scrollTop, behavior:'auto' }), 0);
+          })
+          .withFailureHandler(() => {})
+          .getHistoryDataForClient({ uid:data.session.uid, sig:data.session.sig });
       }
 
       function bindBottomNavLoading(container) {
         container.querySelectorAll('.bottom-nav a[href]').forEach(link => {
           if (!link.getAttribute('href') || link.getAttribute('href') === '#') return;
-          link.addEventListener('click', () => { link.classList.add('is-loading'); link.setAttribute('aria-busy', 'true'); }, { once:true });
+          link.addEventListener('click', event => {
+            const view = link.dataset.spaView || '';
+            if (view && requestSpaNavigation_(view)) {
+              event.preventDefault();
+              return;
+            }
+            link.classList.add('is-loading');
+            link.setAttribute('aria-busy', 'true');
+          });
         });
       }
 
@@ -622,7 +693,7 @@
         const ageDays = Math.round(((parseDateKey(data.today) || new Date()) - parseDateKey(record.date)) / 86400000);
         const canBackfill = ageDays >= 1 && ageDays <= 3;
         const action = canBackfill
-          ? '<a class="record-action secondary" target="_top" href="' + escapeAttr(withDate_(nav.formUrl, record.date)) + '">前往補登</a>'
+          ? '<a class="record-action secondary" target="_top" href="' + escapeAttr(withDate_(nav.formUrl, record.date)) + '" data-spa-backfill="' + escapeAttr(record.date) + '">前往補登</a>'
           : (ageDays > 3 && !data.demo
             ? '<button class="record-action" type="button" data-copy-date="' + escapeAttr(record.date) + '">複製餐點到今天</button>'
             : '');
@@ -1592,9 +1663,11 @@
       }
 
       async function shareMonthlyReport_(downloadOnly) {
+        if (reportBusy) return;
         const stats = buildMonthlyStats_(activeMonthKey);
         const status = document.getElementById('shareStatus');
         if (!stats || !status) return;
+        reportBusy = true;
         const buttons = Array.from(document.querySelectorAll('[data-report-share], [data-report-download]'));
         let blob = null;
         buttons.forEach(button => { button.disabled = true; });
@@ -1623,14 +1696,17 @@
             status.textContent = '圖片產生失敗，請稍後再試。';
           }
         } finally {
+          reportBusy = false;
           buttons.forEach(button => { button.disabled = false; });
         }
       }
 
       async function shareWeeklyReport_(downloadOnly) {
+        if (reportBusy) return;
         const stats = buildWeeklyStats_(activeWeekKey);
         const status = document.getElementById('weeklyShareStatus');
         if (!stats || !status) return;
+        reportBusy = true;
         const buttons = Array.from(document.querySelectorAll('[data-week-report-share], [data-week-report-download]'));
         let blob = null;
         buttons.forEach(button => { button.disabled = true; });
@@ -1660,6 +1736,7 @@
             status.textContent = '週報圖片產生失敗，請稍後再試。';
           }
         } finally {
+          reportBusy = false;
           buttons.forEach(button => { button.disabled = false; });
         }
       }
