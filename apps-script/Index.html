@@ -709,39 +709,20 @@
     .reminder-settings[open] > summary::after { transform: rotate(180deg); }
     .reminder-settings-body { padding: 10px 14px 14px; }
     .reminder-settings-body p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
-    .feature-notice {
-      margin-top: 10px;
-      overflow: hidden;
-      border: 1px solid #d9bd58;
-      border-radius: 15px;
-      background: #fff9e8;
-      box-shadow: 0 5px 13px rgba(119, 88, 18, .08);
-    }
-    .feature-notice > summary {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      min-height: 48px;
-      padding: 10px 13px;
-      color: #765c17;
-      font-size: 14px;
-      font-weight: 900;
-      cursor: pointer;
-      list-style: none;
-    }
-    .feature-notice > summary::-webkit-details-marker { display: none; }
-    .feature-notice > summary::marker { display: none; content: ''; }
-    .feature-notice > summary::after { content: '⌄'; color: #a57a1c; font-size: 18px; transition: transform .18s ease; }
-    .feature-notice[open] > summary { border-bottom: 1px solid #eadb9e; background: #fff4cc; }
-    .feature-notice[open] > summary::after { transform: rotate(180deg); }
-    .feature-notice-body { padding: 11px 13px 13px; }
-    .feature-notice-body p { margin: 0; color: #705f39; font-size: 12px; line-height: 1.55; }
-    .feature-notice-list { display: grid; gap: 7px; margin: 10px 0 12px; }
-    .feature-notice-item { padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.7); color: #645636; font-size: 12px; line-height: 1.45; }
-    .feature-notice-item strong { color: #76500c; }
-    .feature-notice-dismiss { width: 100%; min-height: 39px; border: 1px solid #d7ad39; border-radius: 11px; background: #fffdf7; color: #76500c; font-size: 12px; font-weight: 900; cursor: pointer; }
-    .feature-notice-dismiss:hover { background: #ffe9a0; }
+    .feature-notice { margin-top:10px; overflow:hidden; border:1px solid #d9bd58; border-radius:15px; background:#fff9e8; box-shadow:0 5px 13px rgba(119,88,18,.08); }
+    .feature-notice > summary { display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:48px; padding:10px 13px; color:#765c17; font-size:14px; font-weight:900; cursor:pointer; list-style:none; }
+    .feature-notice > summary::-webkit-details-marker { display:none; }
+    .feature-notice > summary::marker { display:none; content:''; }
+    .feature-notice > summary::after { content:'⌄'; color:#a57a1c; font-size:18px; transition:transform .18s ease; }
+    .feature-notice[open] > summary { border-bottom:1px solid #eadb9e; background:#fff4cc; }
+    .feature-notice[open] > summary::after { transform:rotate(180deg); }
+    .feature-notice-body { padding:11px 13px 13px; }
+    .feature-notice-body p { margin:0; color:#705f39; font-size:12px; line-height:1.55; }
+    .feature-notice-list { display:grid; gap:7px; margin:10px 0 12px; }
+    .feature-notice-item { padding:8px 10px; border-radius:10px; background:rgba(255,255,255,.7); color:#645636; font-size:12px; line-height:1.45; }
+    .feature-notice-item strong { color:#76500c; }
+    .feature-notice-dismiss { width:100%; min-height:39px; border:1px solid #d7ad39; border-radius:11px; background:#fffdf7; color:#76500c; font-size:12px; font-weight:900; cursor:pointer; }
+    .feature-notice-dismiss:hover { background:#ffe9a0; }
     .reminder-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
     .reminder-toggle {
       display: flex;
@@ -2782,7 +2763,7 @@
               NEW_FEATURE_NOTICE.show = false;
               const notice = document.getElementById('newFeatureNotice');
               if (notice) notice.remove();
-              showToast('已關閉這次公告，歡迎到「歷史」看看新功能。');
+              showToast('已關閉這次公告。');
             })
             .withFailureHandler(error => {
               dismissFeatureNotice.disabled = false;
@@ -2791,6 +2772,7 @@
             .dismissNewFeatureNotice({ uid: BOOTSTRAP.uid, sig: BOOTSTRAP.sig });
         });
       }
+
       document.querySelectorAll('[data-record-date]').forEach(button => {
         button.addEventListener('click', () => requestRecordDateSwitch(button.dataset.recordDate));
       });

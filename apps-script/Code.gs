@@ -1,7 +1,8 @@
 // 應用程式版本：2026.09.21-127（單頁資料競態與紀錄牆日期修正）
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
 const APP_BUILD = '2026.09.21-127';
-// 每位使用者只會看到一次的打卡頁公告版本；未來有真正的新一波功能時再換這個值。
+// 暫停目前這一則公告的顯示；保留通知機制，發布下一則公告時再開啟。
+const NEW_FEATURE_NOTICE_ENABLED = false;
 const NEW_FEATURE_NOTICE_ID = '2026_09_history_and_effort_reports';
 
 // 食物庫尚未手動填寫蛋白質時，內建食物仍可提供每份的保守估算值。
@@ -484,16 +485,6 @@ function savePersonalSettingsForClient(payload) {
   return getPersonalSettingsData_(userId);
 }
 
-/** 使用者在打卡頁按下「知道了」後，這一版公告不再顯示。 */
-function dismissNewFeatureNotice(payload) {
-  const userId = requireFormAccessUserId_(payload);
-  PropertiesService.getScriptProperties().setProperty(
-    newFeatureNoticePropertyKey_(userId),
-    String(Date.now())
-  );
-  return { ok: true };
-}
-
 function requireFormAccessUserId_(payload) {
   payload = payload || {};
   const userId = String(payload.uid || '');
@@ -503,11 +494,17 @@ function requireFormAccessUserId_(payload) {
   return userId;
 }
 
+function dismissNewFeatureNotice(payload) {
+  const userId = requireFormAccessUserId_(payload);
+  PropertiesService.getScriptProperties().setProperty(newFeatureNoticePropertyKey_(userId), String(Date.now()));
+  return { ok: true };
+}
+
 function getNewFeatureNotice_(userId) {
   userId = String(userId || '');
-  if (!userId) return { show: false };
+  if (!userId) return { show: false, id: NEW_FEATURE_NOTICE_ID };
   const dismissedAt = PropertiesService.getScriptProperties().getProperty(newFeatureNoticePropertyKey_(userId));
-  return { show: !dismissedAt, id: NEW_FEATURE_NOTICE_ID };
+  return { show: NEW_FEATURE_NOTICE_ENABLED && !dismissedAt, id: NEW_FEATURE_NOTICE_ID };
 }
 
 function newFeatureNoticePropertyKey_(userId) {

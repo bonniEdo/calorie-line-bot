@@ -15,7 +15,7 @@ const records=Array.from({length:45},(_,i)=>({date:day(i),intake:1200+i,tdee:180
 const history=()=>({valid:true,today,records,summary:{},session:{uid:'test',sig:'test'},nav,waterTrackingEnabled:true});
 const personal=()=>({valid:true,auth:{uid:'test',sig:'test'},member:{...member},profile:{...profile},proteinTarget:{targetG:78,multiplier:1.2},reminders:{morning:true,noon:true,evening:true},groupWalls:[],checkInSpaces:[],nav});
 const wall=date=>({date:date||today,today,minDate:day(29),maxDate:today,generatedAt:'test',viewer:{uid:'test',sig:'hub',canLike:true},summary:{publicCount:1,completedCount:1,rankingCount:1},records:[{userId:'friend',alias:'測試小雞',intake:1200,tdee:1800,proteinG:70,isComplete:true,isSelf:false,likeKey:'test-like',likeCount:0,meals:[]}],ranking:[],streaks:[],groupTabs:[{groupId:'g1',groupName:'測試群組',name:'測試群組'}],nav});
-const bootstrap={valid:true,uid:'test',sig:'test',today,initialDate:today,initialView:'form',member,foods:[],frequentFoods:[],waterSettings:{enabled:true,goalMl:2000},personalProfile:profile,proteinTarget:{targetG:78},newFeatureNotice:{show:false},dailyLogs:{},recordDates:[0,1,2,3].map(i=>({date:day(i),label:day(i)})),checkInSpaces:[],...nav};
+const bootstrap={valid:true,uid:'test',sig:'test',today,initialDate:today,initialView:'form',member,foods:[],frequentFoods:[],waterSettings:{enabled:true,goalMl:2000},personalProfile:profile,proteinTarget:{targetG:78},dailyLogs:{},recordDates:[0,1,2,3].map(i=>({date:day(i),label:day(i)})),checkInSpaces:[],...nav};
 const esc=text=>text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 function html(initial='form') {
   const boot={...bootstrap,initialView:initial};
