@@ -1,0 +1,156 @@
+<script>
+/* Single-document routing. Views own their DOM; the router owns navigation and data freshness. */
+class DietRouter {
+  constructor(options) {
+    this.options = options;
+    this.active = 'form';
+    this.pending = '';
+    this.sequence = 0;
+    this.views = new Map();
+    this.disposed = false;
+  }
+  state(view) {
+    if (!this.views.has(view)) this.views.set(view, { instance:null, request:null, version:0, applied:-1, updated:0 });
+    return this.views.get(view);
+  }
+  async ensure(view, refresh = false) {
+    const state = this.state(view);
+    if (state.request) return state.request;
+    if (state.instance && !refresh && state.applied === state.version) return state.instance;
+    state.request = (async () => {
+      do {
+        const version = state.version;
+        const result = await this.options.fetch(view);
+        if (this.disposed) return null;
+        if (!result || result.view !== view || !result.data || result.data.error || result.data.valid === false) {
+          throw new Error(result && result.data && result.data.error || '頁面資料無法讀取，請稍後再試。');
+        }
+        if (version !== state.version) continue;
+        if (state.instance) {
+          if (await state.instance.update(result.data) === false) return state.instance;
+        }
+        else state.instance = this.options.mount(view, result.data);
+        state.applied = version;
+        state.updated = Date.now();
+      } while (state.applied !== state.version);
+      return state.instance;
+    })();
+    try { return await state.request; } finally { state.request = null; }
+  }
+  async go(view, options = {}) {
+    if (!['form', 'history', 'personal', 'wall'].includes(view) || this.disposed) return false;
+    const sequence = ++this.sequence;
+    this.pending = view;
+    this.options.loading(view === this.active ? '' : view);
+    try {
+      if (view !== 'form') await this.ensure(view);
+      if (sequence !== this.sequence || this.disposed) return false;
+      const previous = this.active;
+      this.active = view;
+      this.pending = '';
+      this.options.loading('');
+      this.options.show(view, previous, options);
+      const state = this.views.get(view);
+      // Wall data is revalidated on return; do not rebuild the component or discard its selection.
+      if (state && view !== 'personal' && Date.now() - state.updated > 30000) {
+        this.ensure(view, true).catch(error => this.options.error(error));
+      }
+      return true;
+    } catch (error) {
+      if (sequence === this.sequence) {
+        this.pending = '';
+        this.options.loading('');
+        this.options.error(error);
+      }
+      return false;
+    }
+  }
+  invalidate(view, { clear = false } = {}) {
+    const state = this.state(view);
+    state.version += 1;
+    if (clear && state.instance && state.instance.clearPrivate) state.instance.clearPrivate();
+    if (view === this.active && state.instance) this.ensure(view).catch(error => this.options.error(error));
+  }
+  dispose() {
+    this.disposed = true;
+    this.sequence += 1;
+    this.views.forEach(state => { if (state.instance) state.instance.dispose(); });
+  }
+}
+
+function createDietView(module, host, data, context) {
+  const root = host.attachShadow({ mode:'open' });
+  const style = document.createElement('style');
+  style.textContent = module.css + '\n:host{display:block} :host([hidden]){display:none!important} .bottom-nav{display:none!important} .view-body{min-height:100vh}';
+  const body = document.createElement('div');
+  body.className = 'view-body';
+  body.innerHTML = module.markup;
+  root.append(style, body);
+  const dataNode = root.getElementById(module.dataId);
+  if (!dataNode) throw new Error('頁面元件缺少資料容器。');
+  dataNode.textContent = JSON.stringify(data);
+  const timers = new Set();
+  const listeners = [];
+  const hooks = {};
+  let disposed = false;
+  const api = Object.assign({}, context, {
+    register(value) { Object.assign(hooks, value); },
+    listen(target, type, callback, options) {
+      target.addEventListener(type, callback, options);
+      listeners.push(() => target.removeEventListener(type, callback, options));
+    },
+  });
+  const scopedDocument = new Proxy(document, {
+    get(target, key) {
+      if (key === 'body' || key === 'documentElement') return body;
+      if (key === 'activeElement') return root.activeElement;
+      if (key === 'getElementById') return id => root.getElementById(id);
+      if (key === 'querySelector') return selector => root.querySelector(selector);
+      if (key === 'querySelectorAll') return selector => root.querySelectorAll(selector);
+      if (key === 'addEventListener') return (type, callback, options) => api.listen(root, type, callback, options);
+      const value = Reflect.get(target, key, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const localWindow = { dietApp:api };
+  const scopedWindow = new Proxy(window, {
+    get(target, key) {
+      if (Object.prototype.hasOwnProperty.call(localWindow, key)) return localWindow[key];
+      if (key === 'scrollY' || key === 'pageYOffset') return context.getScroll();
+      if (key === 'scrollTo') return (...args) => context.scrollTo(...args);
+      if (key === 'setTimeout') return (callback, delay) => {
+        const timer = window.setTimeout(() => { timers.delete(timer); if (!disposed) callback(); }, delay);
+        timers.add(timer); return timer;
+      };
+      if (key === 'addEventListener') return (type, callback, options) => api.listen(window, type, callback, options);
+      const value = Reflect.get(target, key, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+    set(target, key, value) { localWindow[key] = value; return true; },
+  });
+  const dispose = () => {
+    disposed = true;
+    timers.forEach(timer => window.clearTimeout(timer));
+    listeners.forEach(remove => remove());
+    if (hooks.dispose) hooks.dispose();
+    host.remove();
+  };
+  try {
+    module.mount(scopedDocument, scopedWindow, api);
+    if (!hooks.update) throw new Error('頁面元件未完成啟動。');
+  } catch (error) { dispose(); throw error; }
+  // Link interception is scoped to this component; shared navigation exists only in the shell.
+  api.listen(root, 'click', event => {
+    const link = event.target.closest('a[href]');
+    if (!link || event.defaultPrevented || event.metaKey || event.ctrlKey) return;
+    if (context.navigateLink(link.getAttribute('href'))) event.preventDefault();
+  });
+  return {
+    host, root,
+    update:next => hooks.update(next),
+    getRequest:() => hooks.getRequest ? hooks.getRequest() : {},
+    clearPrivate:() => { if (hooks.clearPrivate) hooks.clearPrivate(); },
+    dispose,
+  };
+}
+</script>

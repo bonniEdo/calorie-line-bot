@@ -2,7 +2,11 @@
 
 供小群組使用的飲食與運動記錄工具。從 LINE 開啟手機打卡頁，使用照片辨識、食物庫或手動輸入記錄餐點；資料儲存在 Google Sheet，可查看個人歷史、週報、公開牆與群組打卡空間。
 
-目前版本：`2026.09.17-120`。
+目前版本：`2026.09.21-127`。
+
+打卡、紀錄牆、歷史、設定已整合為同一份文件的四分頁應用。新發的本人紀錄牆連結也進入此架構；直接進入歷史／設定／紀錄牆時，後端會一併提供目的分頁資料，避免先閃出打卡頁。
+
+切頁等待時保留原畫面，以底部目的分頁 icon 的呼吸動畫提示；準備完成才顯示新頁，不顯示中間載入頁。載入失敗留在原頁，可再次點擊重試。已載入的分頁保留 DOM 和操作狀態；儲存後透過資料更新同步其他分頁。
 
 ## 現有功能
 
@@ -40,10 +44,17 @@ LINE webhook → Cloudflare Worker 驗證簽章／過濾群聊 → Apps Script �
 
 網頁儲存不經過 Worker。Google Sheet 保存每日紀錄、食物與成員等資料；Script Properties 保存憑證、部分個人設定及排程進度；CacheService 僅作加速，不能作為資料是否存在的唯一依據。
 
+`Index.html` 保留打卡表單與唯一的底部導覽。`SpaRuntime.html` 負責路由、請求合併、快取更新與元件生命週期；歷史、設定與紀錄牆的既有程式分別掛載到 Shadow DOM，隔離樣式與同名元素，沒有額外 iframe、srcdoc 或跨視窗訊息橋接。Apps Script 自己提供的外層沙箱仍存在。
+
+初次載入後背景預備三個分頁，寫入中延後預載。首次切入尚未準備的資料仍需等待 Apps Script；資料齊全的返回切頁只切換顯示。保留餐點輸入與辨識結果、日期篩選／清單／月曆、報告與隱私選項、未儲存設定、紀錄牆日期／頁籤及各頁捲動位置。快速切頁以最後一次點選為準。打卡儲存使歷史與牆資料失效；設定儲存與打卡寫入排序，避免舊設定覆蓋新設定。
+
+匿名公開入口、舊 `view=public` 的有限權限連結、獨立群組分享頁與報表 demo 保留相容入口，不把舊公開憑證提升為私人讀寫權限。新發的本人紀錄牆網址使用和打卡相同的私人權限，不能作為公開分享網址。完整設計與驗收表見 [單頁架構說明](architecture/SPA.md)。
+
 ```text
 apps-script/
   Code.gs          後端、資料存取、LINE、照片辨識與排程
   Index.html       打卡頁、自動儲存與本機草稿
+  SpaRuntime.html  四分頁路由、資料快取與隔離元件
   History.html     個人歷史、週報
   Personal.html    個人設定
   Public.html      公開紀錄牆
@@ -63,7 +74,7 @@ tests/
 1. 建立一份 Google Sheet，例如「姊妹飲控打卡資料庫」。不要開放任何人編輯；一般成員透過網頁使用，實際寫入由 Apps Script 執行。
 2. 從試算表選擇「擴充功能 → Apps Script」。
 3. 將 `apps-script/Code.gs` 貼入 `Code.gs`。
-4. 逐一建立 `Index`、`History`、`Personal`、`Public`、`GroupWall` HTML 檔，貼入對應內容。不能只上傳 Index。
+4. 逐一建立 `Index`、`SpaRuntime`、`History`、`Personal`、`Public`、`GroupWall` HTML 檔，貼入對應內容。不能只上傳 Index。
 5. 設定 `appsscript.json`，確認時區為 `Asia/Taipei`。
 6. 執行 `setupProject` 並完成 Google 授權。
 
@@ -157,7 +168,7 @@ Worker 會忽略群組一般聊天，減少 Apps Script 的不必要執行。
 
 ## 更新既有部署
 
-1. 將新版 `Code.gs`、`Index.html` 與 `History.html` 更新至原 Apps Script 專案；若其他 HTML 尚未安裝，也要一併補齊。
+1. 同步更新 `Code.gs`、`Index.html`、`History.html`、`Personal.html`、`Public.html`，並新增 HTML 檔 **`SpaRuntime`**。保留 `GroupWall.html`。本輪是成套更新，缺少其中一份可能無法啟動。
 2. 「部署 → 管理部署作業 → 編輯 → 新版本 → 部署」，保留同一 `/exec` 網址。只儲存編輯器內容不會更新正式網頁。
 3. 本輪不需重建 Sheet、重設憑證或修改 Worker；已使用三時段提醒者不必重建觸發器。若仍是舊 22:00 版本，執行 `installReminderTrigger` 更新排程。
 4. 關閉舊打卡頁，回 LINE 重新輸入「打卡」取得頁面，再測試儲存。
@@ -168,10 +179,12 @@ Worker 會忽略群組一般聊天，減少 Apps Script 的不必要執行。
 安裝 Node.js 18 以上，在專案根目錄執行：
 
 ```sh
-node --test tests/storage.test.cjs
+node --test tests/storage.test.cjs tests/spa.test.cjs
 ```
 
 使用隔離的 Apps Script／瀏覽器模擬服務，不讀寫正式 Sheet、不發送 LINE 訊息。涵蓋語法、批次快取失效、設定變更檢查、提醒鎖與部分失敗恢復、舊資料列查找、草稿、重試、憑證失效、儲存中修改及日期切換。實際 LINE 內嵌瀏覽器與 Apps Script 部署仍需上述驗收。
+
+另有 `tests/spa.browser.cjs`，需在環境中提供 Playwright 與 Chromium。執行 `node tests/spa.browser.cjs`；若使用已安裝的 Chrome，可設定 `SPA_BROWSER_CHANNEL=chrome`。它以實際 HTML 和模擬 RPC 驗證四頁往返、保留輸入／篩選／捲動、週月報 PNG、設定與自動儲存同步、照片辨識、群組牆、按讚、補登、餐點複製與載入失敗重試，不會碰正式帳號。
 
 ## 食物資料與估算規則
 

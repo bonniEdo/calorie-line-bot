@@ -1435,11 +1435,15 @@
     .bottom-nav a.is-loading span { animation: nav-pulse .65s ease-in-out infinite; }
     @keyframes nav-pulse { 50% { transform: scale(.84); opacity: .55; } }
     body.keyboard-open .bottom-nav { display: none; }
+    body.spa-subview-open > #app, body.spa-subview-open > #submitBar { display:none!important; }
+    body.spa-initial-subview > #app,
+    body.spa-initial-subview > #submitBar,
+    body.spa-initial-subview > #bottomNav { visibility: hidden; }
     .toast {
       position: fixed;
       left: 50%;
       bottom: 145px;
-      z-index: 20;
+      z-index: 40;
       max-width: calc(100vw - 28px);
       transform: translate(-50%, 20px);
       padding: 12px 16px;
@@ -1475,7 +1479,7 @@
     }
   </style>
 </head>
-<body>
+<body class="<?= initialSubviewClass ?>">
   <main id="app" class="app">
     <div class="notice">正在載入打卡畫面…</div>
   </main>
@@ -1493,11 +1497,12 @@
     </div>
   </div>
   <nav id="bottomNav" class="bottom-nav" aria-label="主要導覽" hidden></nav>
+  <section id="spaViews" aria-label="應用程式分頁"></section>
   <div id="toast" class="toast"></div>
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.09.17-120';
+    window.__dietAppBuild = '2026.09.21-127';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1544,6 +1549,8 @@
     };
   </script>
 
+  <?!= HtmlService.createHtmlOutputFromFile('SpaRuntime').getContent() ?>
+  <?!= getSpaModulesScript_() ?>
   <script>window.__dietAppStage = '主程式已下載';</script>
   <script>
     let BOOTSTRAP = null;
@@ -1656,6 +1663,11 @@
     const bottomTotal = document.getElementById('bottomTotal');
     const saveStatus = document.getElementById('saveStatus');
     const toast = document.getElementById('toast');
+    let appRouter = null;
+    let activeAppView = 'form';
+    const viewScroll = { form:0, history:0, personal:0, wall:0 };
+    let settingsWriteBusy = false;
+    let settingsDeferredSave = null;
     let todayIsComplete = Boolean(activeSavedLog && activeSavedLog.isComplete);
     // renderApp 可能在本段程式的函式宣告完成前就被呼叫，需先完成初始化。
     let keyboardAvoidanceBound = false;
@@ -1680,12 +1692,14 @@
         cleanupLocalDrafts_();
         offerLocalDraft_();
         bindSaveRecovery_();
+        initializeSpa_();
       }
       window.__dietAppReady = true;
       window.__dietAppStage = '完成';
       window.clearTimeout(window.__dietAppTimer);
     } catch (error) {
       window.onerror(error && error.message ? error.message : error, '', '?', '?');
+      document.body.classList.remove('spa-initial-subview');
     }
 
     function taipeiDateKey_() {
@@ -2092,7 +2106,7 @@
                 '<div class="protein-progress"><span id="proteinProgressBar"></span></div>',
                 '<div class="energy-progress-caption protein-progress-caption"><span><strong class="protein-card-title">已吃蛋白質 / 建議蛋白質</strong></span></div>',
               '</section>',
-              (BOOTSTRAP.personalSettingsUrl ? '<a class="protein-edit-link" href="' + escapeAttr(BOOTSTRAP.personalSettingsUrl) + '" target="_top" title="前往個人設定" aria-label="編輯消耗與蛋白質設定">✎</a>' : ''),
+              (BOOTSTRAP.personalSettingsUrl ? '<a class="protein-edit-link" href="' + escapeAttr(BOOTSTRAP.personalSettingsUrl) + '" target="_top" data-spa-view="personal" title="前往個人設定" aria-label="編輯消耗與蛋白質設定">✎</a>' : ''),
             '</div>',
           '</div>',
           '<details id="reminderSettings" class="reminder-settings" hidden>',
@@ -2297,24 +2311,264 @@
       const nav = document.getElementById('bottomNav');
       if (!nav) return;
       nav.innerHTML = [
-        '<a class="active" href="' + escapeAttr(BOOTSTRAP.formUrl || '#') + '" target="_top"><span>📝</span>打卡</a>',
-        '<a href="' + escapeAttr(BOOTSTRAP.publicWallUrl || '#') + '" target="_top"><span>🌐</span>紀錄牆</a>',
-        '<a href="' + escapeAttr(BOOTSTRAP.historyUrl || '#') + '" target="_top"><span>📈</span>歷史</a>',
-        '<a href="' + escapeAttr(BOOTSTRAP.personalSettingsUrl || '#') + '" target="_top"><span>⚙️</span>設定</a>',
+        '<a class="active" href="' + escapeAttr(BOOTSTRAP.formUrl || '#') + '" target="_top" data-spa-view="form"><span>📝</span>打卡</a>',
+        '<a href="' + escapeAttr(BOOTSTRAP.publicWallUrl || '#') + '" target="_top" data-spa-view="wall"><span>🌐</span>紀錄牆</a>',
+        '<a href="' + escapeAttr(BOOTSTRAP.historyUrl || '#') + '" target="_top" data-spa-view="history"><span>📈</span>歷史</a>',
+        '<a href="' + escapeAttr(BOOTSTRAP.personalSettingsUrl || '#') + '" target="_top" data-spa-view="personal"><span>⚙️</span>設定</a>',
       ].join('');
       nav.hidden = false;
+      nav.querySelectorAll('[data-spa-view]').forEach(link => {
+        const active = link.dataset.spaView === activeAppView;
+        link.classList.toggle('active', active);
+        if (active) link.setAttribute('aria-current', 'page');
+      });
+      if (appRouter) setSpaNavLoading_(appRouter.pending);
       bindBottomNavLoading_(nav);
     }
 
     function bindBottomNavLoading_(root) {
       root.querySelectorAll('a[href]').forEach(link => {
         if (!link.getAttribute('href') || link.getAttribute('href') === '#') return;
-        link.addEventListener('click', () => {
+        link.addEventListener('click', event => {
+          const view = link.dataset.spaView || '';
+          if (view) {
+            event.preventDefault();
+            openSpaView_(view);
+            return;
+          }
           link.classList.add('is-loading');
           link.setAttribute('aria-busy', 'true');
-        }, { once: true });
+        });
       });
     }
+
+    function openSpaView_(view, options) {
+      if (appRouter) return appRouter.go(view, options || {});
+    }
+
+    function initializeSpa_() {
+      const rpc = payload => new Promise((resolve, reject) => google.script.run
+        .withSuccessHandler(resolve).withFailureHandler(reject).getSpaDataForClient(payload));
+      appRouter = new DietRouter({
+        fetch:async view => {
+          if (BOOTSTRAP.initialSubview && BOOTSTRAP.initialSubview.view === view) {
+            const result = BOOTSTRAP.initialSubview;
+            delete BOOTSTRAP.initialSubview;
+            return result;
+          }
+          const instance = appRouter.state(view).instance;
+          return rpc(Object.assign({ uid:BOOTSTRAP.uid, sig:BOOTSTRAP.sig, view }, instance ? instance.getRequest() : {}));
+        },
+        mount:(view, data) => {
+          const host = document.createElement('section');
+          host.id = 'view-' + view;
+          host.hidden = true;
+          document.getElementById('spaViews').append(host);
+          return createDietView(window.DietViewModules[view], host, data, {
+            navigate:openSpaView_,
+            getScroll:() => activeAppView === view ? window.scrollY : viewScroll[view],
+            scrollTo:(first, second) => {
+              const top = typeof first === 'object' ? first.top : second;
+              viewScroll[view] = Number(top || 0);
+              if (activeAppView === view) window.scrollTo({ top:viewScroll[view], behavior:'instant' });
+            },
+            navigateLink:href => {
+              const url = new URL(href, BOOTSTRAP.formUrl || location.href);
+              const own = new URL(BOOTSTRAP.formUrl || location.href);
+              if (url.origin !== own.origin || url.pathname !== own.pathname) return false;
+              const target = url.searchParams.get('view') || 'form';
+              if (!['form','history','personal','wall','public'].includes(target)) return false;
+              openSpaView_(target === 'public' ? 'wall' : target, { recordDate:url.searchParams.get('date') || '' });
+              return true;
+            },
+            beforeSettingsSave:async () => {
+              await flushFormSave_();
+              settingsWriteBusy = true;
+            },
+            settingsSaved:settings => {
+              applySpaSettings_(settings);
+              resumeFormSave_();
+              // A read started before this write must not restore the old settings afterwards.
+              appRouter.invalidate('personal');
+              appRouter.invalidate('history');
+              appRouter.invalidate('wall', { clear:true });
+            },
+            settingsFailed:resumeFormSave_,
+            spacesUpdated:settings => {
+              CHECK_IN_SPACES = settings.checkInSpaces || [];
+              BOOTSTRAP.groupWalls = settings.groupWalls || [];
+              CHECK_IN_SPACE_IDS = new Set(CHECK_IN_SPACES.map(space => String(space.groupId || '')));
+              syncCheckInSpaceWallTabs_();
+            },
+            spacesChanged:() => {
+              appRouter.invalidate('personal');
+              appRouter.invalidate('wall', { clear:true });
+            },
+            copyMeals:copyMealsIntoForm_,
+          });
+        },
+        loading:setSpaNavLoading_,
+        error:error => {
+          document.body.classList.remove('spa-initial-subview');
+          showToast('載入失敗：' + String(error && error.message || error) + '，請再次點擊分頁重試。');
+        },
+        show:(view, previous, options) => {
+          viewScroll[previous] = window.scrollY;
+          activeAppView = view;
+          document.body.classList.remove('spa-initial-subview', 'keyboard-open');
+          document.body.classList.toggle('spa-subview-open', view !== 'form');
+          appRouter.views.forEach((entry, key) => { if (entry.instance) entry.instance.host.hidden = key !== view; });
+          document.querySelectorAll('#bottomNav a').forEach(link => {
+            const active = link.dataset.spaView === view;
+            link.classList.toggle('active', active);
+            if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
+          });
+          window.scrollTo({ top:viewScroll[view], behavior:'instant' });
+          if (view === 'form' && options.recordDate) requestRecordDateSwitch(options.recordDate);
+          if (!options.fromHistory && previous !== view) {
+            if (typeof google !== 'undefined' && google.script.history) {
+              // Keep a reloadable, authenticated destination; an empty params object would erase the token.
+              const params = Object.fromEntries(new URL(BOOTSTRAP.formUrl).searchParams);
+              params.view = view === 'form' ? '' : view;
+              if (view === 'form') params.date = state.recordDate;
+              google.script.history.push({ view }, params, view);
+            }
+            else window.history.pushState({ view }, '', '#' + view);
+          }
+        },
+      });
+      const onHistory = value => {
+        const view = value && value.state && value.state.view || value && value.location && value.location.hash || 'form';
+        openSpaView_(view, { fromHistory:true });
+      };
+      if (typeof google !== 'undefined' && google.script.history) {
+        google.script.history.replace({ view:BOOTSTRAP.initialView || 'form' }, null, null);
+        google.script.history.setChangeHandler(onHistory);
+      } else {
+        window.history.replaceState({ view:BOOTSTRAP.initialView || 'form' }, '', location.href);
+        window.addEventListener('popstate', onHistory);
+      }
+      openSpaView_(BOOTSTRAP.initialView || 'form', { fromHistory:true });
+      // Warm JSON data after initial interaction; never compete with an active write.
+      const remaining = ['history', 'personal', 'wall'];
+      const preloadNext = async () => {
+        if (!remaining.length) return;
+        if (state.saveInFlight || settingsWriteBusy || document.hidden) {
+          window.setTimeout(preloadNext, 1500);
+          return;
+        }
+        try { await appRouter.ensure(remaining.shift()); } catch (error) { /* A visible click can retry. */ }
+        window.setTimeout(preloadNext, 400);
+      };
+      window.setTimeout(preloadNext, 2000);
+    }
+
+    async function flushFormSave_() {
+      window.clearTimeout(state.autoSaveTimer);
+      if (!state.saveInFlight && state.mealRevision > state.savedMealRevision) submitLog(Boolean(state.pendingAutoComplete), true);
+      const deadline = Date.now() + 30000;
+      while (state.saveInFlight) {
+        if (Date.now() > deadline) throw new Error('打卡仍在同步，請稍後再儲存設定。');
+        await new Promise(resolve => window.setTimeout(resolve, 100));
+      }
+      if (state.mealRevision > state.savedMealRevision) throw new Error('請先完成打卡草稿同步，再儲存設定。');
+    }
+
+    function resumeFormSave_() {
+      settingsWriteBusy = false;
+      if (settingsDeferredSave !== null) {
+        const pending = settingsDeferredSave;
+        settingsDeferredSave = null;
+        submitLog(pending.markComplete, pending.automatic);
+      }
+    }
+
+    async function copyMealsIntoForm_(result) {
+      try {
+        await flushFormSave_();
+        if (!window.confirm('要把這些餐點複製到今天嗎？還原草稿時會替換今天的餐點，飲水與運動會保留。')) return;
+        window.localStorage.setItem('diet-draft:v1:' + BOOTSTRAP.uid + ':' + result.targetDate, JSON.stringify({
+          version:1, savedAt:Date.now(), payload:{ recordDate:result.targetDate, meals:result.meals || {}, aiMeals:result.aiMeals || {}, copyMealsOnly:true, isComplete:false }
+        }));
+        const sameDate = state.recordDate === result.targetDate;
+        await openSpaView_('form', { recordDate:result.targetDate });
+        if (sameDate) {
+          const old = document.getElementById('localDraftRecovery');
+          if (old) old.remove();
+          offerLocalDraft_();
+        }
+      } catch (error) { showToast(error.message || '無法複製，請稍後再試。'); }
+    }
+
+    function setSpaNavLoading_(view) {
+      document.querySelectorAll('#bottomNav a[data-spa-view]').forEach(link => {
+        const loading = link.dataset.spaView === view;
+        link.classList.toggle('is-loading', loading);
+        if (loading) link.setAttribute('aria-busy', 'true'); else link.removeAttribute('aria-busy');
+      });
+    }
+
+    function applySpaSettings_(settings) {
+      if (!settings || !settings.valid) return;
+      Object.assign(MEMBER, settings.member || {});
+      Object.assign(REMINDER_SETTINGS, settings.reminders || {});
+      BOOTSTRAP.personalProfile = settings.profile || BOOTSTRAP.personalProfile;
+      BOOTSTRAP.proteinTarget = settings.proteinTarget || BOOTSTRAP.proteinTarget;
+      state.exerciseWeightKg = Number((settings.profile || {}).weightKg || 0);
+      CHECK_IN_SPACES = settings.checkInSpaces || CHECK_IN_SPACES;
+      BOOTSTRAP.groupWalls = settings.groupWalls || BOOTSTRAP.groupWalls;
+      CHECK_IN_SPACE_IDS = new Set(CHECK_IN_SPACES.map(space => String(space.groupId || '')));
+      syncCheckInSpaceWallTabs_();
+      const spacesRoot = document.getElementById('checkInSpaceContent');
+      if (spacesRoot) { spacesRoot.innerHTML = renderCheckInSpaceContent_(); bindCheckInSpaceEvents_(); }
+      const valueById = {
+        name: MEMBER.name,
+        bmr: MEMBER.bmr,
+        publicAlias: MEMBER.publicAlias,
+        exerciseWeightKg: state.exerciseWeightKg,
+      };
+      Object.entries(valueById).forEach(([id, value]) => {
+        const field = document.getElementById(id);
+        if (field) field.value = value == null ? '' : value;
+      });
+      const checkedById = {
+        publishToday: MEMBER.defaultPublishToday,
+        publishFoodDetails: MEMBER.defaultPublishFoodDetails,
+        publishToGroup: MEMBER.defaultPublishToGroup,
+        joinPublicRanking: MEMBER.joinPublicRanking,
+        reminderMorning: REMINDER_SETTINGS.morning,
+        reminderNoon: REMINDER_SETTINGS.noon,
+        reminderEvening: REMINDER_SETTINGS.evening,
+      };
+      Object.entries(checkedById).forEach(([id, checked]) => {
+        const field = document.getElementById(id);
+        if (field) field.checked = Boolean(checked);
+      });
+      updatePublicSettingsSummary();
+      updateTotals();
+      const heroCaption = document.querySelector('#app .hero-title-wrap > p');
+      if (heroCaption) heroCaption.textContent = state.recordDate + ' · ' + (MEMBER.name || '成員');
+      const hasBmr = Number(MEMBER.bmr || 0) > 0;
+      document.getElementById('checkInContent').hidden = !hasBmr;
+      document.getElementById('personalSettings').hidden = hasBmr;
+      document.getElementById('personalSettings').open = !hasBmr;
+      document.getElementById('personalSettings').classList.toggle('bmr-required', !hasBmr);
+      submitBar.hidden = !hasBmr;
+    }
+
+    function refreshLoadedSpaHistory_() {
+      if (!appRouter) return;
+      appRouter.invalidate('history');
+      appRouter.invalidate('wall');
+      if (!settingsWriteBusy) appRouter.invalidate('personal');
+    }
+
+    document.addEventListener('click', event => {
+      const link = event.target.closest('a[data-spa-view]');
+      if (!link || link.closest('#bottomNav')) return;
+      event.preventDefault();
+      openSpaView_(link.dataset.spaView || 'form');
+    });
 
     function renderCheckInSpaceSettings_() {
       return [
@@ -2366,6 +2620,10 @@
         syncCheckInSpaceWallTabs_();
         root.innerHTML = renderCheckInSpaceContent_();
         bindCheckInSpaceEvents_();
+        if (appRouter) {
+          appRouter.invalidate('personal');
+          appRouter.invalidate('wall', { clear:true });
+        }
       };
       const showSpaceError = error => {
         const node = status();
@@ -2870,6 +3128,7 @@
           ? Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop))
           : 0;
         document.documentElement.style.setProperty('--keyboard-offset', offset + 'px');
+        document.body.classList.toggle('keyboard-open', offset > 80);
       };
 
       const isEditable = element => element && (
@@ -2902,7 +3161,6 @@
 
       document.addEventListener('focusin', event => {
         if (!isEditable(event.target)) return;
-        document.body.classList.add('keyboard-open');
         updateKeyboardOffset();
         scrollFocusedFieldIntoView();
       });
@@ -3370,7 +3628,7 @@
               renderAiReview();
               setAnalyzing(false, `✅ 分析完成，確認後會加入${mealLabels[state.activeMeal]}。`);
               const review = document.getElementById('aiResult');
-              if (review) review.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              if (review && activeAppView === 'form') review.scrollIntoView({ behavior: 'smooth', block: 'center' });
             } else {
               setAnalyzing(false, `沒有辨識到食物，請換一張清楚的照片。`);
             }
@@ -4220,7 +4478,8 @@
       hydrateStateFromDailyLog(savedLog);
       renderApp();
       offerLocalDraft_();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      viewScroll.form = 0;
+      if (activeAppView === 'form') window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function buildSavePayload_(markComplete) {
@@ -4369,6 +4628,16 @@
 
     function submitLog(markComplete, automatic) {
       automatic = Boolean(automatic);
+      if (settingsWriteBusy) {
+        // A pre-existing autosave timer must not cancel an explicit completion request.
+        // New edits advance the revision and can intentionally switch it back to a draft.
+        if (automatic && settingsDeferredSave && !settingsDeferredSave.automatic
+          && settingsDeferredSave.revision === state.mealRevision) return;
+        settingsDeferredSave = { markComplete, automatic, revision:state.mealRevision };
+        state.pendingAutoComplete = Boolean(markComplete);
+        persistLocalDraft_(markComplete);
+        return;
+      }
       window.clearTimeout(state.retryTimer);
       if (!automatic) {
         state.retryCount = 0;
@@ -4467,6 +4736,7 @@
           MEMBER.joinPublicRanking = payload.joinPublicRanking;
           WATER_SETTINGS.enabled = Boolean(payload.waterEnabled);
           WATER_SETTINGS.goalMl = Number(payload.waterGoalMl || 2000);
+          if (typeof refreshLoadedSpaHistory_ === 'function') refreshLoadedSpaHistory_();
           const startedQueuedSave = finishSave(requestRevision);
           if (startedQueuedSave) return;
           if (!automatic) setSavingState(false);
