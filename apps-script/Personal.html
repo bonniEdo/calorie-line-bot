@@ -43,6 +43,7 @@
     .protein-target small { display:block; margin-top:7px; color:#5f7968; font-size:11px; line-height:1.5; }
     .toggle-list { display:grid; gap:8px; margin-top:12px; }
     .toggle { display:flex; align-items:flex-start; gap:10px; padding:10px 11px; border:1px solid #dfe9e1; border-radius:13px; background:#fbfefb; color:var(--ink); cursor:pointer; }
+    .toggle[hidden] { display:none; }
     .toggle input { width:20px; height:20px; min-height:0; margin:0; flex:0 0 auto; accent-color:var(--green); }
     .toggle strong { display:block; font-size:13px; }
     .toggle small { display:block; margin-top:2px; color:var(--muted); font-size:11px; line-height:1.4; }
@@ -212,7 +213,8 @@
           '<div class="toggle-list">',
             '<label class="toggle"><input id="publishToday" type="checkbox"' + checked(member.defaultPublishToday) + '><span><strong>公開到猛猛紀錄牆</strong><small>只有你主動開啟才會顯示。</small></span></label>',
             '<label class="toggle"><input id="publishFoodDetails" type="checkbox"' + checked(member.defaultPublishFoodDetails) + '><span><strong>公開食物細項</strong><small>需同時開啟公開紀錄。</small></span></label>',
-            '<label class="toggle"><input id="joinPublicRanking" type="checkbox"' + checked(member.joinPublicRanking) + '><span><strong>參加連續紀錄排行</strong><small>只顯示公開暱稱與連續天數。</small></span></label>',
+            // 僅暫停顯示，儲存其他設定時沿用原本的參加選擇。
+            '<label class="toggle" hidden><input id="joinPublicRanking" type="checkbox"' + checked(member.joinPublicRanking) + '><span><strong>參加連續紀錄排行</strong><small>只顯示公開暱稱與連續天數。</small></span></label>',
             (groups.length ? '<label class="toggle"><input id="publishToGroup" type="checkbox"' + checked(member.defaultPublishToGroup) + '><span><strong>分享給已加入的 LINE 群組與打卡空間</strong><small>建立或新加入時預設開啟，可在此關閉。會分享過往與之後的紀錄、食物細項；不會自動公開到所有人。</small></span></label>' : ''),
           '</div>',
         '</section>',
