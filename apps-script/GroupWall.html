@@ -89,7 +89,7 @@
         '<section class="hero">',
           '<div class="eyebrow">GROUP HEALTH LOG</div>',
           '<h1>👥 ' + escapeHtml(group.name || '群組猛猛紀錄牆') + '</h1>',
-          '<p>' + escapeHtml(DATA.date || '') + '・只顯示成員主動分享到這個群組的紀錄</p>',
+          '<p>' + escapeHtml(DATA.date || '') + '・' + (group.type === 'space' ? '打卡空間' : 'LINE 群組') + '・只顯示成員已開啟好友分享的紀錄</p>',
           '<div class="summary">',
             '<div class="summary-card"><strong>' + number(summary.sharedCount) + '</strong><span>今日分享</span></div>',
             '<div class="summary-card"><strong>' + number(summary.completedCount) + '</strong><span>完成打卡</span></div>',
@@ -98,7 +98,7 @@
         '</section>',
         '<div class="toolbar"><label for="dateSelect">查看日期</label><select id="dateSelect">' + dateOptions() + '</select><button id="todayButton" class="today" type="button">今天</button></div>',
         '<details class="privacy"><summary>🔒 這個群組牆怎麼保護隱私？</summary><p>只有目前仍在本群組的成員，且從自己的專屬連結開啟，才能查看。你可隨時選擇顯示或不顯示在群組牆；內容會顯示食物細項，但不會顯示照片、體重、BMR 或備註。連結會到期，請不要轉傳。</p></details>',
-        records.length ? records.map(renderRecord).join('') : '<div class="empty">今天還沒有人分享到群組牆。<br>完成或儲存打卡時，開啟「分享到我的群組猛猛紀錄牆」就會顯示在這裡。</div>',
+        records.length ? records.map(renderRecord).join('') : '<div class="empty">今天還沒有人分享到群組牆。<br>完成或儲存打卡時，開啟「分享給已加入的 LINE 群組與打卡空間」就會顯示在這裡。</div>',
         bottomNav_((DATA && DATA.nav) || {}),
       ].join('');
       bindBottomNavLoading_(app);

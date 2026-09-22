@@ -26,6 +26,9 @@ export default {
 
     let webhookBody;
     try { webhookBody = JSON.parse(rawBody); } catch { return json({ ok: false, error: 'invalid_json' }, 400); }
+    if (!webhookBody || typeof webhookBody !== 'object' || Array.isArray(webhookBody)) {
+      return json({ ok: false, error: 'invalid_webhook' }, 400);
+    }
 
     const originalEvents = Array.isArray(webhookBody.events) ? webhookBody.events : [];
     const filteredEvents = originalEvents.filter(shouldForwardEvent);
@@ -38,18 +41,24 @@ export default {
     const target = new URL(env.APPS_SCRIPT_WEBHOOK_URL);
     target.searchParams.set('key', env.APPS_SCRIPT_RELAY_SECRET);
 
-    const upstream = await fetch(target.toString(), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json; charset=utf-8' },
-      body: JSON.stringify(webhookBody),
-    });
-    const text = await upstream.text();
+    let upstream, text;
+    try {
+      upstream = await fetch(target.toString(), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+        body: JSON.stringify(webhookBody),
+      });
+      text = await upstream.text();
+    } catch {
+      console.error('Apps Script request failed');
+      return json({ ok: false, error: 'upstream_failed' }, 502);
+    }
 
     // Apps Script Web Apps normally answer 200 even when their JSON says ok:false.
     let result;
     try { result = JSON.parse(text); } catch { result = { ok: false, error: 'invalid_apps_script_response' }; }
-    if (!upstream.ok || !result.ok) {
-      console.error('Apps Script error', upstream.status, text);
+    if (!upstream.ok || !result || result.ok !== true) {
+      console.error('Apps Script error', upstream.status);
       return json({ ok: false, error: 'upstream_failed' }, 502);
     }
 
