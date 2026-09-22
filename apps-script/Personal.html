@@ -65,6 +65,7 @@
     .danger { border:1px solid #e6aaa1; color:#ad4f46; }
     .space-create { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:end; margin-top:12px; }
     .space-create button { min-height:43px; white-space:nowrap; }
+    .space-type { display:inline-block; margin-bottom:7px; padding:3px 7px; border:1px solid #e8d6a6; border-radius:7px; background:#fff6db; color:#80621d; font-size:10px; font-weight:800; }
     .hint { margin:10px 0 0; color:var(--muted); font-size:11px; line-height:1.5; }
     .bottom-nav { position:fixed; right:0; bottom:0; left:0; z-index:10; display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:3px; padding:7px 9px calc(7px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:rgba(255,250,240,.96); backdrop-filter:blur(14px); }
     .bottom-nav a { display:flex; min-height:49px; flex-direction:column; align-items:center; justify-content:center; gap:2px; border-radius:11px; color:#786f62; font-size:10px; font-weight:900; text-decoration:none; }
@@ -83,6 +84,7 @@
   <main id="app" class="app"><div class="error">正在載入個人設定…</div></main>
   <div id="personalData" hidden><?= personalJson ?></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <?!= HtmlService.createHtmlOutputFromFile('SpaRuntime').getContent() ?>
   <script>
     let DATA;
     const app = document.getElementById('app');
@@ -166,10 +168,12 @@
         const owner = Boolean(space.isOwner);
         const detail = owner
           ? '<div class="invite"><span>邀請碼</span><code>' + escapeHtml(space.inviteCode || '—') + '</code></div><p>有效到 ' + escapeHtml(space.inviteExpiresAt || '—') + '。好友加入官方帳號後，直接傳邀請碼即可加入。</p><div class="actions"><button class="secondary" type="button" data-copy="' + escapeAttr(space.inviteCode || '') + '">複製邀請碼</button><button class="danger" type="button" data-renew="' + escapeAttr(space.groupId || '') + '">重設邀請碼</button></div>'
-          : '<p>可在猛猛紀錄牆的群組分頁查看大家主動分享的紀錄。</p><div class="actions"><button class="danger" type="button" data-leave="' + escapeAttr(space.groupId || '') + '">離開空間</button></div>';
-        return '<article class="space-card' + (owner ? ' owner' : '') + '"><div class="space-head"><strong>' + escapeHtml(space.name || '未命名打卡空間') + '</strong><span class="space-count">' + Math.max(0, Number(space.memberCount || 0)) + ' 人</span></div>' + detail + '</article>';
+          : '<p>可在紀錄牆選擇這個打卡空間，查看成員已分享的紀錄。</p><div class="actions"><button class="danger" type="button" data-leave="' + escapeAttr(space.groupId || '') + '">離開空間</button></div>';
+        const invite = owner && space.inviteCode && space.inviteActive !== false
+          ? '<div class="actions"><button class="secondary" type="button" data-share-space="' + escapeAttr(space.groupId) + '">邀請朋友</button></div><details><summary>邀請文字・可長按複製</summary><p style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(DietFriends.inviteText(space)) + '</p></details>' : '';
+        return '<article class="space-card' + (owner ? ' owner' : '') + '"><span class="space-type">打卡空間</span><div class="space-head"><strong>' + escapeHtml(space.name || '未命名打卡空間') + '</strong><span class="space-count">' + Math.max(0, Number(space.memberCount || 0)) + ' 人</span></div>' + invite + detail + '</article>';
       }).join('');
-      return '<section class="section"><h2>👥 打卡空間</h2><p>不用建立 LINE 群組，也能邀請朋友一起看猛猛紀錄牆。</p><div class="space-create"><label>新增打卡空間<input id="spaceName" maxlength="40" placeholder="例如：晚餐不爆卡小隊"></label><button id="createSpace" class="secondary" type="button">建立空間</button></div>' + (cards ? '<div class="space-list">' + cards + '</div>' : '<p class="hint">尚未加入任何打卡空間。</p>') + '</section>';
+      return '<section class="section"><h2>👥 打卡空間</h2><p>這裡管理使用邀請碼加入的打卡空間，不會建立 LINE 聊天群。LINE 群組請在紀錄牆查看加入教學。建立或新加入時會開啟上方的好友分享。</p><div class="space-create"><label>新增打卡空間<input id="spaceName" maxlength="40" placeholder="例如：晚餐不爆卡小隊"></label><button id="createSpace" class="secondary" type="button">建立打卡空間</button></div>' + (cards ? '<div class="space-list">' + cards + '</div>' : '<p class="hint">尚未加入任何打卡空間。</p>') + '</section>';
     }
 
     function render() {
@@ -203,13 +207,13 @@
           '<label class="toggle"><input id="reminderNoon" type="checkbox"' + checked(reminders.noon) + '><span><strong>🌤️ 中午提醒</strong><small>12:00</small></span></label>',
           '<label class="toggle"><input id="reminderEvening" type="checkbox"' + checked(reminders.evening) + '><span><strong>🌙 最後通知</strong><small>19:30</small></span></label>',
         '</div></section>',
-        '<section class="section"><h2>🌍 公開／空間分享</h2><p>這些設定會記住並套用到之後的新紀錄；空間／群組分享切換時，也會同步你既有的歷史紀錄。</p>',
+        '<section class="section"><h2>🌍 公開與好友分享</h2><p>公開與好友分享可分別設定。好友分享使用同一個開關，切換後會同步所有已加入的 LINE 群組與打卡空間，以及既有的歷史紀錄。</p>',
           '<div class="form-grid"><label>公開暱稱<input id="publicAlias" maxlength="40" value="' + escapeAttr(member.publicAlias || member.name || '') + '" placeholder="例如：檸檬夥伴"></label></div>',
           '<div class="toggle-list">',
             '<label class="toggle"><input id="publishToday" type="checkbox"' + checked(member.defaultPublishToday) + '><span><strong>公開到猛猛紀錄牆</strong><small>只有你主動開啟才會顯示。</small></span></label>',
             '<label class="toggle"><input id="publishFoodDetails" type="checkbox"' + checked(member.defaultPublishFoodDetails) + '><span><strong>公開食物細項</strong><small>需同時開啟公開紀錄。</small></span></label>',
             '<label class="toggle"><input id="joinPublicRanking" type="checkbox"' + checked(member.joinPublicRanking) + '><span><strong>參加連續紀錄排行</strong><small>只顯示公開暱稱與連續天數。</small></span></label>',
-            (groups.length ? '<label class="toggle"><input id="publishToGroup" type="checkbox"' + checked(member.defaultPublishToGroup) + '><span><strong>顯示在我的打卡空間／群組猛猛紀錄牆</strong><small>空間成員可看到食物細項；不等於公開到所有人。</small></span></label>' : ''),
+            (groups.length ? '<label class="toggle"><input id="publishToGroup" type="checkbox"' + checked(member.defaultPublishToGroup) + '><span><strong>分享給已加入的 LINE 群組與打卡空間</strong><small>建立或新加入時預設開啟，可在此關閉。會分享過往與之後的紀錄、食物細項；不會自動公開到所有人。</small></span></label>' : ''),
           '</div>',
         '</section>',
         renderSpaces(),
@@ -254,6 +258,9 @@
       document.getElementById('saveSettings').addEventListener('click', saveSettings);
       document.getElementById('createSpace').addEventListener('click', createSpace);
       document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', () => copyInvite(button.dataset.copy || '')));
+      document.querySelectorAll('[data-share-space]').forEach(button => button.addEventListener('click', () => {
+        DietFriends.share((DATA.checkInSpaces || []).find(space => space.groupId === button.dataset.shareSpace), showToast);
+      }));
       document.querySelectorAll('[data-renew]').forEach(button => button.addEventListener('click', () => renewSpace(button.dataset.renew || '')));
       document.querySelectorAll('[data-leave]').forEach(button => button.addEventListener('click', () => leaveSpace(button.dataset.leave || '')));
     }
@@ -329,6 +336,14 @@
       if (!name) { showToast('請先輸入打卡空間名稱。'); input.focus(); return; }
       const button = document.getElementById('createSpace');
       button.disabled = true;
+      if (window.dietApp && window.dietApp.manageFriendSpace) {
+        window.dietApp.manageFriendSpace('create', name).then(() => {
+          input.value = '';
+          dirtyFields.delete('spaceName');
+          window.dietApp.navigate('wall', { friends:true });
+        }).catch(error => showToast(error.message || '建立失敗')).finally(() => { button.disabled = false; });
+        return;
+      }
       google.script.run.withSuccessHandler(reloadSettings).withFailureHandler(error => { button.disabled = false; showToast(error && error.message ? error.message : '建立失敗'); })
         .createCheckInSpaceForClient(Object.assign(accessPayload(), { name }));
     }

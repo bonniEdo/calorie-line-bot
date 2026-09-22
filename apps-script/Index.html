@@ -1355,6 +1355,12 @@
     /* 鍵盤開啟時仍保留送出列，並由 JS 將它抬到鍵盤上方，避免輸入運動時按鈕消失。 */
     body.keyboard-open .submit-bar { bottom: calc(8px + var(--keyboard-offset, 0px)); display: block !important; visibility: visible; opacity: 1; }
     .submit-inner { max-width: none; margin: 0; display: flex; gap: 10px; align-items: center; }
+    .friend-followup { position:relative; margin:0 0 9px; padding:12px 42px 12px 12px; border:1px solid #cfe1d5; border-radius:12px; background:#f4faf6; color:#35684b; }
+    .friend-followup[hidden] { display:none; }
+    .friend-followup strong { display:block; font-size:14px; }
+    .friend-followup p { margin:4px 0 8px; font-size:12px; line-height:1.5; }
+    .friend-followup button { min-height:40px; padding:7px 12px; border:1px solid #bcd9c8; border-radius:10px; background:white; color:#35684b; font:inherit; font-size:12px; font-weight:800; cursor:pointer; }
+    .friend-followup .friend-close { position:absolute; top:3px; right:3px; width:36px; padding:0; border:0; background:transparent; font-size:20px; }
     .submit-summary { flex: 1; min-width: 0; font-size: 11px; color: var(--muted); font-weight: 800; line-height: 1.35; }
     .submit-summary strong { display: block; color: var(--ink); font-size: 18px; line-height: 1.1; }
     .save-status { display: block; margin-top: 3px; color: var(--green); font-size: 10px; font-weight: 800; line-height: 1.25; }
@@ -1466,6 +1472,7 @@
   </main>
 
   <div id="submitBar" class="submit-bar" hidden>
+    <section id="friendFollowup" class="friend-followup" aria-label="和朋友一起打卡" hidden></section>
     <div class="submit-inner">
       <div class="submit-summary">
         猛猛進食
@@ -1483,7 +1490,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.09.21-127';
+    window.__dietAppBuild = '2026.09.22-135';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -1509,8 +1516,15 @@
     };
 
     window.onerror = function (message, source, line, column) {
+      // 保留第一個錯誤，避免後續「找不到函式」蓋掉真正的解析失敗原因。
+      if (window.__dietAppFailed) return false;
       window.__dietAppFailed = true;
       window.clearTimeout(window.__dietAppTimer);
+      document.body.classList.remove('spa-initial-subview');
+      ['submitBar', 'bottomNav', 'spaViews'].forEach(function (id) {
+        var node = document.getElementById(id);
+        if (node) { node.hidden = true; node.style.display = 'none'; }
+      });
       var root = document.getElementById('app');
       if (!root) return;
       root.innerHTML = '';
@@ -1608,6 +1622,8 @@
       // 拍照分析或手輸後必須由使用者明確選一次餐別，避免預設早餐造成誤記。
       entryMealChosen: false,
       analyzing: false,
+      photoAnalysis: null,
+      aiWaitTimer: null,
       mealRevision: 0,
       savedMealRevision: 0,
       autoSaveTimer: null,
@@ -1662,7 +1678,13 @@
     }
 
     try {
+      if (window.__dietAppFailed) throw new Error('啟動已中止');
       if (bootstrapError) throw bootstrapError;
+      if (BOOTSTRAP && BOOTSTRAP.valid && (typeof DietRouter !== 'function'
+          || typeof createDietView !== 'function' || typeof DietFriends !== 'object'
+          || !window.DietViewModules)) {
+        throw new Error('共用程式未完整載入，請確認所有 HTML 檔已同步更新並重新部署。');
+      }
       window.__dietAppStage = '還原今天的紀錄';
       hydrateStateFromDailyLog(activeSavedLog);
       window.__dietAppStage = '建立打卡畫面';
@@ -1771,7 +1793,8 @@
       state.entryMode = 'photo';
       state.photoPanelVisible = false;
       state.photoEntrySource = '';
-      state.analyzing = false;
+      state.photoAnalysis = null;
+      setAnalyzing(false, '');
       todayIsComplete = Boolean(activeSavedLog && activeSavedLog.isComplete);
       if (!activeSavedLog) {
         state.exerciseRecords = [newExerciseRecord()];
@@ -2149,7 +2172,7 @@
               '<label class="privacy-toggle"><input id="publishToday" type="checkbox" ' + (defaultPublishToday ? 'checked' : '') + '><span><strong>公開我的飲控紀錄</strong><br>開啟後每天沿用，只公開暱稱、已攝取／今日額度、餐別與完成狀態。</span></label>',
               '<label class="privacy-toggle"><input id="publishFoodDetails" type="checkbox" ' + (defaultPublishFoodDetails ? 'checked' : '') + '><span><strong>同時公開我吃了什麼</strong><br>開啟後每天沿用，顯示食物名稱、份量與估算熱量；不會顯示照片。</span></label>',
               '<label class="privacy-toggle"><input id="joinPublicRanking" type="checkbox" ' + (MEMBER.joinPublicRanking ? 'checked' : '') + '><span><strong>參加公開連續打卡排行</strong><br>只比較完成打卡的連續天數，不比較誰吃得最少。</span></label>',
-              (groupWalls.length ? '<label class="privacy-toggle"><input id="publishToGroup" type="checkbox" ' + (publishToGroup ? 'checked' : '') + '><span><strong>顯示在我的打卡空間／群組猛猛紀錄牆</strong><br>切換後會套用到所有日期紀錄與之後的新紀錄，分享給 ' + escapeHtml(groupWallNames) + ' 的現有成員；會顯示食物細項，但不會出現在公開猛猛紀錄牆。</span></label>' : ''),
+              (groupWalls.length ? '<label class="privacy-toggle"><input id="publishToGroup" type="checkbox" ' + (publishToGroup ? 'checked' : '') + '><span><strong>分享給已加入的 LINE 群組與打卡空間</strong><br>切換後會套用到所有日期紀錄與之後的新紀錄，分享給 ' + escapeHtml(groupWallNames) + ' 的現有成員；會顯示食物細項，但不會出現在公開猛猛紀錄牆。</span></label>' : ''),
             '</div>',
           '</details>',
           renderCheckInSpaceSettings_(),
@@ -2183,7 +2206,7 @@
               '<input id="foodPhotoUpload" class="photo-input" type="file" accept="image/*">',
               '<p class="hint">可直接拍照或從相簿上傳；分析結果會顯示在這裡，可展開細節調整份量。</p>',
               '<img id="photoPreview" class="photo-preview" alt="餐點照片預覽" hidden>',
-              '<div id="aiStatus" class="ai-status"></div>',
+              '<div id="aiStatus" class="ai-status" role="status" aria-live="polite"></div>',
               '<div id="aiResult" class="ai-result" hidden></div>',
             '</div>',
           '</div>',
@@ -2363,7 +2386,9 @@
               return true;
             },
             beforeSettingsSave:async () => {
+              if (settingsWriteBusy) throw new Error('空間或設定正在同步，請稍後再儲存。');
               await flushFormSave_();
+              if (settingsWriteBusy) throw new Error('空間或設定正在同步，請稍後再儲存。');
               settingsWriteBusy = true;
             },
             settingsSaved:settings => {
@@ -2376,11 +2401,15 @@
             },
             settingsFailed:resumeFormSave_,
             spacesUpdated:settings => {
+              syncGroupSharing_(settings.member ? settings.member.defaultPublishToGroup : settings.groupSharing);
               CHECK_IN_SPACES = settings.checkInSpaces || [];
               BOOTSTRAP.groupWalls = settings.groupWalls || [];
               CHECK_IN_SPACE_IDS = new Set(CHECK_IN_SPACES.map(space => String(space.groupId || '')));
               syncCheckInSpaceWallTabs_();
+              refreshFriendFollowup_();
             },
+            friendSpaces:() => ({ spaces:CHECK_IN_SPACES, groups:BOOTSTRAP.groupWalls || [], sharing:Boolean(MEMBER.defaultPublishToGroup) }),
+            manageFriendSpace:manageFriendSpace_,
             spacesChanged:() => {
               appRouter.invalidate('personal');
               appRouter.invalidate('wall', { clear:true });
@@ -2405,6 +2434,8 @@
             if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
           });
           window.scrollTo({ top:viewScroll[view], behavior:'instant' });
+          const visibleInstance = appRouter.views.get(view)?.instance;
+          if (visibleInstance && visibleInstance.activate) visibleInstance.activate(options);
           if (view === 'form' && options.recordDate) requestRecordDateSwitch(options.recordDate);
           if (!options.fromHistory && previous !== view) {
             if (typeof google !== 'undefined' && google.script.history) {
@@ -2500,6 +2531,7 @@
       BOOTSTRAP.groupWalls = settings.groupWalls || BOOTSTRAP.groupWalls;
       CHECK_IN_SPACE_IDS = new Set(CHECK_IN_SPACES.map(space => String(space.groupId || '')));
       syncCheckInSpaceWallTabs_();
+      refreshFriendFollowup_();
       const spacesRoot = document.getElementById('checkInSpaceContent');
       if (spacesRoot) { spacesRoot.innerHTML = renderCheckInSpaceContent_(); bindCheckInSpaceEvents_(); }
       const valueById = {
@@ -2564,19 +2596,96 @@
       ].join('');
     }
 
+    function syncGroupSharing_(value, force = false) {
+      if (typeof value !== 'boolean') return;
+      // 背景讀取不能覆寫尚未同步的手動關閉；加入操作成功才強制套用其新設定。
+      if (!force && (settingsWriteBusy || state.saveInFlight || state.mealRevision > state.savedMealRevision)) return;
+      MEMBER.defaultPublishToGroup = value;
+      const input = document.getElementById('publishToGroup');
+      if (input) input.checked = value;
+      updatePublicSettingsSummary();
+      if (state.draftStored && !state.draftNeedsReview) persistLocalDraft_(state.pendingAutoComplete);
+    }
+
+    async function manageFriendSpace_(kind, value) {
+      if (settingsWriteBusy) throw new Error('空間或設定正在同步，請稍後再試。');
+      // 加入會變更分享偏好，先完成舊打卡寫入，再暫停新寫入，避免舊開關蓋回。
+      await flushFormSave_();
+      if (settingsWriteBusy) throw new Error('空間或設定正在同步，請稍後再試。');
+      settingsWriteBusy = true;
+      try {
+        const payload = { uid:BOOTSTRAP.uid, sig:BOOTSTRAP.sig };
+        const result = await new Promise((resolve, reject) => {
+          const run = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+          if (kind === 'create') run.createCheckInSpaceForClient(Object.assign(payload, { name:value }));
+          else if (kind === 'join') run.joinCheckInSpaceForClient(Object.assign(payload, { inviteCode:value }));
+          else reject(new Error('不支援的空間操作。'));
+        });
+        if (!result || !result.ok || !Array.isArray(result.spaces)) throw new Error('空間資料未完整回傳，請稍後重新整理確認。');
+        CHECK_IN_SPACES = result.spaces;
+        if (Array.isArray(result.groupWalls)) BOOTSTRAP.groupWalls = result.groupWalls;
+        syncCheckInSpaceWallTabs_();
+        syncGroupSharing_(result.groupSharing, true);
+        refreshFriendFollowup_();
+        const root = document.getElementById('checkInSpaceContent');
+        if (root) { root.innerHTML = renderCheckInSpaceContent_(); bindCheckInSpaceEvents_(); }
+        appRouter.invalidate('personal');
+        appRouter.invalidate('wall', { clear:true });
+        return result;
+      } finally {
+        resumeFormSave_();
+      }
+    }
+
+    function refreshFriendFollowup_() {
+      const root = document.getElementById('friendFollowup');
+      if (root && !root.hidden) showFriendFollowup_(true);
+    }
+
+    function showFriendFollowup_(refresh = false) {
+      const root = document.getElementById('friendFollowup');
+      if (!root || state.recordDate !== BOOTSTRAP.today || !todayIsComplete) return;
+      const groups = CHECK_IN_SPACES.length ? CHECK_IN_SPACES : (BOOTSTRAP.groupWalls || []);
+      const joined = groups.length > 0;
+      const key = 'diet-friends-prompt:v1:' + BOOTSTRAP.uid;
+      if (!joined && !refresh) {
+        if (showFriendFollowup_.shown) return;
+        try {
+          if (!DietFriends.canPrompt(window.localStorage.getItem(key))) return;
+          window.localStorage.setItem(key, String(Date.now()));
+        } catch (error) { /* 禁用本機儲存時，同次開頁仍只提示一次。 */ }
+        showFriendFollowup_.shown = true;
+      }
+      root.hidden = false;
+      root.innerHTML = '<button type="button" class="friend-close" aria-label="關閉朋友提示">×</button>'
+        + '<strong>' + (joined ? '🐥 今天記好了，看看朋友吧' : '🐥 找個朋友一起記錄') + '</strong>'
+        + '<p>' + (joined ? '到紀錄牆，為彼此今天的累積加油。' : '建立私人打卡空間，和朋友互相鼓勵。自己記也可以。') + '</p>'
+        + '<button type="button" class="friend-open">' + (joined ? '看看朋友的紀錄 →' : '認識打卡空間 →') + '</button>';
+      root.querySelector('.friend-close').onclick = () => { root.hidden = true; };
+      root.querySelector('.friend-open').onclick = () => {
+        root.hidden = true;
+        openSpaView_('wall', joined ? { friendGroupId:groups[0].groupId } : { friends:true });
+      };
+      // 完成提示已在卡片中呈現，避免舊 toast 蓋住朋友入口。
+      window.clearTimeout(showToast.timer);
+      toast.classList.remove('show');
+      return true;
+    }
+
     function renderCheckInSpaceContent_() {
       const spaces = Array.isArray(CHECK_IN_SPACES) ? CHECK_IN_SPACES : [];
       const cards = spaces.map(space => {
         const ownerInfo = space.isOwner
           ? [
               '<div class="space-invite"><span>邀請碼</span><code>' + escapeHtml(space.inviteCode || '—') + '</code></div>',
+              (space.inviteCode && space.inviteActive !== false ? '<button class="secondary" type="button" data-space-share="' + escapeAttr(space.groupId) + '">邀請朋友</button><details><summary>邀請文字・可長按複製</summary><p style="white-space:pre-wrap;overflow-wrap:anywhere">' + escapeHtml(DietFriends.inviteText(space)) + '</p></details>' : ''),
               '<p>有效到 ' + escapeHtml(space.inviteExpiresAt || '—') + '。好友加入官方帳號後，直接私訊這組邀請碼即可加入。</p>',
               '<div class="space-actions">',
                 '<button class="secondary" type="button" data-space-copy="' + escapeAttr(space.inviteCode || '') + '">複製邀請碼</button>',
                 '<button class="danger-small" type="button" data-space-renew="' + escapeAttr(space.groupId || '') + '">重設邀請碼</button>',
               '</div>',
             ].join('')
-          : '<p>你已加入這個空間；可在猛猛紀錄牆的分頁查看大家主動分享的紀錄。</p><div class="space-actions"><button class="danger-small" type="button" data-space-leave="' + escapeAttr(space.groupId || '') + '">離開空間</button></div>';
+          : '<p>你已加入這個空間；可在猛猛紀錄牆的分頁查看大家已開啟分享的紀錄。</p><div class="space-actions"><button class="danger-small" type="button" data-space-leave="' + escapeAttr(space.groupId || '') + '">離開空間</button></div>';
         return [
           '<article class="space-card' + (space.isOwner ? ' space-card-owner' : '') + '">',
             '<div class="space-card-heading"><strong>' + escapeHtml(space.name || '未命名打卡空間') + '</strong><span class="space-member-count">' + Math.max(0, Number(space.memberCount || 0)) + ' 人</span></div>',
@@ -2585,7 +2694,7 @@
         ].join('');
       }).join('');
       return [
-        '<p class="hint">建立空間後，把邀請碼傳給朋友即可；朋友不需要先建立 LINE 群組。加入後，大家會在「猛猛紀錄牆」看到同一個空間分頁。</p>',
+        '<p class="hint">打卡空間使用邀請碼加入，不會建立 LINE 聊天群。建立或新加入時會開啟好友分享，過往紀錄與餐點會分享給所有已加入的 LINE 群組與打卡空間，可在設定關閉。</p>',
         '<div class="space-create-row"><label>新增打卡空間<input id="checkInSpaceName" maxlength="40" placeholder="例如：晚餐不爆卡小隊"></label><button id="createCheckInSpaceButton" class="secondary" type="button">建立空間</button></div>',
         '<div id="checkInSpaceStatus" class="space-status" aria-live="polite"></div>',
         (cards ? '<div class="space-list">' + cards + '</div>' : '<p class="hint">尚未加入任何打卡空間。</p>'),
@@ -2614,6 +2723,9 @@
       };
 
       const createButton = document.getElementById('createCheckInSpaceButton');
+      root.querySelectorAll('[data-space-share]').forEach(button => button.addEventListener('click', () => {
+        DietFriends.share(CHECK_IN_SPACES.find(space => space.groupId === button.dataset.spaceShare), showToast);
+      }));
       if (createButton) createButton.addEventListener('click', () => {
         const input = document.getElementById('checkInSpaceName');
         const name = String(input && input.value || '').trim();
@@ -2625,16 +2737,12 @@
         const node = status();
         if (node) node.textContent = '正在建立…';
         createButton.disabled = true;
-        google.script.run
-          .withSuccessHandler(result => {
-            refresh(result && result.spaces);
-            showToast('✅ 已建立打卡空間，邀請碼已顯示在這裡。');
-          })
-          .withFailureHandler(error => {
-            createButton.disabled = false;
-            showSpaceError(error);
-          })
-          .createCheckInSpaceForClient({ uid: BOOTSTRAP.uid, sig: BOOTSTRAP.sig, name });
+        manageFriendSpace_('create', name).then(() => {
+          showToast('✅ 已建立打卡空間並開啟好友分享，可到設定關閉。');
+        }).catch(error => {
+          createButton.disabled = false;
+          showSpaceError(error);
+        });
       });
 
       root.querySelectorAll('[data-space-copy]').forEach(button => {
@@ -2684,7 +2792,7 @@
       const spaceIds = new Set(spaces.map(space => String(space.groupId || '')));
       const existing = Array.isArray(BOOTSTRAP.groupWalls) ? BOOTSTRAP.groupWalls : [];
       const preserved = existing.filter(group => !CHECK_IN_SPACE_IDS.has(String(group.groupId || '')) && !spaceIds.has(String(group.groupId || '')));
-      BOOTSTRAP.groupWalls = preserved.concat(spaces.map(space => ({ groupId: space.groupId, name: space.name })));
+      BOOTSTRAP.groupWalls = preserved.concat(spaces.map(space => ({ groupId: space.groupId, name: space.name, type:'space' })));
       CHECK_IN_SPACE_IDS = spaceIds;
 
       // 新建第一個空間時，直接把分享開關補到目前畫面，不需要重新載入或遺失正在填寫的餐點。
@@ -2700,7 +2808,7 @@
       if (!body) return;
       const label = document.createElement('label');
       label.className = 'privacy-toggle';
-      label.innerHTML = '<input id="publishToGroup" type="checkbox"><span><strong>顯示在我的打卡空間／群組猛猛紀錄牆</strong><br>切換後會套用到所有日期紀錄與之後的新紀錄；空間成員可看到食物細項，但不會出現在公開猛猛紀錄牆。</span>';
+      label.innerHTML = '<input id="publishToGroup" type="checkbox"><span><strong>分享給已加入的 LINE 群組與打卡空間</strong><br>切換後會套用到所有日期紀錄與之後的新紀錄；所有已加入的 LINE 群組與打卡空間成員可看到食物細項，不會自動公開到所有人。</span>';
       const input = label.querySelector('input');
       input.checked = Boolean(MEMBER.defaultPublishToGroup);
       input.addEventListener('change', () => {
@@ -2778,6 +2886,7 @@
       });
 
       const openPhotoPicker = inputId => {
+        if (state.analyzing) return;
         if (!requireEntryMeal_()) return;
         state.entryMode = 'photo';
         state.photoPanelVisible = true;
@@ -3491,9 +3600,9 @@
       const baseAmount = Math.max(0, Number(hasBaseAmount ? item.baseAmount : (item.amount || item.grams || 0)));
       const hasAmount = item.amount !== undefined && item.amount !== null;
       const amount = Math.max(0, Number(hasAmount ? item.amount : (item.grams || baseAmount || 0)));
-      const baseCalories = Math.max(0, Number(item.baseCalories || item.originalCalories || item.calories || 0));
-      const baseLow = Math.max(0, Number(item.baseLow || item.low || baseCalories));
-      const baseHigh = Math.max(0, Number(item.baseHigh || item.high || baseCalories));
+      const baseCalories = Math.max(0, Number(item.baseCalories ?? item.originalCalories ?? item.calories ?? 0));
+      const baseLow = Math.max(0, Number(item.baseLow ?? item.low ?? baseCalories));
+      const baseHigh = Math.max(0, Number(item.baseHigh ?? item.high ?? baseCalories));
       const baseProteinG = proteinGrams(item.baseProteinG !== undefined ? item.baseProteinG : item.proteinG);
       const proteinG = proteinGrams(item.proteinG !== undefined ? item.proteinG : baseProteinG);
       item.unit = unit;
@@ -3510,7 +3619,7 @@
 
     function recalcAiItemCalories(item) {
       normalizeAiPortion(item);
-      if (item.baseAmount > 0 && item.baseCalories > 0) {
+      if (item.baseAmount > 0) {
         item.calories = Math.round(item.baseCalories * item.amount / item.baseAmount);
         item.low = Math.round(item.baseLow * item.amount / item.baseAmount);
         item.high = Math.round(item.baseHigh * item.amount / item.baseAmount);
@@ -3520,6 +3629,24 @@
       }
       const shownAmount = item.amount > 0 ? `${item.amount} ${item.unit}` : '';
       if (shownAmount) item.portion = shownAmount;
+    }
+
+    function setAiItemCalories_(item, value) {
+      normalizeAiPortion(item);
+      const next = Number(value || 0);
+      item.calories = Number.isFinite(next) ? Math.max(0, Math.min(5000, next)) : 0;
+      // 以目前份量重設基準，避免舊比例覆寫修正值，也避免儲存整數基準時產生誤差。
+      if (item.amount > 0) {
+        item.baseAmount = item.amount;
+        item.baseProteinG = item.proteinG;
+      }
+      item.baseCalories = item.calories;
+      item.low = item.high = item.calories;
+      item.baseLow = item.baseHigh = item.baseCalories;
+    }
+
+    function aiItemMetaText_(item) {
+      return `估計 ${item.amount || '?'} ${item.unit || 'g'} · ${proteinText(item.proteinG)} · 範圍 ${item.low || 0}～${item.high || 0} kcal · 信心 ${item.confidence || '低'}${item.notes ? `\n${item.notes}` : ''}`;
     }
 
     function appendPortionEditor(row, item, onChange) {
@@ -3573,16 +3700,27 @@
       state.photoPanelVisible = true;
       const photoPanel = document.getElementById('photoEntryPanel');
       if (photoPanel) photoPanel.hidden = false;
-      setAnalyzing(true, `正在壓縮照片…`);
+      const analysis = { startedAt:performance.now(), requestStartedAt:null, prepareMs:null, inputBytes:file.size, imageBytes:0 };
+      state.photoAnalysis = analysis;
+      setAnalyzing(true, '正在處理照片…', 'prepare');
       compressPhoto(file).then(imageDataUrl => {
+        analysis.prepareMs = Math.round(performance.now() - analysis.startedAt);
+        if (state.photoAnalysis !== analysis) { logPhotoAnalysis_(analysis, 'discarded'); return; }
+        const base64 = imageDataUrl.slice(imageDataUrl.indexOf(',') + 1);
+        analysis.imageBytes = Math.floor(base64.length * 3 / 4) - (base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0);
         const preview = document.getElementById('photoPreview');
         preview.src = imageDataUrl;
         preview.hidden = false;
-        setAnalyzing(true, 'Gemini 正在分析餐點，約需幾秒…');
+        setAnalyzing(true, '正在辨識餐點…', 'request');
+        analysis.requestStartedAt = performance.now();
 
         google.script.run
           .withSuccessHandler(result => {
-            state.analyzing = false;
+            const current = state.photoAnalysis === analysis;
+            logPhotoAnalysis_(analysis, current ? 'success' : 'discarded', result);
+            if (!current) return;
+            state.photoAnalysis = null;
+            setAnalyzing(false, '');
             const recognizedItems = (result.items || []).map((item, index) => ({
               id: `ai_${Date.now()}_${index}`,
               source: 'gemini',
@@ -3616,24 +3754,50 @@
             }
           })
           .withFailureHandler(error => {
-            setAnalyzing(false, '');
+            const current = state.photoAnalysis === analysis;
+            logPhotoAnalysis_(analysis, current ? 'failed' : 'discarded');
+            if (!current) return;
+            state.photoAnalysis = null;
+            setAnalyzing(false, '這次辨識未完成，可重新選擇照片再試，或先手動記錄。');
             showToast(`AI 分析失敗：${error && error.message ? error.message : error}`);
           })
           .analyzeFoodPhoto({ uid: BOOTSTRAP.uid, sig: BOOTSTRAP.sig, imageDataUrl });
       }).catch(error => {
-        setAnalyzing(false, '');
-        showToast(`照片處理失敗：${error.message || error}`);
+        const current = state.photoAnalysis === analysis;
+        const preparationFailed = analysis.requestStartedAt === null;
+        logPhotoAnalysis_(analysis, current ? (preparationFailed ? 'prepare_failed' : 'failed') : 'discarded');
+        if (!current) return;
+        state.photoAnalysis = null;
+        setAnalyzing(false, preparationFailed ? '照片處理失敗，請重新選擇照片。' : '這次辨識未完成，請稍後再試。');
+        showToast((preparationFailed ? '照片處理失敗：' : 'AI 分析失敗：') + (error.message || error));
+      });
+    }
+
+    function logPhotoAnalysis_(analysis, outcome, result) {
+      if (analysis.logged) return;
+      analysis.logged = true;
+      const now = performance.now();
+      // 只記錄耗時、檔案大小與後端診斷，不記錄照片、食物、檔名或憑證。
+      console.info('photo_analysis', {
+        outcome,
+        prepareMs:analysis.prepareMs === null ? Math.round(now - analysis.startedAt) : analysis.prepareMs,
+        roundTripMs:analysis.requestStartedAt === null ? null : Math.round(now - analysis.requestStartedAt),
+        totalMs:Math.round(now - analysis.startedAt),
+        inputBytes:analysis.inputBytes,
+        imageBytes:analysis.imageBytes,
+        server:result && result.timing || null,
       });
     }
 
     function compressPhoto(file) {
       return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error('無法讀取照片'));
-        reader.onload = () => {
-          const image = new Image();
-          image.onerror = () => reject(new Error('照片格式無法讀取'));
-          image.onload = () => {
+        // 直接解碼本機檔案，避免先把整張原圖轉成大型 base64 字串再讀一次。
+        const image = new Image();
+        const url = URL.createObjectURL(file);
+        const release = () => URL.revokeObjectURL(url);
+        image.onerror = () => { release(); reject(new Error('照片格式無法讀取')); };
+        image.onload = () => {
+          try {
             const maxSide = 1280;
             const ratio = Math.min(1, maxSide / Math.max(image.width, image.height));
             const canvas = document.createElement('canvas');
@@ -3641,15 +3805,19 @@
             canvas.height = Math.max(1, Math.round(image.height * ratio));
             const context = canvas.getContext('2d');
             context.drawImage(image, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', .76));
-          };
-          image.src = reader.result;
+            const data = canvas.toDataURL('image/jpeg', .76);
+            if (!data.startsWith('data:image/jpeg;base64,')) throw new Error('Empty image');
+            resolve(data);
+          } catch (error) { reject(new Error('無法處理照片，請換一張較小的照片再試。')); }
+          finally { release(); }
         };
-        reader.readAsDataURL(file);
+        image.src = url;
       });
     }
 
-    function setAnalyzing(busy, message) {
+    function setAnalyzing(busy, message, phase) {
+      window.clearTimeout(state.aiWaitTimer);
+      state.aiWaitTimer = null;
       state.analyzing = busy;
       ['cameraCaptureButton', 'uploadPhotoButton'].forEach(id => {
         const button = document.getElementById(id);
@@ -3657,6 +3825,22 @@
       });
       const status = document.getElementById('aiStatus');
       if (status) status.textContent = message || '';
+      if (!busy) return;
+      const analysis = state.photoAnalysis;
+      state.aiWaitTimer = window.setTimeout(() => {
+        if (!state.analyzing || state.photoAnalysis !== analysis) return;
+        if (phase === 'prepare') {
+          if (status) status.textContent = '正在處理照片，較大的照片會需要多一點時間。';
+          state.aiWaitTimer = null;
+          return;
+        }
+        if (status) status.textContent = '還在等候辨識結果，你可以先查看其他分頁，完成後再回來確認。';
+        state.aiWaitTimer = window.setTimeout(() => {
+          if (!state.analyzing || state.photoAnalysis !== analysis) return;
+          if (status) status.textContent = '這次等待較久，仍在等候辨識結果。請先保留這個頁面。';
+          state.aiWaitTimer = null;
+        }, 15000);
+      }, phase === 'prepare' ? 8000 : 10000);
     }
 
     function renderAiReview(result) {
@@ -3703,8 +3887,8 @@
         kcalInput.max = '5000';
         kcalInput.value = item.calories;
         kcalInput.addEventListener('input', e => {
-          item.calories = Math.max(0, Number(e.target.value || 0));
-          if (item.baseAmount > 0) item.baseCalories = item.calories;
+          setAiItemCalories_(item, e.target.value);
+          meta.textContent = aiItemMetaText_(item);
           updatePendingAiSummary();
         });
         kcalLabel.append(kcalInput);
@@ -3712,6 +3896,7 @@
 
         appendPortionEditor(row, item, () => {
           kcalInput.value = item.calories;
+          meta.textContent = aiItemMetaText_(item);
           updatePendingAiSummary();
         });
 
@@ -3721,9 +3906,7 @@
         portionInput.maxLength = 80;
         portionInput.addEventListener('input', e => { item.portion = e.target.value; });
         portionLabel.append(portionInput);
-        const meta = el('div', 'ai-meta',
-          `估計 ${item.amount || '?'} ${item.unit || 'g'} · ${proteinText(item.proteinG)} · 範圍 ${item.low}～${item.high} kcal · 信心 ${item.confidence}${item.notes ? `\n${item.notes}` : ''}`
-        );
+        const meta = el('div', 'ai-meta', aiItemMetaText_(item));
         const remove = el('button', 'danger-small', '移除這項');
         remove.type = 'button';
         remove.addEventListener('click', () => {
@@ -4041,6 +4224,7 @@
           else name.append(el('small', '', 'AI 辨識 · 點開可調整份量'));
           if (proteinGrams(item.proteinG) > 0) name.append(proteinChip(item.proteinG));
           row.append(name);
+          let detailMeta = null;
           const kcal = document.createElement('input');
           kcal.className = 'ai-kcal';
           kcal.type = 'number';
@@ -4050,8 +4234,8 @@
           kcal.value = item.calories;
           kcal.setAttribute('aria-label', `${item.name}熱量`);
           kcal.addEventListener('input', event => {
-            item.calories = Math.max(0, Number(event.target.value || 0));
-            item.baseCalories = item.baseAmount > 0 ? item.baseCalories : item.calories;
+            setAiItemCalories_(item, event.target.value);
+            if (detailMeta) detailMeta.textContent = aiItemMetaText_(item);
             updateActiveMealSummary();
             renderMealTabs();
             updateTotals();
@@ -4072,12 +4256,13 @@
             details.className = 'selected-ai-details';
             details.append(el('summary', '', '查看／調整份量與辨識細節'));
             const detailBody = el('div', 'selected-ai-detail-body');
-            const detailMeta = el('div', 'ai-meta',
-              `估計 ${item.amount || '?'} ${item.unit || 'g'} · ${proteinText(item.proteinG)} · 範圍 ${item.low || 0}～${item.high || 0} kcal · 信心 ${item.confidence || '低'}${item.notes ? `\n${item.notes}` : ''}`
-            );
+            detailMeta = el('div', 'ai-meta', aiItemMetaText_(item));
             appendPortionEditor(detailBody, item, () => {
               kcal.value = item.calories;
-              detailMeta.textContent = `估計 ${item.amount || '?'} ${item.unit || 'g'} · ${proteinText(item.proteinG)} · 範圍 ${item.low || 0}～${item.high || 0} kcal · 信心 ${item.confidence || '低'}${item.notes ? `\n${item.notes}` : ''}`;
+              detailMeta.textContent = aiItemMetaText_(item);
+              const oldProtein = name.querySelector('.protein-chip');
+              if (oldProtein) oldProtein.remove();
+              if (proteinGrams(item.proteinG) > 0) name.append(proteinChip(item.proteinG));
               updateActiveMealSummary();
               renderMealTabs();
               updateTotals();
@@ -4279,6 +4464,8 @@
     }
 
     function updateSubmitButtons() {
+      const friendFollowup = document.getElementById('friendFollowup');
+      if (friendFollowup && (!todayIsComplete || state.recordDate !== BOOTSTRAP.today)) friendFollowup.hidden = true;
       // 背景自動儲存時仍允許按「送出完成」；若請求正在進行，會排在下一筆送出。
       const isBackfill = state.recordDate !== BOOTSTRAP.today;
       updateRecordStatusTag();
@@ -4731,7 +4918,8 @@
           const deficit = result.hasBmr
             ? (result.estimatedDeficit >= 0 ? `估算赤字 ${result.estimatedDeficit} kcal` : `估算超出 ${Math.abs(result.estimatedDeficit)} kcal`)
             : '已儲存，待設定基礎代謝';
-          showToast(`${result.isBackfill ? '✅ 補登完成' : '✅ 已完成'}！攝取 ${result.totalIntake} kcal，${deficit}`);
+          const showedFriends = unchanged && !result.isBackfill && activeAppView === 'form' && showFriendFollowup_();
+          if (!showedFriends) showToast(`${result.isBackfill ? '✅ 補登完成' : '✅ 已完成'}！攝取 ${result.totalIntake} kcal，${deficit}`);
         })
         .withFailureHandler(error => {
           state.saveInFlight = false;

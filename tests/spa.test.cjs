@@ -3,6 +3,18 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const runtime = fs.readFileSync('apps-script/SpaRuntime.html', 'utf8').replace(/<\/?script>/g, '');
+test('HtmlService inline scripts keep URLs out of backtick strings', () => {
+  // Node/Chromium can parse these, but HtmlService can misread the URL's // as a comment.
+  // Guard the source pattern too: the previous invite text passed JS syntax tests.
+  for (const file of fs.readdirSync('apps-script').filter(file => file.endsWith('.html'))) {
+    const html = fs.readFileSync('apps-script/' + file, 'utf8');
+    for (const script of html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)) {
+      for (const literal of script[1].matchAll(/`(?:\\[\s\S]|[^`\\])*`/g)) {
+        assert.ok(!/https?:\/\//.test(literal[0]), file + ': use quoted strings for inline URLs');
+      }
+    }
+  }
+});
 const c = vm.createContext({ console });
 vm.runInContext(runtime + '\nthis.Router=DietRouter;', c);
 const deferred = () => { let resolve, reject; const promise = new Promise((a,b) => { resolve=a; reject=b; }); return { promise,resolve,reject }; };

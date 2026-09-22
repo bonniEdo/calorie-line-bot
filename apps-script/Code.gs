@@ -1,6 +1,6 @@
-// 應用程式版本：2026.09.21-127（單頁資料競態與紀錄牆日期修正）
+// 應用程式版本：2026.09.22-135（完整回歸測試與照片處理優化）
 // 若部署後頁面顯示其他版本，代表 Apps Script Web App 尚未切換到最新部署版本。
-const APP_BUILD = '2026.09.21-127';
+const APP_BUILD = '2026.09.22-135';
 // 暫停目前這一則公告的顯示；保留通知機制，發布下一則公告時再開啟。
 const NEW_FEATURE_NOTICE_ENABLED = false;
 const NEW_FEATURE_NOTICE_ID = '2026_09_history_and_effort_reports';
@@ -317,7 +317,7 @@ function doGet(e) {
     proteinTarget: valid ? getProteinTargetInfo_(uid) : { targetG: 0, source: 'none', label: '' },
     // 打卡頁只需要群組名稱來顯示分享設定；群組入口統一由「紀錄牆」處理。
     groupWalls: valid ? getWallTabsForUser_(uid) : [],
-    // 打卡空間可在本頁建立與管理；加入則保留在 LINE 私訊，讓新朋友不需要先拿到個人連結。
+    // 本人可在紀錄牆建立或加入空間；新朋友也可直接在 LINE 私訊邀請碼。
     checkInSpaces: valid ? getCheckInSpacesForUser_(uid) : [],
     newFeatureNotice: valid ? getNewFeatureNotice_(uid) : { show: false },
   };
@@ -369,7 +369,11 @@ function getSpaDataForClient(payload) {
   if (view === 'personal') return { view, data:getPersonalSettingsData_(userId) };
   if (view === 'wall') {
     const hubSig = issueAccessToken_(userId, APP.tokenScopes.hub, APP.tokenTtlSeconds.hub);
-    return { view, data:getPublicWallData_(userId, hubSig, payload.date || today_()) };
+    const data = getPublicWallData_(userId, hubSig, payload.date || today_());
+    // 只有 form 認證的 SPA 回應包含私人空間與擁有者邀請碼；公開牆 API 不提供。
+    data.checkInSpaces = getCheckInSpacesForUser_(userId);
+    data.groupSharing = Boolean((getMemberById_(userId) || {}).defaultPublishToGroup);
+    return { view, data };
   }
   throw new Error('不支援的頁面。');
 }
@@ -421,7 +425,14 @@ function getCheckInSpacesForClient(payload) {
 function createCheckInSpaceForClient(payload) {
   const userId = requireFormAccessUserId_(payload);
   const result = createCheckInSpace_(userId, payload && payload.name);
-  return { ok: true, created: result, spaces: getCheckInSpacesForUser_(userId) };
+  return { ok: true, created: result, spaces: getCheckInSpacesForUser_(userId), groupWalls: getWallTabsForUser_(userId), groupSharing: Boolean((getMemberById_(userId) || {}).defaultPublishToGroup) };
+}
+
+/** 僅本人有效的 form 憑證可加入空間；新加入時預設開啟群組分享。 */
+function joinCheckInSpaceForClient(payload) {
+  const userId = requireFormAccessUserId_(payload);
+  const result = joinCheckInSpaceByInvite_(userId, payload && payload.inviteCode);
+  return { ok: true, joined: result, spaces: getCheckInSpacesForUser_(userId), groupWalls: getWallTabsForUser_(userId), groupSharing: Boolean((getMemberById_(userId) || {}).defaultPublishToGroup) };
 }
 
 function regenerateCheckInSpaceInviteForClient(payload) {
@@ -2266,7 +2277,7 @@ function getGroupWallData_(viewerId, viewerSignature, groupId, selectedDate) {
     minDate: dateKeyDaysAgo_(today_(), 29),
     maxDate: today_(),
     generatedAt: formatPublicTime_(new Date()),
-    group: { groupId: group.groupId, name: group.name, memberCount: base.memberCount },
+    group: { groupId: group.groupId, name: group.name, type: isCheckInSpace_(group) ? 'space' : 'line_group', memberCount: base.memberCount },
     records: base.records.map(record => Object.assign({}, record, { isSelf: record.userId === viewerId })),
     summary: {
       memberCount: base.memberCount,
@@ -2362,11 +2373,12 @@ function getGroupWallLinksForUser_(userId) {
     .map(group => ({
       groupId: group.groupId,
       name: cleanText_(group.name, 80) || '我的群組',
+      type: isCheckInSpace_(group) ? 'space' : 'line_group',
       url: getGroupWallUrl_(userId, group.groupId),
     }));
 }
 
-/** 整合式紀錄牆的群組卡夾資料：只有名稱與 ID，不暴露成員清單。 */
+/** 整合式紀錄牆的來源卡夾資料：只有名稱、ID 與類型，不暴露成員清單或邀請碼。 */
 function getWallTabsForUser_(userId) {
   const activeIds = new Set(getActiveGroupIdsForUser_(userId));
   return getGroups_()
@@ -2374,6 +2386,7 @@ function getWallTabsForUser_(userId) {
     .map(group => ({
       groupId: group.groupId,
       name: cleanText_(group.name, 80) || '我的群組',
+      type: isCheckInSpace_(group) ? 'space' : 'line_group',
     }));
 }
 
@@ -3462,19 +3475,27 @@ function joinCheckInSpaceByInvite_(userId, inviteCode) {
   if (!userId) throw new Error('找不到你的 LINE 身分。');
   const normalizedCode = normalizeCheckInSpaceInviteCode_(inviteCode);
   if (!normalizedCode) throw new Error('請輸入有效的邀請碼。');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(3000)) throw new Error('目前正在更新空間，請稍後再試。');
+  try {
+    const space = getGroups_().find(group => (
+      isCheckInSpace_(group)
+      && group.enabled
+      && normalizeCheckInSpaceInviteCode_(group.inviteCode) === normalizedCode
+    ));
+    if (!space) throw new Error('找不到這組邀請碼，請確認是否輸入正確或請空間擁有者重發。');
+    if (!isCheckInSpaceInviteActive_(space)) throw new Error('這組邀請碼已過期，請向空間擁有者索取新的邀請碼。');
 
-  const space = getGroups_().find(group => (
-    isCheckInSpace_(group)
-    && group.enabled
-    && normalizeCheckInSpaceInviteCode_(group.inviteCode) === normalizedCode
-  ));
-  if (!space) throw new Error('找不到這組邀請碼，請確認是否輸入正確或請空間擁有者重發。');
-  if (!isCheckInSpaceInviteActive_(space)) throw new Error('這組邀請碼已過期，請向空間擁有者索取新的邀請碼。');
-
-  const alreadyJoined = getGroupMemberships_(space.groupId)
-    .some(item => item.userId === userId && item.inGroup);
-  upsertGroupMember_(space.groupId, userId, true);
-  return { ...formatCheckInSpace_(getGroupById_(space.groupId), userId), alreadyJoined };
+    const alreadyJoined = getGroupMemberships_(space.groupId)
+      .some(item => item.userId === userId && item.inGroup);
+    if (!alreadyJoined) {
+      upsertGroupMember_(space.groupId, userId, true);
+      SpreadsheetApp.flush();
+    }
+    return { ...formatCheckInSpace_(getGroupById_(space.groupId), userId), alreadyJoined };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function regenerateCheckInSpaceInvite_(ownerUserId, groupIdOrInviteCode) {
@@ -3534,11 +3555,13 @@ function formatCheckInSpace_(space, viewerId, knownMemberCount) {
   return {
     groupId: space.groupId,
     name: cleanText_(space.name, 40) || '未命名打卡空間',
+    type: 'space',
     isOwner,
     memberCount,
     // 邀請碼只傳給空間建立者，不會出現在群組牆或其他成員的頁面資料中。
     inviteCode: isOwner ? String(space.inviteCode || '') : '',
     inviteExpiresAt: isOwner ? formatCheckInSpaceInviteExpiry_(space.inviteExpiresAt) : '',
+    inviteActive: isOwner && isCheckInSpaceInviteActive_(space),
   };
 }
 
@@ -3580,7 +3603,7 @@ function formatCheckInSpaceInviteExpiry_(value) {
 function checkInSpaceCreatedMessages_(space) {
   return [{
     type: 'text',
-    text: `✅ 已建立打卡空間「${space.name}」\n\n邀請好友的方式：\n1. 請對方先加入本官方帳號\n2. 請對方直接私訊這組邀請碼：\n${space.inviteCode}\n\n邀請碼有效到：${space.inviteExpiresAt}\n建立者可在打卡頁的「個人設定 → 打卡空間」隨時重設邀請碼。`,
+    text: `✅ 已建立打卡空間「${space.name}」\n\n邀請好友的方式：\n1. 請對方先加入本官方帳號\n2. 請對方直接私訊這組邀請碼：\n${space.inviteCode}\n\n邀請碼有效到：${space.inviteExpiresAt}\n\n已開啟好友分享，過往紀錄與餐點會分享給所有已加入的 LINE 群組與打卡空間；可到設定關閉。\n建立者可在「設定 → 打卡空間」重設邀請碼。`,
   }];
 }
 
@@ -3593,10 +3616,12 @@ function checkInSpaceJoinedMessages_(userId, space) {
     altText: message,
     template: {
       type: 'buttons',
-      text: `${message}\n\n到「猛猛紀錄牆」即可看到這個空間的分頁。想讓自己的紀錄出現在空間牆，請到打卡頁開啟「顯示在我的打卡空間／群組猛猛紀錄牆」。`,
+      text: space.alreadyJoined
+        ? '你已在此空間，原分享設定不變。到紀錄牆查看朋友，或到設定調整分享。'
+        : '已加入打卡空間並開啟好友分享！過往紀錄與餐點會分享給所有已加入的 LINE 群組與打卡空間，可到設定關閉；不會自動公開到所有人。',
       actions: [
         { type: 'uri', label: '開啟猛猛紀錄牆', uri: getPublicWallUrl_(userId) },
-        { type: 'uri', label: '前往打卡設定', uri: getSignedFormUrl_(userId) },
+        { type: 'uri', label: '前往分享設定', uri: getPersonalSettingsUrl_(userId) },
       ],
     },
   }];
@@ -3695,7 +3720,17 @@ function upsertGroupMember_(groupId, userId, inGroup) {
   else sheet.appendRow(row);
   CacheService.getScriptCache().remove('group-memberships:v3');
   invalidateGroupWallCachesForGroup_(groupId);
+  if (inGroup && !wasInGroup) enableGroupSharingOnJoin_(userId);
   return true;
+}
+
+/** 僅由新加入／重新加入事件呼叫；重複同步不覆寫使用者之後手動關閉的選擇。 */
+function enableGroupSharingOnJoin_(userId) {
+  const member = getMemberById_(userId);
+  if (!member) return;
+  if (!member.defaultPublishToGroup) upsertMember_({ userId, defaultPublishToGroup:true });
+  // 沿用現有共用開關：既有紀錄與所有已加入群組一起套用，公開牆權限不變。
+  setGroupWallVisibilityForUser_(userId, true);
 }
 
 function applyGroupMembershipStatuses_(groupId, statuses) {
@@ -3710,6 +3745,7 @@ function applyGroupMembershipStatuses_(groupId, statuses) {
   const rowByKey = new Map();
   rows.forEach((row, index) => rowByKey.set(`${String(row[0])}|${String(row[1])}`, index));
   const now = new Date();
+  const newlyJoined = new Set();
 
   statuses.forEach(status => {
     const userId = String(status.userId || '');
@@ -3718,6 +3754,7 @@ function applyGroupMembershipStatuses_(groupId, statuses) {
     const index = rowByKey.get(key);
     const row = index === undefined ? [groupId, userId, false, '', now] : rows[index];
     const wasInGroup = row[2] === true || String(row[2]).toUpperCase() === 'TRUE';
+    if (status.inGroup && !wasInGroup) newlyJoined.add(userId);
     row[2] = Boolean(status.inGroup);
     if (status.inGroup && (!wasInGroup || !row[3])) row[3] = now;
     row[4] = now;
@@ -3729,6 +3766,7 @@ function applyGroupMembershipStatuses_(groupId, statuses) {
   sheet.getRange(2, 1, rows.length, columnCount).setValues(rows);
   CacheService.getScriptCache().remove('group-memberships:v3');
   invalidateGroupWallCachesForGroup_(groupId);
+  newlyJoined.forEach(userId => enableGroupSharingOnJoin_(userId));
 }
 
 function markUserInGroup_(groupId, userId, inGroup) {
@@ -4637,127 +4675,145 @@ function resetPhotoQuota() {
 
 /** 分析一張餐點照片；照片不會寫入 Sheet 或 Drive。 */
 function analyzeFoodPhoto(payload) {
-  payload = payload || {};
-  const uid = String(payload.uid || '');
-  const sig = String(payload.sig || '');
-  const tokenState = inspectAccessToken_(uid, sig, APP.tokenScopes.form);
-  if (tokenState !== 'ok') throw new Error(accessTokenErrorMessage_(tokenState));
+  const startedAt = Date.now();
+  const timing = { prepareMs:0, quotaMs:0, aiMs:0, retryWaitMs:0, totalMs:0, attempts:[], outcome:'failed', phase:'validate' };
+  try {
+    payload = payload || {};
+    const uid = String(payload.uid || '');
+    const sig = String(payload.sig || '');
+    const tokenState = inspectAccessToken_(uid, sig, APP.tokenScopes.form);
+    if (tokenState !== 'ok') throw new Error(accessTokenErrorMessage_(tokenState));
 
-  const match = String(payload.imageDataUrl || '').match(
-    /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/
-  );
-  if (!match) throw new Error('照片格式不支援，請重新拍照或選擇 JPG、PNG 圖片。');
-  if (match[2].length > 2800000) throw new Error('照片太大，請重新拍照。');
+    const match = String(payload.imageDataUrl || '').match(
+      /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/
+    );
+    if (!match) throw new Error('照片格式不支援，請重新拍照或選擇 JPG、PNG 圖片。');
+    if (match[2].length > 2800000) throw new Error('照片太大，請重新拍照。');
 
-  // 格式檢查通過後才計數，避免壞掉的請求白白消耗別人的額度。
-  const quota = consumePhotoQuota_(uid);
-  console.log(`照片辨識配額：本人今日第 ${quota.used} 次，全站今日第 ${quota.total} 次。`);
+    // 配額只計一次，且 Gemini 呼叫仍在鎖外；紀錄只含耗時與結果代碼。
+    timing.phase = 'quota';
+    const quotaStartedAt = Date.now();
+    try { consumePhotoQuota_(uid); }
+    finally { timing.quotaMs = Date.now() - quotaStartedAt; }
 
-  const prompt = [
-    '你是協助台灣使用者記錄飲食的營養估算助手。',
-    '請使用繁體中文，分析照片中看得到的所有食物。',
-    '估算份量、重量與熱量，並考慮油、醬料、糖與裹粉造成的誤差。',
-    '每個食物請另外給可調整的數值 estimatedAmount 與 unit；液體用 ml，固體用 g。estimatedAmount 是照片中估算的原始份量，必須大於 0。',
-    '每個食物也請估算 estimatedProteinG（蛋白質克數，可為 0）；肉、蛋、魚、奶、豆製品請特別留意。',
-    '看不出來就說明不確定；不是食物照片時 items 回傳空陣列。',
-    'summary、portion、notes 請保持簡短，每個 notes 最多 20 個中文字。',
-  ].join('\n');
+    const prompt = [
+      '你是協助台灣使用者記錄飲食的營養估算助手。',
+      '請使用繁體中文，分析照片中看得到的所有食物。',
+      '估算份量、重量與熱量，並考慮油、醬料、糖與裹粉造成的誤差。',
+      '每項欄位：n=食物名稱，s=份量說明，a=原始估算份量（>0），u=單位（固體g、液體ml），k=熱量kcal，p=蛋白質g，l/h=熱量低/高估計，c=信心，x=不確定性說明。',
+      '蛋白質可為 0；肉、蛋、魚、奶、豆製品請特別留意。',
+      '看不出來就說明不確定；不是食物照片時 items 回傳空陣列。',
+      '最多列出 12 項食物；s 與 x 保持簡短，每個 x 最多 20 個中文字，不確定性寫在對應食物的 x。',
+    ].join('\n');
 
-  const responseSchema = {
-    type: 'OBJECT',
-    properties: {
-      summary: { type: 'STRING' },
-      items: {
-        type: 'ARRAY',
+    const responseSchema = {
+      type: 'OBJECT',
+      properties: {
         items: {
-          type: 'OBJECT',
-          properties: {
-            name: { type: 'STRING' },
-            portion: { type: 'STRING' },
-            estimatedGrams: { type: 'INTEGER' },
-            estimatedAmount: { type: 'INTEGER' },
-            unit: { type: 'STRING', enum: ['g', 'ml'] },
-            estimatedCalories: { type: 'INTEGER' },
-            estimatedProteinG: { type: 'NUMBER' },
-            caloriesLow: { type: 'INTEGER' },
-            caloriesHigh: { type: 'INTEGER' },
-            confidence: { type: 'STRING', enum: ['高', '中', '低'] },
-            notes: { type: 'STRING' },
+          type: 'ARRAY',
+          maxItems: 12,
+          items: {
+            type: 'OBJECT',
+            properties: {
+              n: { type: 'STRING' },
+              s: { type: 'STRING' },
+              a: { type: 'INTEGER' },
+              u: { type: 'STRING', enum: ['g', 'ml'] },
+              k: { type: 'INTEGER' },
+              p: { type: 'NUMBER' },
+              l: { type: 'INTEGER' },
+              h: { type: 'INTEGER' },
+              c: { type: 'STRING', enum: ['高', '中', '低'] },
+              x: { type: 'STRING' },
+            },
+            required: ['n', 's', 'a', 'u', 'k', 'p', 'l', 'h', 'c', 'x'],
           },
-          required: ['name', 'portion', 'estimatedGrams', 'estimatedAmount', 'unit', 'estimatedCalories', 'estimatedProteinG', 'caloriesLow', 'caloriesHigh', 'confidence', 'notes'],
         },
       },
-      warnings: { type: 'ARRAY', items: { type: 'STRING' } },
-    },
-    required: ['summary', 'items', 'warnings'],
-  };
+      required: ['items'],
+    };
 
-  const requestParts = [
-    { text: prompt },
-    { inlineData: { mimeType: match[1], data: match[2] } },
-  ];
-  const generationConfig = {
-    maxOutputTokens: 3000,
-    responseMimeType: 'application/json',
-    responseSchema,
-    thinkingConfig: { thinkingLevel: 'minimal' },
-  };
+    const requestParts = [
+      { text: prompt },
+      { inlineData: { mimeType: match[1], data: match[2] } },
+    ];
+    const generationConfig = {
+      maxOutputTokens: 3000,
+      responseMimeType: 'application/json',
+      responseSchema,
+      thinkingConfig: { thinkingLevel: 'minimal' },
+    };
 
-  let parsed = null;
-  let lastParseError = '';
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const apiResult = callGemini_(requestParts, generationConfig);
-    const candidate = apiResult.candidates && apiResult.candidates[0];
-    const finishReason = candidate ? String(candidate.finishReason || '') : '';
-    const jsonText = candidate && candidate.content && Array.isArray(candidate.content.parts)
-      ? candidate.content.parts.map(part => part.text || '').join('')
-      : '';
+    timing.prepareMs = Date.now() - startedAt;
+    timing.phase = 'ai';
+    const parsed = callGemini_(requestParts, generationConfig, { parseResult:parseFoodPhotoResponse_, timing });
+    timing.phase = 'normalize';
+    const items = (Array.isArray(parsed.items) ? parsed.items : []).slice(0, 12).map(item => ({
+      name: cleanText_(item.name, 60),
+      portion: cleanText_(item.portion, 80),
+      estimatedGrams: item.unit === 'g' ? Math.round(numberInRange_(item.estimatedAmount, 0, 3000)) : 0,
+      estimatedAmount: Math.round(numberInRange_(item.estimatedAmount, 0, 5000)),
+      unit: String(item.unit || '').toLowerCase() === 'ml' ? 'ml' : 'g',
+      estimatedCalories: Math.round(numberInRange_(item.estimatedCalories, 0, 5000)),
+      estimatedProteinG: proteinGrams_(item.estimatedProteinG),
+      caloriesLow: Math.round(numberInRange_(item.caloriesLow, 0, 5000)),
+      caloriesHigh: Math.round(numberInRange_(item.caloriesHigh, 0, 5000)),
+      confidence: ['高', '中', '低'].includes(item.confidence) ? item.confidence : '低',
+      notes: cleanText_(item.notes, 200),
+    })).filter(item => item.name && item.estimatedCalories > 0);
 
-    if (!jsonText) {
-      lastParseError = `沒有文字結果，finishReason=${finishReason || 'unknown'}`;
-      console.warn(`Gemini 第 ${attempt} 次分析沒有 JSON：${lastParseError}`);
-      continue;
-    }
-
-    try {
-      parsed = JSON.parse(cleanGeminiJsonText_(jsonText));
-      break;
-    } catch (error) {
-      lastParseError = String(error && error.message ? error.message : error);
-      console.warn(
-        `Gemini 第 ${attempt} 次 JSON 不完整，finishReason=${finishReason || 'unknown'}：${lastParseError}`
-      );
-    }
+    timing.outcome = 'success';
+    return {
+      ok: true,
+      summary: '',
+      items,
+      totalCalories: items.reduce((sum, item) => sum + item.estimatedCalories, 0),
+      totalCaloriesLow: items.reduce((sum, item) => sum + item.caloriesLow, 0),
+      totalCaloriesHigh: items.reduce((sum, item) => sum + item.caloriesHigh, 0),
+      totalProteinG: proteinGrams_(items.reduce((sum, item) => sum + item.estimatedProteinG, 0)),
+      warnings: [],
+      timing,
+    };
+  } finally {
+    if (!timing.prepareMs && timing.phase !== 'ai' && timing.phase !== 'normalize') timing.prepareMs = Date.now() - startedAt;
+    timing.totalMs = Date.now() - startedAt;
+    console.info(JSON.stringify({ event:'photo_analysis', ...timing }));
   }
+}
 
-  if (!parsed) {
-    console.error(`Gemini JSON 自動重試後仍失敗：${lastParseError}`);
-    throw new Error('Gemini 回傳的分析格式不完整，自動重試後仍失敗。請稍後再按一次分析。');
+// 格式錯誤也交回同一個重試迴圈；空 items 是有效的「非食物照片」結果。
+function parseFoodPhotoResponse_(result) {
+  const candidate = result && result.candidates && result.candidates[0];
+  const finishReason = candidate && candidate.finishReason;
+  if ((result && result.promptFeedback && result.promptFeedback.blockReason)
+      || ['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY', 'IMAGE_PROHIBITED_CONTENT'].includes(finishReason)) {
+    const error = new Error('這張照片無法完成辨識，請改用另一張餐點照片或手動輸入。');
+    error.geminiOutcome = 'blocked';
+    throw error;
   }
-  const items = (Array.isArray(parsed.items) ? parsed.items : []).slice(0, 12).map(item => ({
-    name: cleanText_(item.name, 60),
-    portion: cleanText_(item.portion, 80),
-    estimatedGrams: Math.round(numberInRange_(item.estimatedGrams, 0, 3000)),
-    estimatedAmount: Math.round(numberInRange_(item.estimatedAmount || item.estimatedGrams, 0, 5000)),
-    unit: String(item.unit || '').toLowerCase() === 'ml' ? 'ml' : 'g',
-    estimatedCalories: Math.round(numberInRange_(item.estimatedCalories, 0, 5000)),
-    estimatedProteinG: proteinGrams_(item.estimatedProteinG),
-    caloriesLow: Math.round(numberInRange_(item.caloriesLow, 0, 5000)),
-    caloriesHigh: Math.round(numberInRange_(item.caloriesHigh, 0, 5000)),
-    confidence: ['高', '中', '低'].includes(item.confidence) ? item.confidence : '低',
-    notes: cleanText_(item.notes, 200),
-  })).filter(item => item.name && item.estimatedCalories > 0);
-
-  return {
-    ok: true,
-    summary: cleanText_(parsed.summary, 300),
-    items,
-    totalCalories: items.reduce((sum, item) => sum + item.estimatedCalories, 0),
-    totalCaloriesLow: items.reduce((sum, item) => sum + item.caloriesLow, 0),
-    totalCaloriesHigh: items.reduce((sum, item) => sum + item.caloriesHigh, 0),
-    totalProteinG: proteinGrams_(items.reduce((sum, item) => sum + item.estimatedProteinG, 0)),
-    warnings: (Array.isArray(parsed.warnings) ? parsed.warnings : []).slice(0, 5).map(item => cleanText_(item, 200)),
-  };
+  if (finishReason && finishReason !== 'STOP') {
+    const error = new Error('AI 回傳的內容不完整，請稍後再試。');
+    error.geminiOutcome = finishReason === 'MAX_TOKENS' ? 'truncated' : 'invalid_response';
+    throw error;
+  }
+  const parts = candidate && candidate.content && candidate.content.parts;
+  const text = Array.isArray(parts) ? parts.filter(part => !part.thought).map(part => part.text || '').join('') : '';
+  const parsed = JSON.parse(cleanGeminiJsonText_(text));
+  // 短鍵僅用於 AI 傳輸，降低每項食物重複產生的文字；前端與已儲存紀錄沿用原欄位。
+  const fields = { n:'name', s:'portion', a:'estimatedAmount', u:'unit', k:'estimatedCalories', p:'estimatedProteinG', l:'caloriesLow', h:'caloriesHigh', c:'confidence', x:'notes' };
+  if (parsed && Array.isArray(parsed.items)) parsed.items = parsed.items.map(item => {
+    if (!item || typeof item !== 'object') return item;
+    return Object.fromEntries(Object.entries(fields).map(([short, full]) => [full, Object.prototype.hasOwnProperty.call(item, short) ? item[short] : item[full]]));
+  });
+  const numbers = ['estimatedAmount', 'estimatedCalories', 'estimatedProteinG', 'caloriesLow', 'caloriesHigh'];
+  if (!parsed || !Array.isArray(parsed.items) || parsed.items.length > 12 || parsed.items.some(item => (
+    !item || typeof item.name !== 'string' || !item.name.trim()
+    || typeof item.portion !== 'string' || typeof item.notes !== 'string'
+    || !['g', 'ml'].includes(item.unit) || !['高', '中', '低'].includes(item.confidence)
+    || numbers.some(key => typeof item[key] !== 'number' || !Number.isFinite(item[key]) || item[key] < 0)
+    || item.estimatedAmount <= 0
+  ))) throw new Error('AI 回傳的食物欄位不完整。');
+  return parsed;
 }
 
 function cleanGeminiJsonText_(text) {
@@ -4773,65 +4829,82 @@ function cleanGeminiJsonText_(text) {
   return cleaned;
 }
 
-function callGemini_(parts, generationConfig) {
+function callGemini_(parts, generationConfig, options) {
+  options = options || {};
   const apiKey = PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY');
   if (!apiKey) throw new Error('尚未設定 GEMINI_API_KEY。');
-  const attempts = [
-    { model: 'gemini-3.5-flash-lite', delayMs: 0 },
-    { model: 'gemini-3.5-flash-lite', delayMs: 800 },
-    { model: 'gemini-3.1-flash-lite', delayMs: 1200 },
-    { model: 'gemini-3.5-flash', delayMs: 2200 },
-  ];
+  // 初次加最多兩次補救；HTTP、連線與格式錯誤共用此上限。
+  const models = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash'];
   const retryableStatuses = [408, 429, 500, 502, 503, 504];
-  const unavailableModels = new Set();
-  let lastStatus = 0;
-  let lastText = '';
+  const timing = options.timing || { aiMs:0, retryWaitMs:0, attempts:[] };
+  const startedAt = Date.now();
+  const retryBudgetMs = 25000;
+  let waitMs = 0;
+  let lastError = new Error('AI 暫時無法回應，請稍後再試一次。');
+  const requestBody = JSON.stringify({ contents:[{ role:'user', parts }], generationConfig:generationConfig || {} });
 
-  for (let index = 0; index < attempts.length; index += 1) {
-    const attempt = attempts[index];
-    if (unavailableModels.has(attempt.model)) continue;
-    if (attempt.delayMs) {
-      Utilities.sleep(attempt.delayMs + Math.floor(Math.random() * 400));
+  for (let index = 0; index < models.length; index += 1) {
+    // 只限制是否繼續嘗試，不能中止正在執行的 UrlFetchApp.fetch。
+    if (index && Date.now() - startedAt + waitMs >= retryBudgetMs) break;
+    if (waitMs) {
+      const waitStartedAt = Date.now();
+      Utilities.sleep(waitMs);
+      timing.retryWaitMs += Date.now() - waitStartedAt;
+      if (Date.now() - startedAt >= retryBudgetMs) break;
     }
-
+    const attempt = { model:models[index], status:0, durationMs:0, outcome:'network_error' };
+    timing.attempts.push(attempt);
+    const attemptStartedAt = Date.now();
     let response;
     try {
       response = UrlFetchApp.fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${attempt.model}:generateContent`,
-        {
-          method: 'post',
-          contentType: 'application/json',
-          headers: { 'x-goog-api-key': apiKey },
-          payload: JSON.stringify({
-            contents: [{ role: 'user', parts }],
-            generationConfig: generationConfig || {},
-          }),
-          muteHttpExceptions: true,
-        }
+        { method:'post', contentType:'application/json', headers:{ 'x-goog-api-key':apiKey }, payload:requestBody, muteHttpExceptions:true }
       );
     } catch (error) {
-      lastStatus = 0;
-      lastText = String(error && error.message ? error.message : error);
-      console.warn(`Gemini ${attempt.model} 連線失敗：${lastText}`);
+      // 不輸出原始例外，避免回應本文、照片或連線資訊進入日誌。
+      lastError = new Error('AI 連線暫時不穩，請稍後再試一次。');
+    } finally {
+      attempt.durationMs = Date.now() - attemptStartedAt;
+      timing.aiMs += attempt.durationMs;
+    }
+    waitMs = 800 * Math.pow(2, index) + Math.floor(Math.random() * 400);
+    if (!response) continue;
+    attempt.status = response.getResponseCode();
+    const responseText = response.getContentText();
+    if (attempt.status >= 200 && attempt.status < 300) {
+      try {
+        const result = JSON.parse(responseText);
+        const parsed = options.parseResult ? options.parseResult(result) : result;
+        attempt.outcome = 'success';
+        return parsed;
+      } catch (error) {
+        attempt.outcome = ['blocked', 'truncated'].includes(error.geminiOutcome) ? error.geminiOutcome : 'invalid_response';
+        if (attempt.outcome === 'blocked') throw error;
+        lastError = new Error('AI 回傳的分析格式不完整，請稍後再試一次。');
+        waitMs = 0; // 格式錯誤直接使用下一個模型，不另跑一輪重試。
+        continue;
+      }
+    }
+    if (attempt.status === 404) {
+      attempt.outcome = 'unavailable';
+      lastError = new Error('AI 辨識服務暫時無法使用，請稍後再試。');
+      waitMs = 0;
       continue;
     }
-    lastStatus = response.getResponseCode();
-    lastText = response.getContentText();
-
-    if (lastStatus >= 200 && lastStatus < 300) return JSON.parse(lastText);
-    if (lastStatus === 404) {
-      unavailableModels.add(attempt.model);
-      console.warn(`Gemini ${attempt.model} 已停用或目前不可用，自動改用下一個模型。`);
-      continue;
+    attempt.outcome = 'http_error';
+    if (!retryableStatuses.includes(attempt.status)) throw new Error(geminiApiErrorMessage_(attempt.status, responseText));
+    lastError = new Error(attempt.status === 429 ? 'AI 目前使用量較高，請稍後 1～2 分鐘再試。' : 'AI 服務暫時忙碌，請稍後再試。');
+    // 若服務要求更久的等待，遵守 Retry-After；超出本次預算則交由使用者稍後重試。
+    const headers = response.getAllHeaders ? response.getAllHeaders() : {};
+    const retryAfterKey = Object.keys(headers).find(key => key.toLowerCase() === 'retry-after');
+    if (retryAfterKey) {
+      const value = String(headers[retryAfterKey]);
+      const retryAfterMs = /^\d+(?:\.\d+)?$/.test(value) ? Number(value) * 1000 : Date.parse(value) - Date.now();
+      if (Number.isFinite(retryAfterMs)) waitMs = Math.max(waitMs, retryAfterMs);
     }
-    if (!retryableStatuses.includes(lastStatus)) {
-      throw new Error(geminiApiErrorMessage_(lastStatus, lastText));
-    }
-    console.warn(`Gemini ${attempt.model} 第 ${index + 1} 次失敗：HTTP ${lastStatus}`);
   }
-
-  console.error(`Gemini 自動重試後仍失敗：HTTP ${lastStatus} ${lastText}`);
-  throw new Error('Gemini 目前流量過高，自動重試與備用模型仍無法回應。請稍後 1～2 分鐘再試一次。');
+  throw lastError;
 }
 
 function geminiApiErrorMessage_(status, text) {

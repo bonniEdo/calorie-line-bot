@@ -1,4 +1,52 @@
 <script>
+// 共用邀請內容；只包含公開加好友網址與擁有者提供的邀請碼，不分享私人打卡連結。
+const DietFriends = {
+  inviteText(space) {
+    // HtmlService 對含 URL 的反引號字串可能錯判 //；用一般字串保留網址與換行。
+    return [
+      '一起來「' + space.name + '」記錄飲食吧 🐥',
+      '',
+      '1. 加入「飲控打卡緊迫盯人」LINE 好友：',
+      'https://lin.ee/VdKn7XU',
+      '2. 在官方帳號聊天室傳送這組邀請碼：',
+      space.inviteCode,
+      '也可以在打卡頁的「紀錄牆 → 輸入邀請碼」加入打卡空間。',
+      '',
+      '邀請碼有效到 ' + space.inviteExpiresAt + '。',
+      '這是打卡空間，不會建立 LINE 聊天群。建立或新加入後會自動開啟好友分享，過往紀錄與餐點會分享給所有已加入的 LINE 群組與打卡空間；可在設定關閉。不會自動公開到所有人。',
+    ].join('\n');
+  },
+  async share(space, notify) {
+    if (!space || !space.isOwner || !space.inviteCode || space.inviteActive === false) {
+      notify('邀請碼已失效或沒有邀請權限，請到設定重設邀請碼。');
+      return;
+    }
+    const text = this.inviteText(space);
+    if (navigator.share) {
+      try { await navigator.share({ title:'一起打卡｜' + space.name, text }); return; }
+      catch (error) { if (error.name === 'AbortError') return; }
+    }
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(text);
+    } catch (error) {
+      const field = document.createElement('textarea');
+      field.value = text;
+      field.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px';
+      document.body.append(field);
+      field.select();
+      let copied = false;
+      try { copied = document.execCommand('copy'); } catch (ignored) { /* Manual copy remains available. */ }
+      field.remove();
+      if (!copied) { notify('請展開「邀請文字」，長按複製後傳給朋友。'); return; }
+    }
+    notify('已複製邀請文字，貼給朋友就能邀請加入。');
+  },
+  canPrompt(lastShown, now = Date.now()) {
+    return !Number(lastShown) || now - Number(lastShown) >= 7 * 24 * 60 * 60 * 1000;
+  },
+};
+
 /* Single-document routing. Views own their DOM; the router owns navigation and data freshness. */
 class DietRouter {
   constructor(options) {
@@ -150,6 +198,7 @@ function createDietView(module, host, data, context) {
     update:next => hooks.update(next),
     getRequest:() => hooks.getRequest ? hooks.getRequest() : {},
     clearPrivate:() => { if (hooks.clearPrivate) hooks.clearPrivate(); },
+    activate:options => { if (hooks.activate) hooks.activate(options); },
     dispose,
   };
 }

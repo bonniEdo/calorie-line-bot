@@ -54,6 +54,8 @@
     .wall-tab.active { position:relative; z-index:3; min-height:52px; padding-bottom:14px; border-color:#efbc45; border-bottom:0; background:#fffdf7; color:#76500c; box-shadow:0 -3px 9px rgba(122,86,19,.08); }
     .wall-tab.active::after { content:''; position:absolute; z-index:4; right:0; bottom:-4px; left:0; height:5px; background:#fffdf7; }
     .wall-tab:focus-visible { outline:3px solid rgba(78,139,105,.24); outline-offset:2px; }
+    .wall-tab-name { display:block; overflow:hidden; text-overflow:ellipsis; }
+    .wall-tab .friends-type { margin-top:5px; }
     .wall-body { position:relative; z-index:1; padding:12px 12px 14px; border:2px solid #efbc45; border-radius:22px; background:#fffdf7; box-shadow:0 7px 20px rgba(122,86,19,.07); }
     .group-panel { margin-top:10px; }
 
@@ -285,6 +287,58 @@
     .privacy p { margin: 0; padding: 0 13px 12px; color: #35684b; font-size: 12px; line-height: 1.65; }
     .updated { margin-top: 12px; color: #aaa094; font-size: 11px; text-align: center; }
 
+    .friends-card { margin-top:14px; padding:16px; border:1px solid var(--line); border-radius:20px; background:var(--white); box-shadow:0 5px 18px rgba(85,65,28,.04); }
+    .friends-card[hidden], .friends-form[hidden] { display:none; }
+    .friends-card h2 { margin:0; font-size:17px; }
+    .friends-intro { margin-top:8px; }
+    .friends-intro > summary { min-height:40px; padding:10px 0; color:#76500c; font-size:12px; font-weight:800; cursor:pointer; }
+    .friends-intro > summary:focus-visible { outline:3px solid #b8d8c6; outline-offset:2px; border-radius:8px; }
+    .friends-card .friends-join-note { margin:12px 0 0; color:var(--muted); font-size:11px; }
+    .friends-card p { margin:6px 0 12px; color:var(--muted); font-size:12px; line-height:1.65; }
+    .friends-actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .friends-button { min-height:42px; padding:9px 13px; border:1px solid var(--line); border-radius:12px; background:#fffaf0; color:#76500c; font-size:13px; font-weight:800; cursor:pointer; }
+    .friends-button.primary, .friends-button[aria-expanded="true"] { border-color:#efbc45; background:#fff1ba; }
+    .friends-button.green { border-color:#c4dfce; background:#f0f8f3; color:#35684b; }
+    .friends-button:disabled { opacity:.55; cursor:wait; }
+    .friends-button:focus-visible, .friends-card input:focus-visible { outline:3px solid #b8d8c6; outline-offset:2px; }
+    .friends-form { margin-top:12px; padding:12px; border-radius:14px; background:var(--cream); }
+    .friends-form label { display:block; margin-bottom:6px; font-size:12px; font-weight:800; color:var(--muted); }
+    .friends-input-row { display:flex; flex-wrap:wrap; gap:8px; }
+    .friends-input-row input { flex:1 1 150px; min-width:0; min-height:44px; padding:10px 12px; border:1px solid var(--line); border-radius:11px; background:white; color:var(--ink); font:inherit; font-size:16px; }
+    .friends-status { margin-top:8px; color:#35684b; font-size:12px; line-height:1.6; }
+    .friends-status:empty { display:none; }
+    .friends-status.error { color:#b84639; }
+    .friends-spaces { margin-top:8px; }
+    .friends-spaces:empty { display:none; }
+    .friends-space { position:relative; min-width:0; padding-right:44px; border-top:1px solid var(--line); }
+    .friends-space.no-actions { padding-right:0; }
+    .friends-space-view { display:flex; align-items:center; gap:10px; width:100%; min-height:64px; padding:10px 4px 10px 0; border:0; background:transparent; color:var(--ink); text-align:left; cursor:pointer; }
+    .friends-space-label { flex:1; min-width:0; }
+    .friends-space-label strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:14px; line-height:1.5; }
+    .friends-space-meta { display:block; margin-top:3px; color:var(--muted); font-size:11px; line-height:1.5; }
+    .friends-space-arrow { color:var(--muted); font-size:17px; }
+    .friends-more > summary { position:absolute; top:10px; right:0; display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:9px; color:var(--muted); font-size:23px; cursor:pointer; list-style:none; }
+    .friends-more > summary::-webkit-details-marker { display:none; }
+    .friends-more[open] > summary { background:var(--cream); color:#76500c; }
+    .friends-space-view:focus-visible, .friends-more > summary:focus-visible { outline:3px solid #b8d8c6; outline-offset:1px; border-radius:8px; }
+    .friends-more-body { margin-right:-44px; padding-bottom:10px; }
+    .friends-more-body .friends-button { padding:8px 4px; border:0; border-radius:0; background:transparent; color:#35684b; }
+    .friends-invite { margin-top:8px; color:var(--muted); font-size:12px; }
+    .friends-invite summary { cursor:pointer; padding:5px 0; }
+    .friends-invite pre { white-space:pre-wrap; overflow-wrap:anywhere; font:inherit; line-height:1.7; user-select:text; }
+    .friends-card .friends-privacy { display:flex; flex-wrap:wrap; align-items:center; gap:0 10px; margin:4px 0 0; color:#35684b; font-size:11px; }
+    .friends-privacy button { min-height:32px; padding:4px 0; border:0; background:transparent; color:#35684b; font:inherit; font-weight:800; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+    .friends-type { display:inline-block; padding:3px 7px; border:1px solid #e8d6a6; border-radius:7px; background:#fff6db; color:#80621d; font-size:10px; font-weight:800; line-height:1.3; white-space:nowrap; vertical-align:middle; }
+    .friends-type.line { border-color:#cfe1d5; background:#f0f8f3; color:#35684b; }
+    .friends-space .friends-type { padding:0; border:0; border-radius:0; background:transparent; font-size:11px; font-weight:600; }
+    .friends-line-guide { margin-top:12px; border-top:1px solid var(--line); }
+    .friends-line-guide > summary { min-height:44px; padding:12px 0; color:#76500c; font-size:12px; font-weight:800; cursor:pointer; line-height:1.6; }
+    .friends-line-guide > summary:focus-visible { outline:3px solid #b8d8c6; outline-offset:2px; border-radius:8px; }
+    .friends-guide-body { padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--cream); }
+    .friends-guide-body ol { margin:0; padding-left:21px; color:var(--ink); font-size:12px; line-height:1.8; }
+    .friends-guide-body li + li { margin-top:7px; }
+    .friends-guide-body p:last-child { margin-bottom:0; }
+
     @media (max-width: 380px) {
       .app { padding-left: 10px; padding-right: 10px; }
       .hero { padding: 16px; }
@@ -335,6 +389,41 @@
       </div>
     </section>
 
+    <section id="friendSpaces" class="friends-card" aria-labelledby="friendsTitle" hidden>
+      <h2 id="friendsTitle">👥 和朋友一起打卡</h2>
+      <details id="friendsIntro" class="friends-intro">
+      <summary id="friendsIntroLabel">選擇一起打卡的方式</summary>
+      <p>用邀請碼一起看紀錄，不用另開 LINE 聊天群。</p>
+      <div class="friends-actions">
+        <button id="friendsCreateToggle" class="friends-button primary" type="button" aria-expanded="false" aria-controls="friendsCreateForm">＋ 建立打卡空間</button>
+        <button id="friendsJoinToggle" class="friends-button" type="button" aria-expanded="false" aria-controls="friendsJoinForm">輸入邀請碼</button>
+      </div>
+      <form id="friendsCreateForm" class="friends-form" hidden>
+        <label for="friendsName">幫你們的空間取個名字</label>
+        <div class="friends-input-row"><input id="friendsName" maxlength="40" placeholder="例如：一起好好吃飯" autocomplete="off" required><button class="friends-button primary" type="submit">建立</button></div>
+      </form>
+      <form id="friendsJoinForm" class="friends-form" hidden>
+        <label for="friendsCode">朋友給你的打卡空間邀請碼</label>
+        <div class="friends-input-row"><input id="friendsCode" maxlength="40" placeholder="貼上邀請碼" autocomplete="off" autocapitalize="characters" spellcheck="false" required><button class="friends-button primary" type="submit">加入</button></div>
+      </form>
+      <details id="friendsLineGuide" class="friends-line-guide">
+        <summary>已有 LINE 群組？</summary>
+        <div class="friends-guide-body">
+          <ol>
+            <li>成員先加官方帳號好友。</li>
+            <li>邀機器人加入 LINE 群組。</li>
+            <li>在群內傳送「<strong>啟用排行</strong>」。</li>
+          </ol>
+          <p>完成後，在下方紀錄牆選擇群組。新朋友從 LINE 加入群組，不用空間邀請碼。</p>
+        </div>
+      </details>
+      <p class="friends-join-note">建立或新加入後，過往與之後的紀錄、餐點會分享給所有已加入的 LINE 群組與打卡空間，可到設定關閉。</p>
+      </details>
+      <p class="friends-privacy"><span id="friendsPrivacy"></span> <button id="friendsSharingSettings" type="button">分享設定 →</button></p>
+      <div id="friendsStatus" class="friends-status" role="status" aria-live="polite"></div>
+      <div id="friendsSpacesList" class="friends-spaces" role="group" aria-label="我加入的群組與打卡空間"></div>
+    </section>
+
     <section class="wall-frame" aria-label="猛猛紀錄牆內容">
       <nav id="wallTabs" class="wall-tabs" role="tablist" aria-label="猛猛紀錄牆來源"></nav>
 
@@ -369,7 +458,7 @@
       <section id="groupRecordsPanel" class="panel"></section>
       <details class="privacy">
         <summary>🔒 群組牆說明</summary>
-        <p>只顯示目前群組成員主動選擇分享的紀錄與食物細項；不會顯示照片、體重、BMR 或備註。</p>
+        <p>只顯示目前群組成員已開啟分享的紀錄與食物細項；不會顯示照片、體重、BMR 或備註。</p>
       </details>
     </section>
       <div id="updated" class="updated"></div>
@@ -418,6 +507,7 @@
     const groupLoadWaiters = new Map();
     let selectedDate = String(DATA.date || DATA.today || '');
     let selectedDateLabel = formatDateLabel(selectedDate);
+    let friendSpaceBusy = false;
 
     if (DATA.error) {
       document.querySelector('.app').innerHTML =
@@ -444,6 +534,121 @@
     renderBottomNav(publicNav);
 
     renderWallTabs();
+    initFriendSpaces();
+
+    function wallGroupType_(group) {
+      if (group.type) return group.type === 'space' ? 'space' : 'line_group';
+      // 舊快取沒有類型時，用本人空間清單辨識；其餘沿用既有 LINE 群組。
+      return (DATA.checkInSpaces || []).some(space => space.groupId === group.groupId) ? 'space' : 'line_group';
+    }
+
+    function groupTypeBadge_(type) {
+      return '<span class="friends-type' + (type === 'space' ? '' : ' line') + '">'
+        + (type === 'space' ? '打卡空間' : 'LINE 群組') + '</span>';
+    }
+
+    function friendSpaceRow_(group, type, meta, actions) {
+      const name = group.name || (type === 'space' ? '我的打卡空間' : '我的 LINE 群組');
+      return '<article class="friends-space' + (actions ? '' : ' no-actions') + '" data-friend-type="' + type + '">'
+        + '<button class="friends-space-view" type="button" data-friend-view="' + escapeAttr(group.groupId) + '" title="' + escapeAttr(name) + '" aria-label="' + escapeAttr('查看' + name + '的紀錄') + '">'
+        + '<span class="friends-space-label"><strong>' + escapeHtml(name) + '</strong><span class="friends-space-meta">' + groupTypeBadge_(type) + escapeHtml(meta) + '</span></span><span class="friends-space-arrow" aria-hidden="true">›</span></button>'
+        + (actions ? '<details class="friends-more" id="' + escapeAttr('friendsMenu-' + encodeURIComponent(group.groupId)) + '"><summary title="更多選項" aria-label="' + escapeAttr(name + '的更多選項') + '"><span aria-hidden="true">⋯</span></summary><div class="friends-more-body">' + actions + '</div></details>' : '') + '</article>';
+    }
+
+    function renderFriendSpaces() {
+      if (!window.dietApp || !window.dietApp.friendSpaces) return;
+      const info = window.dietApp.friendSpaces();
+      document.getElementById('friendSpaces').hidden = false;
+      document.getElementById('friendsPrivacy').textContent = info.sharing ? '🔒 好友分享已開啟' : '🔒 好友分享已關閉';
+      const list = document.getElementById('friendsSpacesList');
+      const openDetails = new Set(Array.from(list.querySelectorAll('details[open]')).map(node => node.id));
+      const spaceIds = new Set(info.spaces.map(space => space.groupId));
+      const lineGroups = (info.groups || []).filter(group => group.type !== 'space' && !spaceIds.has(group.groupId));
+      const hasJoined = Boolean(info.spaces.length || lineGroups.length);
+      const intro = document.getElementById('friendsIntro');
+      // 只在首次掛載決定預設值；切頁或背景更新不覆蓋使用者的展開／收合。
+      if (!intro.dataset.initialized) {
+        intro.open = !hasJoined;
+        intro.dataset.initialized = 'true';
+      }
+      document.getElementById('friendsIntroLabel').textContent = hasJoined ? '建立或加入其他空間' : '選擇一起打卡的方式';
+      const spaceCards = info.spaces.map(space => {
+        const canInvite = space.isOwner && space.inviteCode && space.inviteActive !== false;
+        const actions = canInvite ? '<button class="friends-button" type="button" data-friend-invite="' + escapeAttr(space.groupId) + '">邀請朋友 ↗</button>'
+          + '<details class="friends-invite" id="' + escapeAttr('friendsInvite-' + encodeURIComponent(space.groupId)) + '" data-invite-text="' + escapeAttr(space.groupId) + '"><summary>邀請文字・可長按複製</summary><pre>' + escapeHtml(DietFriends.inviteText(space)) + '</pre></details>'
+          : (space.isOwner ? '<button class="friends-button" type="button" data-friend-settings>更新邀請碼 →</button>' : '');
+        return friendSpaceRow_(space, 'space', ' · ' + number(space.memberCount) + ' 人' + (space.isOwner ? ' · 我建立的' : ''), actions);
+      }).join('');
+      const lineCards = lineGroups.map(group => friendSpaceRow_(group, 'line_group', '', '<button class="friends-button" type="button" data-friend-line-guide>邀請方式 →</button>')).join('');
+      list.innerHTML = spaceCards + lineCards;
+      list.querySelectorAll('[data-friend-view]').forEach(button => button.onclick = () => {
+        activateWallTab('group:' + button.dataset.friendView);
+        window.scrollTo({ top:window.scrollY + document.querySelector('.wall-frame').getBoundingClientRect().top - 12, behavior:'smooth' });
+      });
+      list.querySelectorAll('[data-friend-invite]').forEach(button => button.onclick = () => {
+        const space = window.dietApp.friendSpaces().spaces.find(item => item.groupId === button.dataset.friendInvite);
+        DietFriends.share(space, showToast);
+      });
+      list.querySelectorAll('[data-friend-settings]').forEach(button => button.onclick = () => window.dietApp.navigate('personal'));
+      list.querySelectorAll('[data-friend-line-guide]').forEach(button => button.onclick = () => {
+        document.getElementById('friendsIntro').open = true;
+        const guide = document.getElementById('friendsLineGuide');
+        guide.open = true;
+        guide.querySelector('summary').focus({ preventScroll:true });
+        guide.scrollIntoView({ behavior:'smooth', block:'nearest' });
+      });
+      list.querySelectorAll('details').forEach(node => { node.open = openDetails.has(node.id); });
+    }
+
+    function initFriendSpaces() {
+      if (!window.dietApp || !window.dietApp.manageFriendSpace) return;
+      if (Array.isArray(DATA.checkInSpaces)) window.dietApp.spacesUpdated({ checkInSpaces:DATA.checkInSpaces, groupWalls:DATA.groupTabs || [], groupSharing:DATA.groupSharing });
+      renderFriendSpaces();
+      document.getElementById('friendsSharingSettings').onclick = () => window.dietApp.navigate('personal');
+      ['Create','Join'].forEach(kind => {
+        const toggle = document.getElementById('friends' + kind + 'Toggle');
+        const form = document.getElementById('friends' + kind + 'Form');
+        toggle.onclick = () => {
+          const open = form.hidden;
+          ['Create','Join'].forEach(other => {
+            const visible = open && other === kind;
+            document.getElementById('friends' + other + 'Form').hidden = !visible;
+            document.getElementById('friends' + other + 'Toggle').setAttribute('aria-expanded', String(visible));
+          });
+          if (open) form.querySelector('input').focus();
+        };
+        form.onsubmit = async event => {
+          event.preventDefault();
+          if (friendSpaceBusy) return;
+          const input = form.querySelector('input');
+          const value = input.value.trim();
+          if (!value) { input.focus(); return; }
+          const status = document.getElementById('friendsStatus');
+          friendSpaceBusy = true;
+          document.querySelectorAll('#friendSpaces input, #friendSpaces button').forEach(node => { node.disabled = true; });
+          status.classList.remove('error');
+          status.textContent = kind === 'Create' ? '正在建立空間…' : '正在確認邀請碼…';
+          try {
+            const result = await window.dietApp.manageFriendSpace(kind.toLowerCase(), value);
+            DATA.groupTabs = result.groupWalls;
+            renderFriendSpaces();
+            renderWallTabs();
+            input.value = '';
+            form.hidden = true;
+            toggle.setAttribute('aria-expanded', 'false');
+            const space = result.created || result.joined;
+            status.textContent = result.created ? '已建立打卡空間「' + space.name + '」並開啟好友分享，按下方邀請朋友一起記錄。'
+              : (space.alreadyJoined ? '你已經在「' + space.name + '」，原分享設定不變。' : '已加入打卡空間「' + space.name + '」並開啟好友分享，可到設定關閉。');
+          } catch (error) {
+            status.classList.add('error');
+            status.textContent = error.message || '操作失敗，請稍後再試。';
+          } finally {
+            friendSpaceBusy = false;
+            document.querySelectorAll('#friendSpaces input, #friendSpaces button').forEach(node => { node.disabled = false; });
+          }
+        };
+      });
+    }
     function renderBottomNav(nav) {
       const root = document.getElementById('bottomNav');
       if (!root) return;
@@ -492,9 +697,9 @@
       select.onchange = () => navigateToDate(select.value);
       todayButton.onclick = () => navigateToDate(maxDate);
       const group = activeWallTab === 'public' ? null : currentGroupTab_();
-      document.getElementById('wallDateTitle').textContent = group ? '📅 群組紀錄日期' : '📅 公開紀錄日期';
+      document.getElementById('wallDateTitle').textContent = group ? '📅 ' + (group.type === 'space' ? '空間' : '群組') + '紀錄日期' : '📅 公開紀錄日期';
       document.getElementById('dateRangeHint').textContent = group
-        ? `可查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)} · 本群組主動分享的紀錄。`
+        ? `可查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)} · 成員已開啟分享的紀錄。`
         : `可查 ${formatDateLabel(minDate)} ～ ${formatDateLabel(maxDate)} · 主動公開的紀錄。`;
     }
 
@@ -599,6 +804,7 @@
         (Array.isArray(DATA.groupTabs) ? DATA.groupTabs : []).map(group => ({
           key: 'group:' + String(group.groupId || ''),
           groupId: String(group.groupId || ''),
+          type: wallGroupType_(group),
           label: '👥 ' + String(group.name || '我的群組'),
         })).filter(item => item.groupId)
       );
@@ -610,7 +816,7 @@
 
     function renderWallTabs() {
       const items = wallTabItems_();
-      wallTabs.innerHTML = items.map(item => '<button class="wall-tab' + (item.key === activeWallTab ? ' active' : '') + '" type="button" role="tab" aria-selected="' + String(item.key === activeWallTab) + '" title="' + escapeAttr(item.label) + '" data-wall-tab="' + escapeAttr(item.key) + '">' + escapeHtml(item.label) + '</button>').join('');
+      wallTabs.innerHTML = items.map(item => '<button class="wall-tab' + (item.key === activeWallTab ? ' active' : '') + '" type="button" role="tab" aria-selected="' + String(item.key === activeWallTab) + '" title="' + escapeAttr(item.label) + '" data-wall-tab="' + escapeAttr(item.key) + '"><span class="wall-tab-name">' + escapeHtml(item.label) + '</span>' + (item.type ? groupTypeBadge_(item.type) : '') + '</button>').join('');
       wallTabs.querySelectorAll('[data-wall-tab]').forEach(button => {
         button.addEventListener('click', () => activateWallTab(button.getAttribute('data-wall-tab') || 'public'));
       });
@@ -751,14 +957,15 @@
       if (!GROUP_DATA || !GROUP_DATA.group) return;
       const summary = GROUP_DATA.summary || {};
       const groupName = String(GROUP_DATA.group.name || '我的群組');
+      const groupType = wallGroupType_(GROUP_DATA.group) === 'space' ? '打卡空間' : 'LINE 群組';
       document.getElementById('wallTitle').textContent = '👥 ' + groupName;
-      document.getElementById('heroDate').textContent = `${selectedDateLabel}・只顯示本群組成員主動分享的內容`;
+      document.getElementById('heroDate').textContent = `${selectedDateLabel}・${groupType}・只顯示成員已開啟分享的內容`;
       document.getElementById('publicCount').textContent = number(summary.sharedCount);
       document.getElementById('completedCount').textContent = number(summary.completedCount);
       document.getElementById('rankingCount').textContent = number(summary.memberCount);
       document.getElementById('publicCountLabel').textContent = `${selectedDateLabel}分享`;
       document.getElementById('completedCountLabel').textContent = `${selectedDateLabel}已完成`;
-      document.getElementById('rankingCountLabel').textContent = '群組成員';
+      document.getElementById('rankingCountLabel').textContent = groupType === '打卡空間' ? '空間成員' : '群組成員';
       document.getElementById('updated').textContent = `更新時間：${GROUP_DATA.generatedAt || ''}`;
       initDatePicker();
       renderGroupRecords();
@@ -1115,6 +1322,16 @@
     updateLikeHint();
     prefetchGroupWalls();
     if (window.dietApp) window.dietApp.register({
+      activate:options => {
+        renderFriendSpaces();
+        if (options.friendGroupId) {
+          activateWallTab('group:' + options.friendGroupId);
+          window.scrollTo({ top:window.scrollY + document.querySelector('.wall-frame').getBoundingClientRect().top - 12, behavior:'instant' });
+        } else if (options.friends) {
+          document.getElementById('friendsIntro').open = true;
+          window.scrollTo({ top:0, behavior:'instant' });
+        }
+      },
       getRequest:() => ({ date:selectedDate }),
       clearPrivate:() => {
         dateRequestGeneration += 1;
@@ -1127,10 +1344,12 @@
         groupRecordsPanel.innerHTML = '';
       },
       update:next => {
-        if (likeRequestInFlight || dateRequestInFlight || (next.date && next.date !== selectedDate)) return false;
+        if (friendSpaceBusy || likeRequestInFlight || dateRequestInFlight || (next.date && next.date !== selectedDate)) return false;
         const scroll = window.scrollY;
         const expanded = Array.from(document.querySelectorAll('details[open]')).map(node => node.id || node.querySelector('summary')?.textContent);
         DATA = next;
+        if (Array.isArray(DATA.checkInSpaces)) window.dietApp.spacesUpdated({ checkInSpaces:DATA.checkInSpaces, groupWalls:DATA.groupTabs || [], groupSharing:DATA.groupSharing });
+        renderFriendSpaces();
         groupCacheGeneration += 1;
         GROUP_CACHE.clear();
         groupLoadWaiters.clear();
