@@ -661,6 +661,7 @@
       color: var(--ink);
       cursor: pointer;
     }
+    .privacy-toggle[hidden] { display: none; }
     .privacy-toggle input { width: 20px; height: 20px; margin: 0; flex: 0 0 auto; accent-color: var(--green); }
     .privacy-toggle span { font-size: 13px; line-height: 1.45; }
     .privacy-toggle input:disabled + span { opacity: .48; }
@@ -1490,7 +1491,7 @@
   <div id="bootstrapData" hidden><?= bootstrapJson ?></div>
 
   <script>
-    window.__dietAppBuild = '2026.09.22-135';
+    window.__dietAppBuild = '2026.09.22-136';
     window.__dietAppReady = false;
     window.__dietAppFailed = false;
     window.__dietAppStage = '啟動程式';
@@ -2085,7 +2086,7 @@
                 '<div class="hero-backfill-menu">',
                   '<p class="record-date-hint">選擇要補卡的日期</p>',
                   '<div id="recordDateOptions" class="record-date-options">' + dateOptions + '</div>',
-                  (isBackfill ? '<div class="backfill-banner">目前正在補卡：' + escapeHtml(currentDateMeta.label) + '。修改後會更新歷史與連續打卡，不會重新發送當天群組排行。</div>' : ''),
+                  (isBackfill ? '<div class="backfill-banner">目前正在補卡：' + escapeHtml(currentDateMeta.label) + '。修改後會更新歷史紀錄與報告，不會重新發送當天群組排行。</div>' : ''),
                 '</div>',
               '</details>',
             '</div>',
@@ -2171,7 +2172,8 @@
               '<label>公開暱稱<input id="publicAlias" maxlength="40" value="' + escapeAttr(MEMBER.publicAlias || MEMBER.name || '') + '" placeholder="例如：檸檬夥伴"></label>',
               '<label class="privacy-toggle"><input id="publishToday" type="checkbox" ' + (defaultPublishToday ? 'checked' : '') + '><span><strong>公開我的飲控紀錄</strong><br>開啟後每天沿用，只公開暱稱、已攝取／今日額度、餐別與完成狀態。</span></label>',
               '<label class="privacy-toggle"><input id="publishFoodDetails" type="checkbox" ' + (defaultPublishFoodDetails ? 'checked' : '') + '><span><strong>同時公開我吃了什麼</strong><br>開啟後每天沿用，顯示食物名稱、份量與估算熱量；不會顯示照片。</span></label>',
-              '<label class="privacy-toggle"><input id="joinPublicRanking" type="checkbox" ' + (MEMBER.joinPublicRanking ? 'checked' : '') + '><span><strong>參加公開連續打卡排行</strong><br>只比較完成打卡的連續天數，不比較誰吃得最少。</span></label>',
+              // 暫停公開連續紀錄介面，保留既有值以免自動儲存覆蓋參加設定。
+              '<label class="privacy-toggle" hidden><input id="joinPublicRanking" type="checkbox" ' + (MEMBER.joinPublicRanking ? 'checked' : '') + '><span><strong>參加公開連續打卡排行</strong><br>只比較完成打卡的連續天數，不比較誰吃得最少。</span></label>',
               (groupWalls.length ? '<label class="privacy-toggle"><input id="publishToGroup" type="checkbox" ' + (publishToGroup ? 'checked' : '') + '><span><strong>分享給已加入的 LINE 群組與打卡空間</strong><br>切換後會套用到所有日期紀錄與之後的新紀錄，分享給 ' + escapeHtml(groupWallNames) + ' 的現有成員；會顯示食物細項，但不會出現在公開猛猛紀錄牆。</span></label>' : ''),
             '</div>',
           '</details>',
@@ -3360,17 +3362,15 @@
       const status = document.getElementById('publicSettingsStatus');
       const publishToday = document.getElementById('publishToday');
       const publishFoodDetails = document.getElementById('publishFoodDetails');
-      const joinPublicRanking = document.getElementById('joinPublicRanking');
-      if (!status || !publishToday || !publishFoodDetails || !joinPublicRanking) return;
+      if (!status || !publishToday || !publishFoodDetails) return;
       if (!publishToday.checked) publishFoodDetails.checked = false;
       publishFoodDetails.disabled = !publishToday.checked;
       const recordText = publishToday.checked
         ? (publishFoodDetails.checked ? '紀錄與餐點細項預設公開' : '紀錄預設公開（不含餐點細項）')
         : '紀錄預設不公開';
-      const rankingText = joinPublicRanking.checked ? '已參加連續排行' : '未參加連續排行';
       const groupInput = document.getElementById('publishToGroup');
       const groupText = groupInput ? (groupInput.checked ? '已分享到群組牆' : '未分享到群組牆') : '';
-      status.textContent = `目前：${[recordText, rankingText, groupText].filter(Boolean).join('・')}`;
+      status.textContent = `目前：${[recordText, groupText].filter(Boolean).join('・')}`;
     }
 
     let reminderSaveTimer = null;

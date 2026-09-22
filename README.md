@@ -2,7 +2,9 @@
 
 供小群組使用的飲食與運動記錄工具。從 LINE 開啟手機打卡頁，使用照片辨識、食物庫或手動輸入記錄餐點；資料儲存在 Google Sheet，可查看個人歷史、週報、公開牆與群組打卡空間。
 
-目前版本：`2026.09.22-135`。
+目前版本：`2026.09.22-136`。
+
+136 版暫停公開牆的連續紀錄展示，直接呈現公開紀錄與鼓勵讚。上方摘要只保留公開／完成人數；切到 LINE 群組或打卡空間時，仍顯示成員人數。打卡頁、設定頁的參加選項與狀態文字一併收起，LINE 入口說明同步更新。既有參加設定、連續天數計算與個人週／月報保留，不需修改 Sheet。
 
 135 版完成擴充回歸測試：以本機檔案網址解碼照片，省去原圖 base64 中間轉換；AI 改用較短的傳輸欄位名稱，後端還原完整欄位。修正 AI 食物手動改熱量後再調份量的比例、資訊標籤未同步、介紹頁在 320px 螢幕的水平溢出，以及 LINE 轉送遇到空值／連線失敗時的未處理例外。新增一鍵完整測試與可重跑的圖片處理效能比較。
 
@@ -47,7 +49,9 @@ GitHub repository 的 Settings → Pages → Source 選擇 **GitHub Actions**。
 
 本機預覽可在專案根目錄執行 `python3 -m http.server 8080 --directory docs`，再開啟 `http://localhost:8080`。
 
-介紹頁包含搜尋摘要、canonical、Open Graph／Twitter 分享標籤、WebApplication 結構化資料與 `sitemap.xml`。預設分享封面為正方形 `docs/assets/social-square.png`（1254 × 1254），以大標題與小雞提升 LINE 小縮圖辨識度；另保留 `docs/assets/project-card-cover.png` 作為 4:3 作品封面。網站運動小雞為 `docs/assets/sport-chick.png`。若變更網域或 repository 名稱，請同步更新 `docs/index.html` 與 `docs/sitemap.xml` 中的公開網址；網站發布後分享圖片才能被外部服務讀取。
+介紹頁包含搜尋摘要、canonical、Open Graph／Twitter 分享標籤、WebApplication 結構化資料與 `sitemap.xml`。搜尋與分享標題統一為「飲控打卡緊迫盯人 | LINE 飲食紀錄，和朋友一起打卡」，首頁主打私人打卡空間與互相鼓勵，也明確說明自己記錄即可開始，加入 LINE 不代表公開飲食。好友分享沿用統一開關，建立／加入空間時預設開啟，與公開紀錄分開設定。
+
+預設分享封面為正方形 `docs/assets/social-square-friends.png`（1254 × 1254），保留運動小雞與大標題，加入「一起打卡，看見每天的累積」；另提供 `docs/assets/project-card-friends.png`（1448 × 1086）作為 4:3 作品封面。新版使用不同檔名，舊封面保留作為備份；文字產圖提示見 `docs/assets/friends-seo-prompts.txt`。網站運動小雞為 `docs/assets/sport-chick.png`。若變更網域或 repository 名稱，請同步更新 `docs/index.html` 與 `docs/sitemap.xml` 中的公開網址；網站發布後分享圖片才能被外部服務讀取。外部平台已快取的分享卡片，需等平台重新抓取才會顯示新版。
 
 ## 系統架構
 

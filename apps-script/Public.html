@@ -33,7 +33,9 @@
     .eyebrow { font-size: 11px; font-weight: 900; letter-spacing: .12em; color: #765c17; }
     h1 { margin: 6px 0 4px; font-size: 23px; line-height: 1.2; }
     .hero p { margin: 0; color: #6b571f; font-size: 13px; line-height: 1.5; }
-    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 13px; }
+    .summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 13px; }
+    .summary.has-group-count { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .summary-card[hidden] { display: none; }
     .summary-card { padding: 9px 6px; border-radius: 13px; background: rgba(255,255,255,.72); text-align: center; }
     .summary-card strong { display: block; font-size: 18px; }
     .summary-card span { font-size: 11px; color: #765c17; }
@@ -104,10 +106,7 @@
     .date-today:disabled { cursor: wait; opacity: .62; }
     .date-range-hint { grid-column: 1 / -1; color: #928879; font-size: 11px; line-height: 1.4; }
 
-    /* 頁籤改成底線，不再套第二層大圓角卡片。 */
-    .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-top: 12px; border-bottom: 1px solid var(--line); }
-    .tab { min-height: 40px; border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--muted); font-weight: 900; cursor: pointer; }
-    .tab.active { background: transparent; color: var(--ink); border-bottom-color: var(--amber); }
+    .records-heading { margin: 16px 0 0; font-size: 16px; line-height: 1.5; }
     .panel { margin-top: 12px; }
 
     /* 收合狀態保留一眼可讀的摘要；手機版會讓名字單獨一列，避免被熱量與按讚擠掉。 */
@@ -382,10 +381,10 @@
       <div class="eyebrow">HEALTH LOG</div>
       <h1 id="wallTitle">🌐 猛猛紀錄牆</h1>
       <p id="heroDate"></p>
-      <div class="summary">
+      <div id="wallSummary" class="summary">
         <div class="summary-card"><strong id="publicCount">0</strong><span id="publicCountLabel">今日公開</span></div>
         <div class="summary-card"><strong id="completedCount">0</strong><span id="completedCountLabel">已完成</span></div>
-        <div class="summary-card"><strong id="rankingCount">0</strong><span id="rankingCountLabel">參加連續紀錄</span></div>
+        <div id="groupMemberCountCard" class="summary-card" hidden><strong id="groupMemberCount">0</strong><span id="groupMemberCountLabel">群組成員</span></div>
       </div>
     </section>
 
@@ -438,13 +437,8 @@
     </section>
 
     <section id="publicWallContent">
-      <nav class="tabs" role="tablist" aria-label="公開功能頁籤">
-        <button id="recordsTab" class="tab active" type="button" role="tab" aria-selected="true" aria-controls="recordsPanel">公開紀錄</button>
-        <button id="streaksTab" class="tab" type="button" role="tab" aria-selected="false" aria-controls="streaksPanel">連續紀錄</button>
-      </nav>
-
-      <section id="recordsPanel" class="panel" role="tabpanel" aria-labelledby="recordsTab"></section>
-      <section id="streaksPanel" class="panel" role="tabpanel" aria-labelledby="streaksTab" hidden></section>
+      <h2 id="publicRecordsTitle" class="records-heading">公開紀錄</h2>
+      <section id="recordsPanel" class="panel" aria-labelledby="publicRecordsTitle"></section>
 
       <div id="likeHint" class="like-hint"></div>
 
@@ -475,11 +469,10 @@
   -->
   <div id="publicData" hidden><?= publicJson ?></div>
   <script>
-    window.__publicWallBuild = '2026.08.24-89';
+    window.__publicWallBuild = '2026.09.22-136';
 
     const toast = document.getElementById('toast');
     const recordsPanel = document.getElementById('recordsPanel');
-    const streaksPanel = document.getElementById('streaksPanel');
     const likeHint = document.getElementById('likeHint');
     const publicWallContent = document.getElementById('publicWallContent');
     const groupWallContent = document.getElementById('groupWallContent');
@@ -520,12 +513,8 @@
     document.getElementById('heroDate').textContent = `${selectedDateLabel}・只顯示本人主動公開的內容`;
     document.getElementById('publicCount').textContent = number(DATA.summary && DATA.summary.publicCount);
     document.getElementById('completedCount').textContent = number(DATA.summary && DATA.summary.completedCount);
-    document.getElementById('rankingCount').textContent = number(DATA.summary && DATA.summary.rankingCount);
     document.getElementById('publicCountLabel').textContent = `${selectedDateLabel}公開`;
     document.getElementById('completedCountLabel').textContent = `${selectedDateLabel}已完成`;
-    document.getElementById('rankingCountLabel').textContent = `${selectedDateLabel}連續紀錄`;
-    document.getElementById('recordsTab').textContent = '公開紀錄';
-    document.getElementById('streaksTab').textContent = '連續紀錄';
     document.getElementById('updated').textContent = `更新時間：${DATA.generatedAt || ''}`;
 
     initDatePicker();
@@ -751,7 +740,6 @@
           if (activeWallTab !== 'public') return;
           refreshDateView();
           renderRecords();
-          renderStreaks();
           updateLikeHint();
           showToast(`已切換到 ${selectedDateLabel}`, 1000);
         })
@@ -776,12 +764,8 @@
       document.getElementById('heroDate').textContent = `${dateLabel}・只顯示本人主動公開的內容`;
       document.getElementById('publicCount').textContent = number(DATA.summary && DATA.summary.publicCount);
       document.getElementById('completedCount').textContent = number(DATA.summary && DATA.summary.completedCount);
-      document.getElementById('rankingCount').textContent = number(DATA.summary && DATA.summary.rankingCount);
       document.getElementById('publicCountLabel').textContent = `${dateLabel}公開`;
       document.getElementById('completedCountLabel').textContent = `${dateLabel}已完成`;
-      document.getElementById('rankingCountLabel').textContent = `${dateLabel}連續紀錄`;
-      document.getElementById('recordsTab').textContent = '公開紀錄';
-      document.getElementById('streaksTab').textContent = '連續紀錄';
       document.getElementById('updated').textContent = `更新時間：${DATA.generatedAt || ''}`;
       initDatePicker();
     }
@@ -827,6 +811,9 @@
       if (!next) return;
       activeWallTab = next.key;
       renderWallTabs();
+      // 群組成員摘要仍保留；公開牆只顯示公開與完成紀錄數。
+      document.getElementById('groupMemberCountCard').hidden = activeWallTab === 'public';
+      document.getElementById('wallSummary').classList.toggle('has-group-count', activeWallTab !== 'public');
       if (activeWallTab === 'public') {
         publicWallContent.hidden = false;
         groupWallContent.hidden = true;
@@ -836,7 +823,6 @@
         }
         refreshDateView();
         renderRecords();
-        renderStreaks();
         updateLikeHint();
         return;
       }
@@ -962,10 +948,10 @@
       document.getElementById('heroDate').textContent = `${selectedDateLabel}・${groupType}・只顯示成員已開啟分享的內容`;
       document.getElementById('publicCount').textContent = number(summary.sharedCount);
       document.getElementById('completedCount').textContent = number(summary.completedCount);
-      document.getElementById('rankingCount').textContent = number(summary.memberCount);
+      document.getElementById('groupMemberCount').textContent = number(summary.memberCount);
       document.getElementById('publicCountLabel').textContent = `${selectedDateLabel}分享`;
       document.getElementById('completedCountLabel').textContent = `${selectedDateLabel}已完成`;
-      document.getElementById('rankingCountLabel').textContent = groupType === '打卡空間' ? '空間成員' : '群組成員';
+      document.getElementById('groupMemberCountLabel').textContent = groupType === '打卡空間' ? '空間成員' : '群組成員';
       document.getElementById('updated').textContent = `更新時間：${GROUP_DATA.generatedAt || ''}`;
       initDatePicker();
       renderGroupRecords();
@@ -992,21 +978,6 @@
         return '<details class="person' + (record.isSelf ? ' group-self' : '') + '"><summary><div class="person-row"><span class="dot ' + (record.isComplete ? 'complete' : '') + '" aria-hidden="true"></span><span class="person-name">' + escapeHtml(record.alias || '群組夥伴') + (record.isSelf ? '（我）' : '') + '</span>' + proteinBadgeHtml(record) + kcal + '<span class="person-spacer" aria-hidden="true"></span><span class="chevron" aria-hidden="true">▼</span></div>' + (hasAllowance ? '<div class="bar ' + (over ? 'over' : '') + '"><span style="width:' + ratio + '%"></span></div>' : '') + '</summary><div class="person-body">' + personMetaHtml(record, hasAllowance) + foodDetailsHtml(record, '這筆紀錄沒有可顯示的食物細項。') + '</div></details>';
       }).join('');
     }
-
-    function switchTab(tab) {
-      const showRecords = tab === 'records';
-      const recordsTab = document.getElementById('recordsTab');
-      const streaksTab = document.getElementById('streaksTab');
-      recordsPanel.hidden = !showRecords;
-      streaksPanel.hidden = showRecords;
-      recordsTab.classList.toggle('active', showRecords);
-      streaksTab.classList.toggle('active', !showRecords);
-      recordsTab.setAttribute('aria-selected', String(showRecords));
-      streaksTab.setAttribute('aria-selected', String(!showRecords));
-    }
-
-    document.getElementById('recordsTab').addEventListener('click', () => switchTab('records'));
-    document.getElementById('streaksTab').addEventListener('click', () => switchTab('streaks'));
 
     /**
      * 收合時只顯示名字與熱量，點開才載入餐別與食物細項。
@@ -1130,24 +1101,6 @@
       return '<details class="food-details"><summary>🍽️ 食物細項（依餐別展開）</summary><div class="food-details-body">' + content + '</div></details>';
     }
 
-    function renderStreaks() {
-      const streaks = sortSelfFirst(Array.isArray(DATA.streaks) ? DATA.streaks : [], (a, b) => {
-        const difference = Number(b && b.streak || 0) - Number(a && a.streak || 0);
-        return difference || aliasCompare(a, b);
-      });
-      if (!streaks.length) {
-        streaksPanel.innerHTML = '<div class="empty">還沒有人選擇參加公開連續紀錄。</div>';
-        return;
-      }
-      streaksPanel.innerHTML = '<div class="rank-card">' + streaks.map(item => {
-        return '<div class="rank-row no-rank">'
-          + '<div class="rank-name">' + escapeHtml(item.alias) + '</div>'
-          + '<div class="streak">' + number(item.streak) + ' 天<small>' + (item.completedOnDate ? selectedDateLabel + '已完成' : selectedDateLabel + '尚未完成') + '</small></div>'
-          + likeButtonHtml(item)
-          + '</div>';
-      }).join('') + '</div>';
-    }
-
     function sortSelfFirst(items, compareOthers) {
       return items.slice().sort((a, b) => {
         const selfFirst = Number(Boolean(b && b.isSelf)) - Number(Boolean(a && a.isSelf));
@@ -1216,7 +1169,6 @@
     }
 
     recordsPanel.addEventListener('click', handleLikeClick);
-    streaksPanel.addEventListener('click', handleLikeClick);
 
     function handleLikeClick(event) {
       const button = event.target.closest('[data-like-key]');
@@ -1231,7 +1183,7 @@
       const item = items.find(entry => entry.likeKey === targetKey);
       if (!item) return;
 
-      // 同一個人可能同時出現在兩個頁籤，兩邊都要一起更新。
+      // 同一人的公開紀錄與保留的連續紀錄資料共用按讚狀態，需一起更新。
       const matchedItems = items.filter(entry => entry.likeKey === targetKey);
       const previousItems = matchedItems.map(entry => ({
         entry,
@@ -1318,7 +1270,6 @@
     function escapeAttr(value) { return escapeHtml(value).replace(/`/g, '&#96;'); }
 
     renderRecords();
-    renderStreaks();
     updateLikeHint();
     prefetchGroupWalls();
     if (window.dietApp) window.dietApp.register({

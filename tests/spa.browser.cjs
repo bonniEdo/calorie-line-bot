@@ -17,7 +17,7 @@ const profile={weightKg:65,proteinActivityLevel:'general',proteinTargetG:0};
 const records=Array.from({length:45},(_,i)=>({date:day(i),intake:1200+i,tdee:1800,deficit:600-i,proteinG:70,exerciseMinutes:30,exerciseKcal:100,exerciseName:'快走',waterMl:1200,waterGoalMl:2000,waterTracked:true,status:'完成',meals:[{label:'早餐',names:['雞蛋'],kcal:200,proteinG:12}]}));
 const history=()=>({valid:true,today,records,summary:{},session:{uid:'test',sig:'test'},nav,waterTrackingEnabled:true});
 const personal=()=>({valid:true,auth:{uid:'test',sig:'test'},member:{...member},profile:{...profile},proteinTarget:{targetG:78,multiplier:1.2},reminders:{morning:true,noon:true,evening:true},groupWalls:joinedGroups(),checkInSpaces:structuredClone(spaces),groupSharing:member.defaultPublishToGroup,nav});
-const wall=date=>({date:date||today,today,minDate:day(29),maxDate:today,generatedAt:'test',viewer:{uid:'test',sig:'hub',canLike:true},summary:{publicCount:1,completedCount:1,rankingCount:1},records:[{userId:'friend',alias:'測試小雞',intake:1200,tdee:1800,proteinG:70,isComplete:true,isSelf:false,likeKey:'test-like',likeCount:0,meals:[]}],ranking:[],streaks:[],groupTabs:joinedGroups(),checkInSpaces:structuredClone(spaces),groupSharing:member.defaultPublishToGroup,nav});
+const wall=date=>({date:date||today,today,minDate:day(29),maxDate:today,generatedAt:'test',viewer:{uid:'test',sig:'hub',canLike:true},summary:{publicCount:1,completedCount:1,rankingCount:1},records:[{userId:'friend',alias:'測試小雞',intake:1200,tdee:1800,proteinG:70,isComplete:true,isSelf:false,likeKey:'test-like',likeCount:0,meals:[]}],ranking:[],streaks:[{alias:'連續零天測試',streak:0,isSelf:false,completedOnDate:false,likeKey:'test-like',likeCount:0}],groupTabs:joinedGroups(),checkInSpaces:structuredClone(spaces),groupSharing:member.defaultPublishToGroup,nav});
 const bootstrap={valid:true,uid:'test',sig:'test',today,initialDate:today,initialView:'form',member,foods:[],frequentFoods:[],waterSettings:{enabled:true,goalMl:2000},personalProfile:profile,proteinTarget:{targetG:78},dailyLogs:{},recordDates:[0,1,2,3].map(i=>({date:day(i),label:day(i)})),checkInSpaces:[],...nav};
 const esc=text=>text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 function html(initial='form', fault='') {
@@ -114,6 +114,10 @@ function html(initial='form', fault='') {
     };
     // The form DOM remains alive, including text not yet committed as a meal.
     console.log('Mounted form');
+    assert.equal(await page.locator('#joinPublicRanking').evaluate(node=>getComputedStyle(node.closest('label')).display),'none');
+    assert.equal(await page.locator('#joinPublicRanking').isChecked(),true,'existing ranking preference is preserved while its control is hidden');
+    assert.ok(!(await page.locator('#publicSettingsStatus').textContent()).includes('排行'));
+
     await page.locator('#mealTabs button').first().click();
     await page.locator('#manualModeButton').click();
     await page.waitForFunction(()=>document.activeElement?.id==='customFoodKcal');
@@ -127,8 +131,18 @@ function html(initial='form', fault='') {
     await page.evaluate(()=>window.scrollTo(0,250));
     const scroll=await page.evaluate(()=>window.scrollY);
     await go('personal');
+    assert.equal(await page.locator('#view-personal #joinPublicRanking').isVisible(),false);
+    assert.equal(await page.locator('#view-personal #joinPublicRanking').isChecked(),true);
     await page.locator('#view-personal #name').fill('未儲存設定');
     await go('wall');
+    assert.equal(await page.locator('#view-wall .summary-card:visible').count(),2,'public wall shows records and completion only');
+    const publicWallText=await page.locator('#view-wall #publicWallContent').innerText();
+    assert.ok(publicWallText.includes('測試小雞'),'public records remain visible');
+    assert.ok(!publicWallText.includes('連續紀錄'));
+    assert.ok(!publicWallText.includes('連續零天測試'),'zero-day streak data is not rendered');
+    assert.equal(await page.locator('#view-wall #recordsPanel').isVisible(),true);
+    await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
+    await page.screenshot({path:'/tmp/calorie-wall-records-only.png'});
     const lineCard=page.locator('#view-wall [data-friend-type="line_group"]');
     assert.equal(await lineCard.count(),1);
     assert.equal(await page.locator('#view-wall #friendsIntro').evaluate(node=>node.open),false,'joined users start with introduction collapsed');
@@ -191,6 +205,8 @@ function html(initial='form', fault='') {
     await go('history');
     await page.waitForTimeout(1400);
     assert.ok(calls.some(c=>c.method==='saveDailyLog'&&c.args[0].bmr===1700));
+    assert.equal(calls.filter(c=>c.method==='savePersonalSettingsForClient').at(-1).args[0].member.joinPublicRanking,true,'saving settings keeps the hidden participation preference');
+    assert.equal(calls.filter(c=>c.method==='saveDailyLog').at(-1).args[0].joinPublicRanking,true,'daily autosave keeps the hidden participation preference');
     // A delayed pre-write settings read cannot revert a successful save.
     await go('personal');
     holdPersonalRead=true;
@@ -210,6 +226,9 @@ function html(initial='form', fault='') {
     await page.waitForFunction(()=>document.querySelector('#view-wall').shadowRoot.querySelector('#wallTitle').textContent.includes('測試群組'));
     await go('personal');await go('wall');
     assert.ok((await page.locator('#view-wall #wallTitle').textContent()).includes('測試群組'));
+    assert.equal(await page.locator('#view-wall .summary-card:visible').count(),3,'group member count remains available');
+    assert.equal(await page.locator('#view-wall #groupMemberCount').textContent(),'2');
+    assert.equal(await page.locator('#view-wall #groupMemberCountLabel').textContent(),'群組成員');
     await page.locator('#view-wall #groupRecordsPanel .person > summary').first().click();
     const expectedGroupRead=groupReads+1;
     await page.evaluate(()=>appRouter.invalidate('wall'));
@@ -226,6 +245,8 @@ function html(initial='form', fault='') {
         && root.querySelector('#publicCountLabel').textContent.startsWith(date.slice(5).replace('-','/'));
     },day(2));
     assert.equal(calls.filter(c=>c.method==='getPublicWallDataForClient').length,wallReads+1);
+    assert.equal(await page.locator('#view-wall .summary-card:visible').count(),2,'returning from a group restores the two-card public summary');
+    assert.equal(await page.locator('#view-wall #groupMemberCountCard').isVisible(),false);
     // A pre-permission-change date response must not restore cleared group data or dates.
     holdPublicRead=true;
     await page.locator('#view-wall #publicDateSelect').selectOption(day(3));

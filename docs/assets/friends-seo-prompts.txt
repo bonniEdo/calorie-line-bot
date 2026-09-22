@@ -1,0 +1,16 @@
+2026-09-22: Friends-focused SEO covers
+Tool: built-in imagegen; existing raster assets edited, no CLI fallback.
+
+Square LINE cover -> docs/assets/social-square-friends.png (1254 x 1254)
+Reference: docs/assets/social-square.png
+Use case: text-localization. Edit target: the attached existing square LINE social sharing cover. Preserve its established sports chick mascot exactly: round yellow chick, sparkling brown eyes, determined eyebrows, pink cheeks, green-white headband and bow, broccoli badge, aqua bottle, green-check clipboard, orange feet. Preserve cream, butter yellow and sage green colors, soft illustrated texture, warm dark brown bold Traditional Chinese typography. Produce one finished SQUARE 1:1 social thumbnail, ideally 1024x1024.
+Keep brand title exactly on two centered lines: "飲控打卡" / "緊迫盯人".
+Add new exact tagline on two centered, clearly readable lines below the brand title: "一起打卡，" / "看見每天的累積".
+Rebalance existing layout to provide real whitespace for the tagline; reduce the full mascot slightly if necessary. Title remains the largest, tagline is substantial (not tiny), and chick remains fully visible beneath all text. Concentrate all essential typography and chick within central 80% of canvas, at least 10% safe margins; keep any plants/sparkles decorative at outer edges. Avoid any overlap of chick and letters. No phone, QR, URL, MENG MENG, new characters, extra words, claims or badges. Do not output mockups or several versions. Only the finished image.
+
+4:3 project cover -> docs/assets/project-card-friends.png (1448 x 1086)
+Reference: docs/assets/project-card-cover.png
+Use case: text-localization. Edit target: existing 4:3 project catalog cover attached. Preserve established sports chick identity exactly, palette cream / butter yellow / sage green, warm dark brown rounded Traditional Chinese typography, subtle paper texture, phone with illustrated meal/progress shapes.
+Create one finished true landscape 4:3 catalog image, ideally 1440x1080. Replace old slogan "把每天的小努力，留下來。" with exact new Traditional Chinese slogan "一起打卡，看見每天的累積". It may use two lines: "一起打卡，" then "看見每天的累積". Preserve brand title on two lines "飲控打卡" / "緊迫盯人". Change small features line to exact "私人打卡空間 · AI 餐點辨識 · 週／月報".
+Rebalance spacing as needed so the slogan is clearly legible, text and chick never overlap, and important words are not cropped. Keep essential text and entire chick within generous central safe area, at least 10% margin on left and right. Phone may be smaller to make enough room. No QR, URL, extra words, new mascot, or medical claims. Keep this a polished variant of the same existing brand cover, not a new style.
+
